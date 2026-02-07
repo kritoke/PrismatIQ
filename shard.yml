@@ -1,0 +1,14 @@
+name: prismatiq
+version: 0.1.0
+
+authors:
+  - PrismatIQ <dev@prismatiq.io>
+
+crystal: 1.11.0
+
+dependencies:
+  crimage:
+    github: naqvis/crimage
+    version: ~> 0.5.0
+
+license: MIT
