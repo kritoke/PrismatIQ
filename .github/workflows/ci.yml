@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Crystal)
+        run: |
+          # Install Crystal via the official apt installer script
+          curl -sSL https://dist.crystal-lang.org/apt/setup.sh | sudo bash
+          sudo apt-get update
+          sudo apt-get install -y crystal
+
+      - name: Install shards
+        run: shards install
+
+      - name: Run specs
+        run: crystal spec
+
+      - name: Run color-thief adapter on sample image
+        run: |
+          crystal run examples/color_thief_adapter.cr -- bench/test_1080p.jpg 5 10 0 > out.json
+          # Validate JSON produced
+          python3 -m json.tool out.json
