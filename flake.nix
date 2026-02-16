@@ -11,6 +11,7 @@
       system = "aarch64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
+
       # System-specific Xorg libraries for Playwright
       getXorg = name: if builtins.hasAttr name pkgs.xorg then pkgs.xorg.${name} else null;
 
@@ -31,10 +32,16 @@
         buildInputs = with pkgs; [ ] ++ pwLibs;
 
         shellHook = ''
-          
+          # Special pinned Crystal 1.18.2 module used as the default for spoke-gen.
           # --- Common Spoke Setup ---
-          export HUB_ROOT="/workspaces/aiworkflow"\\nexport SSH_AUTH_SOCK="$HUB_ROOT/.ssh-auth.sock"\\nexport PATH="$PATH:$HUB_ROOT/bin"\\nexport OPEN_SPEC_SKILLS_PATH="$HUB_ROOT/skills"\\nexport OPEN_SPEC_PROJECT_DIR="/workspaces/PrismatIQ"\\n\\necho "🚀 PrismatIQ DevShell Active"
-        '';
+          export HUB_ROOT="/workspaces/aiworkflow"
+          export SSH_AUTH_SOCK="$HUB_ROOT/.ssh-auth.sock"
+          export PATH="$PATH:$HUB_ROOT/bin"
+          export OPEN_SPEC_SKILLS_PATH="$HUB_ROOT/skills"
+          export OPEN_SPEC_PROJECT_DIR="/workspaces/PrismatIQ"
+          
+          echo "PrismatIQ DevShell Active"
+         '';
       };
     };
 }

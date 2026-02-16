@@ -92,3 +92,47 @@ describe PrismatIQ::PriorityQueue do
     pq.pop.should eq(1)
   end
 end
+
+describe "multithreaded histogram parity" do
+  it "produces same top color for 1 and multiple threads" do
+    # Create a small synthetic 4x4 RGBA buffer with a known dominant color
+    width = 4
+    height = 4
+    pixels = Array(UInt8).new(width * height * 4, 0)
+
+    # Fill most pixels with red (255,0,0,255), but a few blue
+    idx = 0
+    i = 0
+    while i < width * height
+      if i % 5 == 0
+        pixels[idx] = 0   # r
+        pixels[idx + 1] = 0 # g
+        pixels[idx + 2] = 255 # b
+        pixels[idx + 3] = 255 # a
+      else
+        pixels[idx] = 255 # r
+        pixels[idx + 1] = 0 # g
+        pixels[idx + 2] = 0 # b
+        pixels[idx + 3] = 255 # a
+      end
+      idx += 4
+      i += 1
+    end
+
+    # Create a mutable slice and copy contents
+    slice = Slice(UInt8).new(pixels.size)
+    i = 0
+    while i < pixels.size
+      slice[i] = pixels[i]
+      i += 1
+    end
+
+    pal1 = PrismatIQ.get_palette_from_buffer(slice, width, height, 3, 1, 1)
+    pal4 = PrismatIQ.get_palette_from_buffer(slice, width, height, 3, 1, 4)
+
+    # Compare palettes (as hex arrays) for parity between 1 and multiple threads
+    pal1_hex = pal1.map(&.to_hex)
+    pal4_hex = pal4.map(&.to_hex)
+    pal1_hex.should eq(pal4_hex)
+  end
+end
