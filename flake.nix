@@ -12,10 +12,7 @@
       pkgs = nixpkgs.legacyPackages.${system};
 
       crystal-1-18-2_mod = import ./nix/modules/crystal-1-18-2.nix { inherit pkgs; };
-      # Local package aliases
-      let
-        crystal_1_18_2 = crystal_1_18_2;
-      in
+      # Local package aliases (none by default)
 
       # System-specific Xorg libraries for Playwright
       # The `xorg` attribute set is deprecated in nixpkgs; prefer modern attribute names.
@@ -37,9 +34,9 @@
         private_hook = if builtins.pathExists ./flake.private.nix then builtins.readFile ./flake.private.nix else "";
 
         shellHook = ''
-${private_hook}
-echo "PrismatIQ DevShell Active"
-'';
+        ${private_hook}
+        echo "PrismatIQ DevShell Active"
+        '';
       };
     };
 }
