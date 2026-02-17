@@ -13,12 +13,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install dependencies (Crystal)
-        run: |
-          # Install Crystal via the official apt installer script
-          curl -sSL https://dist.crystal-lang.org/apt/setup.sh | sudo bash
-          sudo apt-get update
-          sudo apt-get install -y crystal
+      - name: Setup Crystal
+        uses: crystal-lang/setup-crystal@v1
+        with:
+          # use latest available Crystal in the runner
+          version: latest
 
       - name: Install shards
         run: shards install
