@@ -11,8 +11,6 @@ All notable changes to this project will be documented in this file.
 - Add tests exercising the new APIs and verifying determinism.
 - Add GitHub Actions CI workflow that runs specs and executes the example against a sample image.
 
-## Unreleased
-
 ## v0.1.0 - Initial release
 
 - Initial public release of PrismatIQ (v0.1.0). Includes:
