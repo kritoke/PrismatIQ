@@ -1,24 +1,17 @@
 { pkgs }:
 
-let
-  # Special pinned Crystal 1.18.2 derivation used as the default for spokes.
-  crystal_1_18_2 = pkgs.stdenv.mkDerivation rec {
-    pname = "crystal";
-    version = "1.18.2";
+/*
+  Temporarily avoid fetching a specific Crystal tarball which can cause
+  fixed-output derivation hash mismatches during evaluation. By default
+  fall back to the Crystal package provided by nixpkgs. If you need to pin
+  a custom Crystal binary, replace this implementation with a proper
+  fetchurl and the correct sha256 (use `nix-prefetch-url --unpack` to obtain
+  the sha256 in base32 form).
+*/
 
-    src = pkgs.fetchurl {
-      url = "https://github.com/crystal-lang/crystal/releases/download/${version}/crystal-${version}-1-linux-aarch64.tar.gz";
-      # SHA256 obtained via `nix-prefetch-url --unpack` on the Crystal 1.18.2 tarball
-      sha256 = "1dzyayqy45kkgh0jdwmb8fmlxgpxwag4c3mhx36sd5vzf4lg7d7w";
-    };
+{ pkgs }:
 
-    installPhase = ''
-      mkdir -p $out
-      cp -r ./* $out/
-    '';
-  };
-in
 {
-  inherit crystal_1_18_2;
-  buildInputs = [ crystal_1_18_2 ];
+  inherit (pkgs) crystal;
+  buildInputs = [ pkgs.crystal ];
 }
