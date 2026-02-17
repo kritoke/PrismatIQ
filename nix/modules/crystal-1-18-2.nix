@@ -1,17 +1,16 @@
 { pkgs }:
 
 /*
-  Temporarily avoid fetching a specific Crystal tarball which can cause
-  fixed-output derivation hash mismatches during evaluation. By default
-  fall back to the Crystal package provided by nixpkgs. If you need to pin
-  a custom Crystal binary, replace this implementation with a proper
-  fetchurl and the correct sha256 (use `nix-prefetch-url --unpack` to obtain
-  the sha256 in base32 form).
+  Provide a simple module that exposes a `crystal_1_18_2` attribute. We
+  currently default to `pkgs.crystal` to avoid fragile fixed-output
+  derivations in the repo. If you want to pin a specific binary, replace
+  this with a proper `fetchurl` derivation and track the file in Git.
 */
 
-{ pkgs }:
-
+let
+  crystal_1_18_2 = pkgs.crystal;
+in
 {
-  inherit (pkgs) crystal;
-  buildInputs = [ pkgs.crystal ];
+  inherit crystal_1_18_2;
+  buildInputs = [ crystal_1_18_2 ];
 }
