@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.2.0 - 2026-02-16
 
 - Add public API: `get_palette_with_stats_from_buffer` returning counts and percentages.
 - Add compatibility wrapper `get_palette_color_thief_from_buffer` returning hex strings.
@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
 - Add deterministic priority tie-breaking in MMCQ to ensure stable palettes across thread counts.
 - Add tests exercising the new APIs and verifying determinism.
 - Add GitHub Actions CI workflow that runs specs and executes the example against a sample image.
+
+## Unreleased
 
 ## v0.1.0 - Initial release
 
