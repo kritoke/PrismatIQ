@@ -15,10 +15,11 @@
       # the system-provided Crystal from nixpkgs. Nix flakes require files that
       # are referenced by path to be tracked by Git, so the fallback prevents
       # evaluation errors when the local module is not present in the repo.
-      crystal_1_18_2_mod = if builtins.pathExists ./nix/modules/crystal-1-18-2.nix then
-        import ./nix/modules/crystal-1-18-2.nix { inherit pkgs; }
-      else
-        { crystal_1_18_2 = pkgs.crystal; };
+      crystal_1_18_2_mod =
+        if builtins.pathExists ./nix/modules/crystal-1-18-2.nix then
+          import ./nix/modules/crystal-1-18-2.nix { inherit pkgs; }
+        else
+          { crystal_1_18_2 = pkgs.crystal; };
       # Local package aliases (none by default)
 
       # System-specific Xorg libraries for Playwright
@@ -29,14 +30,15 @@
         in if builtins.hasAttr alt pkgs then builtins.getAttr alt pkgs else if builtins.hasAttr name pkgs then builtins.getAttr name pkgs else null;
 
       # Playwright libs removed from default spoke; include only when explicitly requested in a module.
-      pwLibs = with pkgs; [];
+      pwLibs = with pkgs; [ ];
 
       # Read a local flake.private.nix if present. We wrap it in a guard so
       # Nix evaluation doesn't error when the file is missing. This is evaluated
       # in the outer let so it's visible when constructing the devShell below.
       private_hook = builtins.tryEval (if builtins.pathExists ./flake.private.nix then builtins.readFile ./flake.private.nix else "");
 
-    in {
+    in
+    {
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = with pkgs; [ ] ++ [ crystal_1_18_2_mod.crystal_1_18_2 ] ++ pwLibs;
 
