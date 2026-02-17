@@ -30,70 +30,16 @@
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = with pkgs; [ ] ++ [ crystal-1-18-2_mod.crystal_1_18_2 ] ++ pwLibs;
 
+        # Use a local, untracked `flake.private.nix` to inject any personal shellHook
+        # or environment glue. This keeps personal workspace-specific logic out of
+        # the repository. If `flake.private.nix` exists it should export a shell
+        # snippet; otherwise a minimal shellHook runs.
+        private_hook = if builtins.pathExists ./flake.private.nix then builtins.readFile ./flake.private.nix else "";
+
         shellHook = ''
-          # --- Common Spoke Setup ---
-          export HUB_ROOT="/workspaces/aiworkflow"
-          # Ensure SSH agent is available inside the devShell:
-          # Try a list of candidate sockets and pick the first responsive agent. This handles
-          # cases where the editor or host provides an agent via a symlink or under /run/user.
-          HUB_SOCK_CANDIDATES=()
-          # Candidate 1: current environment
-          if [ -n "$SSH_AUTH_SOCK" ] && [ -S "$SSH_AUTH_SOCK" ]; then
-            HUB_SOCK_CANDIDATES+=("$SSH_AUTH_SOCK")
-          fi
-          # Candidate 2: hub-local symlink
-          if [ -S "/workspaces/aiworkflow/.ssh-auth.sock" ]; then
-            HUB_SOCK_CANDIDATES+=("/workspaces/aiworkflow/.ssh-auth.sock")
-          fi
-          # Candidate 3: workspace-level standard path
-          if [ -S "/workspaces/.ssh-auth.sock" ]; then
-            HUB_SOCK_CANDIDATES+=("/workspaces/.ssh-auth.sock")
-          fi
-          # Candidate 4: resolve symlink target of SSH_AUTH_SOCK (if present)
-          if [ -n "$SSH_AUTH_SOCK" ]; then
-            _real=$(readlink -f "$SSH_AUTH_SOCK" 2>/dev/null || true)
-            if [ -n "$_real" ] && [ -S "$_real" ]; then
-              HUB_SOCK_CANDIDATES+=("$_real")
-            fi
-          fi
-          # Candidate 5: VSCode agent proxy sockets under /run/user
-          for s in /run/user/$(id -u)/vscode-ssh-auth-sock-*; do
-            if [ -S "$s" ]; then
-              HUB_SOCK_CANDIDATES+=("$s")
-            fi
-          done
-          
-            # Try the external helper to pick and link a responsive socket (preferred).
-            if command -v "/workspaces/aiworkflow/../bin/refresh-ssh-sock" >/dev/null 2>&1; then
-              # call helper with HUB_ROOT expanded
-              _sock_path=$(HUB_ROOT="/workspaces/aiworkflow" "/workspaces/aiworkflow/../bin/refresh-ssh-sock" 2>/dev/null || true)
-              if [ -n "$_sock_path" ] && [ -S "$_sock_path" ]; then
-                export SSH_AUTH_SOCK="$_sock_path"
-              fi
-            else
-              # Try candidates in order and pick the first responsive agent
-              for cand in "${HUB_SOCK_CANDIDATES[@]:-}"; do
-                if [ -S "$cand" ]; then
-                  SSH_AUTH_SOCK="$cand" ssh-add -l >/dev/null 2>&1 && {
-                    mkdir -p "/workspaces/aiworkflow" 2>/dev/null || true
-                    ln -sf "$cand" "/workspaces/aiworkflow/.ssh-auth.sock" || true
-                    export SSH_AUTH_SOCK="/workspaces/aiworkflow/.ssh-auth.sock"
-                    break
-                  }
-                fi
-              done
-          
-              # If no responsive agent found, but a hub symlink exists, use it as a fallback
-              if [ -S "/workspaces/aiworkflow/.ssh-auth.sock" ] && [ -z "$SSH_AUTH_SOCK" ]; then
-                export SSH_AUTH_SOCK="/workspaces/aiworkflow/.ssh-auth.sock"
-              fi
-            fi
-          export PATH="$PATH:$HUB_ROOT/bin"
-          export OPEN_SPEC_SKILLS_PATH="$HUB_ROOT/skills"
-          export OPEN_SPEC_PROJECT_DIR="/workspaces/PrismatIQ"
-          
-          echo "PrismatIQ DevShell Active"
-         '';
+${private_hook}
+echo "PrismatIQ DevShell Active"
+'';
       };
     };
 }
