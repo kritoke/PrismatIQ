@@ -44,8 +44,7 @@
         # or environment glue. This keeps personal workspace-specific logic out of
         # the repository. If `flake.private.nix` exists it should export a shell
         # snippet; otherwise a minimal shellHook runs.
-        shellHook = ''
-${toString (if private_hook.success then private_hook.value else "")} 
+        shellHook = ''${if private_hook.success then private_hook.value else ""}
 echo "PrismatIQ DevShell Active"
 '';
       };
