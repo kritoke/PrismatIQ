@@ -22,6 +22,36 @@ jobs:
       - name: Install shards
         run: shards install
 
+      - name: Generate RGBA fixtures
+        run: |
+          # regenerate canonical raw RGBA fixtures used by tests and benchmarks
+          crystal run scripts/gen_rgba_crystal.cr 4 4 spec/fixtures/solid_4x4_rgba.bin
+          crystal run scripts/gen_rgba_crystal.cr 8 8 spec/fixtures/palette_threads_8x8.bin
+          crystal run scripts/gen_rgba_crystal.cr 32 32 spec/fixtures/favicon_32x32.rgba.bin
+
+      - name: Verify generated fixtures
+        run: |
+          set -euo pipefail
+          # golden hashes for canonical fixtures (sha256)
+          SOLID_4x4=2589b3a94be9f75a868b54d39bc33af89d93485c728103a14c7fd0d9a078c9aa
+          GENERATED=$(sha256sum spec/fixtures/solid_4x4_rgba.bin | awk '{print $1}')
+          if [ "$GENERATED" != "$SOLID_4x4" ]; then
+            echo "ERROR: solid_4x4_rgba.bin hash mismatch: $GENERATED != $SOLID_4x4"
+            exit 2
+          fi
+          PAL8_8x8=ce1ccd99c9ddf201f359f6c08297d1109bab2ff1a3f931654b62110613a729fe
+          GENERATED2=$(sha256sum spec/fixtures/palette_threads_8x8.bin | awk '{print $1}')
+          if [ "$GENERATED2" != "$PAL8_8x8" ]; then
+            echo "ERROR: palette_threads_8x8.bin hash mismatch: $GENERATED2 != $PAL8_8x8"
+            exit 3
+          fi
+          FAV32=4abe9c4bbabf3d169cc71f5a3bba54b294bab06363ad76beea7ac869f462f7b4
+          GENERATED3=$(sha256sum spec/fixtures/favicon_32x32.rgba.bin | awk '{print $1}')
+          if [ "$GENERATED3" != "$FAV32" ]; then
+            echo "ERROR: favicon_32x32.rgba.bin hash mismatch: $GENERATED3 != $FAV32"
+            exit 4
+          fi
+
       - name: Run specs
         run: crystal spec
 
