@@ -1,0 +1,6 @@
+---
+version: 1.0
+shards:
+  crimage:
+    git: https://github.com/naqvis/crimage.git
+    version: 1.0.4+git.commit.b65f67df27f4cb8807a34d94a90dfd4162acf45a

@@ -1,4 +1,5 @@
 require "./cpu_cores"
+require "./prismatiq/color_extractor"
 
 module PrismatIQ
   VERSION = "0.2.0"

@@ -47,8 +47,8 @@
         # the repository. If `flake.private.nix` exists it should export a shell
         # snippet; otherwise a minimal shellHook runs.
         shellHook = ''${if private_hook.success then private_hook.value else ""}
-echo "PrismatIQ DevShell Active"
-'';
+          echo "PrismatIQ DevShell Active"
+        '';
       };
     };
 }

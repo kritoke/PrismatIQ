@@ -1,0 +1,1 @@
+/workspaces/aiworkflow/.opencode/skills/mint/SKILL.md
