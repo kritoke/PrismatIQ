@@ -3,36 +3,8 @@ require "../src/prismatiq"
 
 describe "Palette stats and ColorThief compatibility" do
   it "returns entries with counts and percentages that sum to ~1 and hex format" do
-    width = 4
-    height = 4
-    pixels = Array(UInt8).new(width * height * 4, 0)
-
-    # Fill most pixels with red, some blue (deterministic)
-    idx = 0
-    i = 0
-    while i < width * height
-      if i % 5 == 0
-        pixels[idx] = 0
-        pixels[idx + 1] = 0
-        pixels[idx + 2] = 255
-        pixels[idx + 3] = 255
-      else
-        pixels[idx] = 255
-        pixels[idx + 1] = 0
-        pixels[idx + 2] = 0
-        pixels[idx + 3] = 255
-      end
-      idx += 4
-      i += 1
-    end
-
-    # copy to Slice(UInt8)
-    slice = Slice(UInt8).new(pixels.size)
-    i = 0
-    while i < pixels.size
-      slice[i] = pixels[i]
-      i += 1
-    end
+    fixture = File.join(__DIR__, "..", "fixtures", "palette_stats_a_4x4.bin")
+    slice, width, height = load_rgba_fixture(fixture)
 
     entries, total = PrismatIQ.get_palette_with_stats_from_buffer(slice, width, height, 3, 1, 1)
 
@@ -61,34 +33,8 @@ describe "Palette stats and ColorThief compatibility" do
   end
 
   it "compatibility wrapper returns same hex list as entries" do
-    width = 4
-    height = 4
-    pixels = Array(UInt8).new(width * height * 4, 0)
-
-    idx = 0
-    i = 0
-    while i < width * height
-      if i % 3 == 0
-        pixels[idx] = 0
-        pixels[idx + 1] = 255
-        pixels[idx + 2] = 0
-        pixels[idx + 3] = 255
-      else
-        pixels[idx] = 255
-        pixels[idx + 1] = 255
-        pixels[idx + 2] = 0
-        pixels[idx + 3] = 255
-      end
-      idx += 4
-      i += 1
-    end
-
-    slice = Slice(UInt8).new(pixels.size)
-    i = 0
-    while i < pixels.size
-      slice[i] = pixels[i]
-      i += 1
-    end
+    fixture = File.join(__DIR__, "..", "fixtures", "palette_stats_b_4x4.bin")
+    slice, width, height = load_rgba_fixture(fixture)
 
     entries, total = PrismatIQ.get_palette_with_stats_from_buffer(slice, width, height, 4, 1, 1)
     ct = PrismatIQ.get_palette_color_thief_from_buffer(slice, width, height, 4, 1, 1)
@@ -98,34 +44,8 @@ describe "Palette stats and ColorThief compatibility" do
   end
 
   it "color thief wrapper is deterministic across thread counts" do
-    width = 8
-    height = 8
-    pixels = Array(UInt8).new(width * height * 4, 0)
-
-    idx = 0
-    i = 0
-    while i < width * height
-      if i % 7 == 0
-        pixels[idx] = 123
-        pixels[idx + 1] = 50
-        pixels[idx + 2] = 200
-        pixels[idx + 3] = 255
-      else
-        pixels[idx] = 10
-        pixels[idx + 1] = 200
-        pixels[idx + 2] = 100
-        pixels[idx + 3] = 255
-      end
-      idx += 4
-      i += 1
-    end
-
-    slice = Slice(UInt8).new(pixels.size)
-    i = 0
-    while i < pixels.size
-      slice[i] = pixels[i]
-      i += 1
-    end
+    fixture = File.join(__DIR__, "..", "fixtures", "palette_threads_8x8.bin")
+    slice, width, height = load_rgba_fixture(fixture)
 
     ct1 = PrismatIQ.get_palette_color_thief_from_buffer(slice, width, height, 5, 1, 1)
     ct4 = PrismatIQ.get_palette_color_thief_from_buffer(slice, width, height, 5, 1, 4)

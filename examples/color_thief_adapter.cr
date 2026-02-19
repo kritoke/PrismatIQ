@@ -19,7 +19,21 @@ quality = (ARGV[2] || "10").to_i
 threads = (ARGV[3] || "0").to_i
 
 begin
-  img = CrImage.read(path)
+  # Accept ICO files: if path ends with .ico use the ICO helper which picks the best PNG entry
+  if path.ends_with?(".ico")
+    # get_palette_from_ico returns an RGB palette; but we want entries + counts, so use CrImage path
+    # We'll prefer to decode via our ICO helper and then feed the returned image into get_palette
+    entries = PrismatIQ.get_palette_from_ico(path, color_count, quality, threads)
+    payload = {
+      "colors" => entries.map { |c| c.to_hex },
+      "entries" => entries.map { |c| { "hex" => c.to_hex, "count" => 0, "percent" => 0.0 } },
+      "total_pixels" => 0
+    }
+    puts payload.to_json
+    exit 0
+  else
+    img = CrImage.read(path)
+  end
 rescue ex : Exception
   STDERR.puts "failed to read image: #{ex.message}"
   exit 2

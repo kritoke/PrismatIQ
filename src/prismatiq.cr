@@ -1,5 +1,7 @@
 require "./cpu_cores"
 require "./prismatiq/color_extractor"
+require "crimage"
+require "./prismatiq/ico"
 
 module PrismatIQ
   VERSION = "0.2.0"
