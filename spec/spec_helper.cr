@@ -7,8 +7,16 @@ require "../src/prismatiq"
 #  - next 4 bytes: height (UInt32 little-endian)
 #  - remaining bytes: raw RGBA bytes (width * height * 4)
 def load_rgba_fixture(path : String) : Tuple(Slice(UInt8), Int32, Int32)
-  bytes = File.read_bytes(path)
-  raise "fixture too small: #{path}" if bytes.size < 8
+  # Read binary file and convert to Bytes for indexed access
+  data = File.read(path)
+  raise "fixture too small: #{path}" if data.size < 8
+  bytes = Bytes.new(data.size)
+  # Use each_byte to avoid character/codepoint issues when reading binary files
+  idx = 0
+  data.each_byte do |b|
+    bytes[idx] = b.to_u8
+    idx += 1
+  end
 
   # try little-endian first, then big-endian; accept whichever matches body size
   le_width = bytes[0].to_u32 | (bytes[1].to_u32 << 8) | (bytes[2].to_u32 << 16) | (bytes[3].to_u32 << 24)
@@ -31,7 +39,7 @@ def load_rgba_fixture(path : String) : Tuple(Slice(UInt8), Int32, Int32)
     raise "fixture body size does not match header (path=#{path} body=#{body_size} le_expected=#{le_expected} be_expected=#{be_expected})"
   end
 
-  body = bytes[8, (width.to_i64 * height.to_i64 * 4).to_i]
+  body = bytes.to_slice[8, (width.to_i64 * height.to_i64 * 4).to_i]
   slice = Slice(UInt8).new(body.size)
   i = 0
   while i < body.size

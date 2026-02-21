@@ -882,9 +882,12 @@ module PrismatIQ
       end
       # if we overshot, step back one
       chunk >>= 1 if chunk > slots && chunk > 64
-    end
+      end
 
     start = 0
+    if ENV["PRISMATIQ_DEBUG"]?
+      STDERR.puts "merge_locals_chunked: chunk=#{chunk} threads=#{locals.size}"
+    end
     while start < 32768
       ending = [start + chunk, 32768].min
       idx = start

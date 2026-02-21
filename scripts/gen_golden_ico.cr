@@ -28,13 +28,12 @@ File.open(ico_png_path, "wb") do |f|
   f.write_byte(0_u8)
   f.write_bytes(0_u16, IO::ByteFormat::LittleEndian)
   f.write_bytes(0_u16, IO::ByteFormat::LittleEndian)
-  f.write_bytes(png_bytes.size.to_u32, IO::ByteFormat::LittleEndian)
+  size = png_bytes.bytesize
+  f.write_bytes(size.to_u32, IO::ByteFormat::LittleEndian)
   f.write_bytes((6 + 16).to_u32, IO::ByteFormat::LittleEndian)
 
-  # write PNG bytes one byte at a time to the file
-  png_bytes.each_byte do |b|
-    f.write_byte(b.to_u8)
-  end
+  # write PNG bytes directly to the file (preserve exact bytes)
+  f.write(png_bytes.to_slice)
 end
 
 # Create BMP/DIB ICO using CrImage writer
