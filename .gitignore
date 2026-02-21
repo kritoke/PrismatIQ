@@ -31,3 +31,6 @@ bin/
 .env.*
 !.env.example
 flake.private.nix
+
+# Local audit todo file
+todo.md

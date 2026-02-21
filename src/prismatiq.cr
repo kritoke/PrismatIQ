@@ -423,29 +423,75 @@ module PrismatIQ
   end
 
   def self.get_palette(path : String, color_count : Int32 = 5, quality : Int32 = 10) : Array(RGB)
+    if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
+      STDERR.puts "get_palette(path): path=#{path} color_count=#{color_count} quality=#{quality}"
+    end
     img = CrImage.read(path)
-    get_palette(img, color_count, quality)
+    # Cast to CrImage::Image to satisfy compile-time dispatch and call the
+    # concrete helper which operates on CrImage::Image specifically.
+    get_palette_from_image(img.as(CrImage::Image), color_count, quality)
   end
 
   def self.get_palette(io : IO, color_count : Int32 = 5, quality : Int32 = 10) : Array(RGB)
     img = CrImage.read(io)
-    get_palette(img, color_count, quality)
+    get_palette_from_image(img.as(CrImage::Image), color_count, quality)
   end
 
-  def self.get_palette(img : CrImage, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
-    pixels = img.pix
-    width = img.width
-    height = img.height
+  def self.get_palette(img, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
+    # Prefer to operate on CrImage::Image directly; if the caller passed a
+    # different type, attempt to coerce it into an image and delegate.
+    if img.is_a?(CrImage::Image)
+      get_palette_from_image(img.as(CrImage::Image), color_count, quality, threads)
+    else
+      # Try to read it using CrImage.read if possible
+      begin
+        begin
+          read_img = CrImage.read(img)
+        rescue ex : Exception
+          STDERR.puts "get_palette: CrImage.read failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+          read_img = nil
+        end
+        if read_img
+          return get_palette_from_image(read_img.as(CrImage::Image), color_count, quality, threads)
+        end
+      rescue ex : Exception
+        STDERR.puts "get_palette: unexpected error while attempting fallback read: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+      end
+      [RGB.new(0, 0, 0)]
+    end
+  end
+
+  # Concrete implementation working with CrImage::Image (compile-time known type)
+  def self.get_palette_from_image(image, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
+    # Convert image to an RGBA image via CrImage::Pipeline which provides a
+    # concrete RGBA image with a contiguous `pix` buffer. This avoids compile-
+    # time dispatch issues on CrImage's many image variants.
+    if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
+      STDERR.puts "get_palette_from_image: image.class=#{image.class} color_count=#{color_count} quality=#{quality} threads=#{threads}"
+    end
+    rgba_image = CrImage::Pipeline.new(image).result
+    width = rgba_image.bounds.width.to_i32
+    height = rgba_image.bounds.height.to_i32
+
+    src = rgba_image.pix
+    pixels = Slice(UInt8).new(src.size)
+    i = 0_i32
+    while i < src.size
+      pixels[i] = src[i]
+      i += 1
+    end
+    # Delegate to the buffer-based extraction now that we have an RGBA buffer.
+    return get_palette_from_buffer(pixels, width, height, color_count, quality, threads)
     histo = Array(UInt32).new(32768, 0_u32)
     total_pixels = 0
 
     step = quality < 1 ? 1 : quality
 
     # Multithreaded histogram build: if threads <= 1 fall back to single-threaded loop
-      if threads <= 1
-        y_coord = 0
+    y_coord = 0_i32
+    if threads <= 1
       while y_coord < height
-        x_coord = 0
+        x_coord = 0_i32
         while x_coord < width
                idx = (y_coord * width + x_coord) * 4
                # Safety: guard against any index calculation issues (avoid IndexError in threads)
@@ -589,6 +635,15 @@ module PrismatIQ
     end
 
     palette = sort_by_popularity(palette, histo)
+
+    if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
+      begin
+        hex = palette.map(&.to_hex).join(",")
+        total_info = (begin @total rescue "n/a" end)
+        STDERR.puts "get_palette_from_buffer: palette_hex=#{hex} total_pixels=#{total_info}"
+      rescue
+      end
+    end
 
     palette[0...color_count]
   end
@@ -771,7 +826,7 @@ module PrismatIQ
     get_palette(io, color_count: 1, quality: 1)[0]
   end
 
-  def self.get_color(img : CrImage) : RGB
+  def self.get_color(img) : RGB
     get_palette(img, color_count: 1, quality: 1)[0]
   end
 

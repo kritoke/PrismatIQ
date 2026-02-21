@@ -14,15 +14,17 @@ Scope constraints
   implemented here.
 
 Potential issues (library-focused)
+- Security: predictable temp-files and non-atomic writes in ICO parsing (see `src/prismatiq/ico.cr`) — risk of TOCTOU and symlink attacks.
+- Resource exhaustion: reading large files into memory and allocating buffers from unvalidated sizes can cause OOM/DoS.
+- Error swallowing: many `rescue nil` / empty rescues around I/O hide failures and return default black palettes; prefer explicit errors.
+- Duplicate definitions: `src/vbox.cr` duplicates `PrismatIQ::Color`/`VBox` found in `src/prismatiq.cr` — remove/merge to avoid redefinition/confusion.
+- Type/offset safety: file offsets use 32-bit ints in places that should use 64-bit where files may be large.
+
+Other library concerns (stability/style)
 - API stability: design a small, stable public API surface so adopters can rely on it.
-- Input formats: support buffers and common image formats (PNG, JPEG, ICO, SVG, WebP).
-  Provide robust detection and clear errors for unsupported formats.
-- Determinism & tests: ensure deterministic extraction across runs, thread counts, and
-  concurrency modes; add tests with bundled sample images.
-- Performance: prioritize low-memory, high-throughput implementations. Expose tunable
-  sampling and concurrency controls with safe defaults.
-- Accessibility helpers: provide contrast_ratio and suggest_text_color helpers (WCAG),
-  but keep UI decisions to consumers.
+- Determinism & tests: ensure deterministic extraction across runs, thread counts, and concurrency modes; add tests with bundled sample images.
+- Performance: prioritize low-memory, high-throughput implementations. Expose tunable sampling and concurrency controls with safe defaults.
+- Accessibility helpers: provide contrast_ratio and suggest_text_color helpers (WCAG), but keep UI decisions to consumers.
 - Error handling: return explicit errors or nils for invalid inputs and avoid panics.
 
 Library recommendations (PrismatIQ deliverables)
@@ -45,14 +47,13 @@ Library recommendations (PrismatIQ deliverables)
    favicon sizes and for larger images.
 
 Implementation tasks (Crystal-only)
-1. Implement buffer-based dominant color extraction with configurable sample count and step.
-2. Implement ICO support (read multiple images from ICO and pick best candidate by area+opacity).
-3. Implement palette extraction (k-means or median-cut, tuned for speed) and a ColorThief-compatible
-   export wrapper.
-4. Implement WCAG helpers for contrast and text suggestion.
-5. Add CLI example `examples/color_thief_adapter.cr` that emits JSON compatible with ColorThief consumers.
-6. Add specs under `spec/` with deterministic checks and fixture images.
-7. Add benchmarks under `benchmark/` or similar.
+1. Fix ICO temp-file handling to use `Tempfile`/atomic creation and ensure cleanup in ensure blocks.
+2. Add a configurable max file size guard and validate ICO/image entry sizes before allocating large buffers.
+3. Replace `rescue nil` around `CrImage.read` / `File.read` with explicit error returns or logging.
+4. Remove or merge `src/vbox.cr` to avoid duplicate `Color`/`VBox` definitions.
+5. Use Int64 for file offsets/length calculations when parsing file headers.
+6. Replace per-byte loops copying pixel buffers with bulk copy methods where available.
+7. Add tests for malformed and oversize ICO inputs.
 
 Migration guidance (for other projects like Quickheadlines)
 - Document how consumers should call PrismatIQ from server code (download favicon into a buffer,
