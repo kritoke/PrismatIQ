@@ -1,6 +1,7 @@
 require "./cpu_cores"
 require "./prismatiq/color_extractor"
 require "crimage"
+require "./prismatiq/tempfile_helper"
 require "./prismatiq/ico"
 
 module PrismatIQ
@@ -814,7 +815,9 @@ module PrismatIQ
 
   # Compatibility wrapper returning ColorThief-like hex array
   def self.get_palette_color_thief_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(String)
-    entries, _ = get_palette_with_stats_from_buffer(pixels, width, height, color_count, quality, threads)
+    # For the ColorThief-style wrapper return deterministic results independent
+    # of threading. Build stats single-threaded to ensure stable ordering.
+    entries, _ = get_palette_with_stats_from_buffer(pixels, width, height, color_count, quality, 1)
     entries.map(&.rgb.to_hex)
   end
 
