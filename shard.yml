@@ -11,7 +11,7 @@ dependencies:
     github: naqvis/crimage
     version: ~> 1.0
   tempdir:
-    github: lugia-kun/tempdir
+    github: kritoke/tempdir
     version: ~> 0.1
 
 license: MIT
