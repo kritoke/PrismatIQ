@@ -12,6 +12,6 @@ dependencies:
     version: ~> 1.0
   tempdir:
     github: kritoke/tempdir
-    version: ~> 0.1
+    version: ~> 0.3
 
 license: MIT
