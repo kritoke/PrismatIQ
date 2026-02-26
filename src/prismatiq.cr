@@ -83,6 +83,20 @@ module PrismatIQ
     end
   end
 
+  # Validation exception for invalid input parameters
+  class ValidationError < Exception
+  end
+
+  # Validate input parameters for palette extraction methods
+  private def self.validate_params(color_count : Int32, quality : Int32) : Nil
+    if color_count < 1
+      raise ValidationError.new("color_count must be >= 1, got #{color_count}")
+    end
+    if quality < 1
+      raise ValidationError.new("quality must be >= 1, got #{quality}")
+    end
+  end
+
   struct VBox
     property y1 : Int32
     property y2 : Int32
@@ -424,6 +438,7 @@ module PrismatIQ
   end
 
   def self.get_palette(path : String, color_count : Int32 = 5, quality : Int32 = 10) : Array(RGB)
+    validate_params(color_count, quality)
     if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
       STDERR.puts "get_palette(path): path=#{path} color_count=#{color_count} quality=#{quality}"
     end
@@ -434,11 +449,13 @@ module PrismatIQ
   end
 
   def self.get_palette(io : IO, color_count : Int32 = 5, quality : Int32 = 10) : Array(RGB)
+    validate_params(color_count, quality)
     img = CrImage.read(io)
     get_palette_from_image(img.as(CrImage::Image), color_count, quality)
   end
 
   def self.get_palette(img, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
+    validate_params(color_count, quality)
     # Prefer to operate on CrImage::Image directly; if the caller passed a
     # different type, attempt to coerce it into an image and delegate.
     if img.is_a?(CrImage::Image)
@@ -464,6 +481,7 @@ module PrismatIQ
 
   # Concrete implementation working with CrImage::Image (compile-time known type)
   def self.get_palette_from_image(image, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
+    validate_params(color_count, quality)
     # Convert image to an RGBA image via CrImage::Pipeline which provides a
     # concrete RGBA image with a contiguous `pix` buffer. This avoids compile-
     # time dispatch issues on CrImage's many image variants.
@@ -482,176 +500,13 @@ module PrismatIQ
       i += 1
     end
     # Delegate to the buffer-based extraction now that we have an RGBA buffer.
-    return get_palette_from_buffer(pixels, width, height, color_count, quality, threads)
-    histo = Array(UInt32).new(32768, 0_u32)
-    total_pixels = 0
-
-    step = quality < 1 ? 1 : quality
-
-    # Multithreaded histogram build: if threads <= 1 fall back to single-threaded loop
-    y_coord = 0_i32
-    if threads <= 1
-      while y_coord < height
-        x_coord = 0_i32
-        while x_coord < width
-               idx = (y_coord * width + x_coord) * 4
-               # Safety: guard against any index calculation issues (avoid IndexError in threads)
-               if idx + 3 >= pixels.size
-                 x_coord += step
-                 next
-               end
-
-               if idx + 3 >= pixels.size
-                 x_coord += step
-                 next
-               end
-
-               r = pixels[idx]
-               g = pixels[idx + 1]
-               b = pixels[idx + 2]
-               a = pixels[idx + 3]
-
-          if a >= 125
-            y, i, q = quantize_yiq_from_rgb(r.to_i, g.to_i, b.to_i)
-            index = VBox.to_index(y, i, q)
-            # increment fixed histogram slot
-            histo[index] += 1_u32
-            total_pixels += 1
-          end
-
-          x_coord += step
-        end
-        y_coord += step
-      end
-    else
-      # Choose a sensible default if threads is non-positive (shouldn't reach here)
-      # Default to CPU.cores when threads <= 0
-      # Default: use CPU.cores helper, fallback to ENV override, then 4
-       thread_count = if threads <= 0
-                        ::PrismatIQ::CPU.cores
-                      else
-                        threads
-                      end
-
-      # Limit thread_count to height to avoid useless threads
-      thread_count = [thread_count, height].min
-
-      locals = Array(Array(UInt32) | Nil).new(thread_count, nil)
-      totals = Array(Int32).new(thread_count, 0)
-      workers = Array(Thread).new
-
-      # Compute rows per thread carefully, but ensure non-zero step for small heights
-      rows_per = (height + thread_count - 1) // thread_count
-      rows_per = 1 if rows_per <= 0
-
-      t = 0
-      while t < thread_count
-        start_row = t * rows_per
-        # ensure start_row within bounds
-        break if start_row >= height
-        end_row = [start_row + rows_per, height].min
-
-        # Capture variables for thread
-        local_t = t
-        s_row = start_row
-        e_row = end_row
-
-        if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
-          STDERR.puts "DBG: spawn worker t=#{local_t} s_row=#{s_row} e_row=#{e_row} rows_per=#{rows_per} width=#{width} height=#{height} pixels_size=#{pixels.size} expected_size=#{width * height * 4} step=#{step} thread_count=#{thread_count}"
-        end
-
-        workers << Thread.new do
-          begin
-            local_histo = Array(UInt32).new(32768, 0_u32)
-            local_count = 0
-
-            y_coord = s_row
-            while y_coord < e_row
-              x_coord = 0
-              while x_coord < width
-                idx = (y_coord * width + x_coord) * 4
-                # Safety: guard against any index calculation issues (avoid IndexError in threads)
-                if idx + 3 >= pixels.size
-                  x_coord += step
-                  next
-                end
-
-                r = pixels[idx]
-                g = pixels[idx + 1]
-                b = pixels[idx + 2]
-                a = pixels[idx + 3]
-
-                if a >= 125
-                  y, i, q = quantize_yiq_from_rgb(r.to_i, g.to_i, b.to_i)
-                  index = VBox.to_index(y, i, q)
-                  if index < 0 || index >= local_histo.size
-                    if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
-                      STDERR.puts "DBG: local_histo OOB in get_palette worker t=#{local_t} index=#{index} local_size=#{local_histo.size} y=#{y} i=#{i} q=#{q} s_row=#{s_row} e_row=#{e_row}"
-                    end
-                  else
-                    local_histo[index] += 1_u32
-                  end
-                  local_count += 1
-                end
-
-                x_coord += step
-              end
-              y_coord += step
-            end
-
-            locals[local_t] = local_histo
-            totals[local_t] = local_count
-          rescue IndexError
-            STDERR.puts "IndexError in worker t=#{local_t} s_row=#{s_row} e_row=#{e_row} width=#{width} height=#{height} pixels_size=#{pixels.size} y_coord=#{y_coord} x_coord=#{x_coord} idx=#{idx}"
-            raise
-          end
-        end
-
-        t += 1
-      end
-
-      # Wait for workers
-      workers.each do |w|
-        w.join
-      end
-
-      # Merge local histograms using chunked aggregation to improve cache locality
-      total_pixels = merge_locals_chunked(histo, locals)
-    end
-
-    if total_pixels == 0
-      return [RGB.new(0, 0, 0)]
-    end
-
-    mmcq = MMCQ.new(histo)
-    vboxes = mmcq.quantize(color_count)
-
-    palette = Array(RGB).new
-    vboxes.each do |box|
-      if box.count > 0
-        avg_color = box.average_color
-        rgb = avg_color.to_rgb_obj
-        palette << rgb
-      end
-    end
-
-    palette = sort_by_popularity(palette, histo)
-
-    if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
-      begin
-        hex = palette.map(&.to_hex).join(",")
-        total_info = (begin @total rescue "n/a" end)
-        STDERR.puts "get_palette_from_buffer: palette_hex=#{hex} total_pixels=#{total_info}"
-      rescue
-      end
-    end
-
-    palette[0...color_count]
+    get_palette_from_buffer(pixels, width, height, color_count, quality, threads)
   end
 
   # Helper: run palette extraction directly from an RGBA buffer (Slice(UInt8)).
   # Useful for benchmarks or when you already have raw pixel data.
   def self.get_palette_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
+    validate_params(color_count, quality)
     histo, total_pixels = build_histo_from_buffer(pixels, width, height, quality, threads)
 
     if total_pixels == 0
