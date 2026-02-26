@@ -190,12 +190,7 @@ module PrismatIQ
 
   # Validate input parameters for palette extraction methods
   private def self.validate_params(color_count : Int32, quality : Int32) : Nil
-    if color_count < 1
-      raise ValidationError.new("color_count must be >= 1, got #{color_count}")
-    end
-    if quality < 1
-      raise ValidationError.new("quality must be >= 1, got #{quality}")
-    end
+    Options.new(color_count, quality).validate!
   end
 
   struct VBox
@@ -614,6 +609,10 @@ module PrismatIQ
       return [RGB.new(0, 0, 0)]
     end
 
+    quantize_palette(histo, color_count)[0...color_count]
+  end
+
+  private def self.quantize_palette(histo : Array(UInt32), color_count : Int32) : Array(RGB)
     mmcq = MMCQ.new(histo)
     vboxes = mmcq.quantize(color_count)
 
@@ -626,9 +625,7 @@ module PrismatIQ
       end
     end
 
-    palette = sort_by_popularity(palette, histo)
-
-    palette[0...color_count]
+    sort_by_popularity(palette, histo)
   end
 
   # Build histogram from an RGBA buffer. Returns [histo, total_pixels].
@@ -843,19 +840,7 @@ module PrismatIQ
         return PaletteResult.err("No valid pixels found")
       end
 
-      mmcq = MMCQ.new(histo)
-      vboxes = mmcq.quantize(options.color_count)
-
-      palette = Array(RGB).new
-      vboxes.each do |box|
-        if box.count > 0
-          avg_color = box.average_color
-          rgb = avg_color.to_rgb_obj
-          palette << rgb
-        end
-      end
-
-      palette = sort_by_popularity(palette, histo)
+      palette = quantize_palette(histo, options.color_count)
       PaletteResult.ok(palette[0...options.color_count], total_pixels)
     rescue ex : Exception
       PaletteResult.err(ex.message || "Unknown error")

@@ -8,6 +8,10 @@ result-*
 node_modules/
 lib/
 
+# Rules and skills (external tooling)
+rules/
+skills/
+
 # Build artifacts
 bin/
 prismatiq
