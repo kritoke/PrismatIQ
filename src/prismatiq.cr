@@ -126,10 +126,14 @@ module PrismatIQ
     def self.from_hex(hex : String) : RGB
       hex = hex.lchop('#')
       raise ValidationError.new("Invalid hex color: #{hex}") unless hex.size == 6
-      r = hex[0, 2].to_i(16)
-      g = hex[2, 2].to_i(16)
-      b = hex[4, 2].to_i(16)
-      new(r, g, b)
+      begin
+        r = hex[0, 2].to_i(16)
+        g = hex[2, 2].to_i(16)
+        b = hex[4, 2].to_i(16)
+        new(r, g, b)
+      rescue ex : ArgumentError
+        raise ValidationError.new("Invalid hex color characters: #{hex}")
+      end
     end
 
     def distance_to(other : RGB) : Float64
@@ -604,7 +608,7 @@ module PrismatIQ
   end
 
   # Build histogram from an RGBA buffer. Returns [histo, total_pixels].
-  private def self.build_histo_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, quality : Int32, threads : Int32) : Tuple(Array(UInt32), Int32)
+  private def self.build_histo_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, quality : Int32, threads : Int32, alpha_threshold : UInt8 = 125_u8) : Tuple(Array(UInt32), Int32)
     histo = Array(UInt32).new(32768, 0_u32)
     total_pixels = 0
 
@@ -627,7 +631,7 @@ module PrismatIQ
           b = pixels[idx + 2]
           a = pixels[idx + 3]
 
-          if a >= 125
+          if a >= alpha_threshold
             y, i, q = quantize_yiq_from_rgb(r.to_i, g.to_i, b.to_i)
             index = VBox.to_index(y, i, q)
             histo[index] += 1_u32
@@ -657,6 +661,7 @@ module PrismatIQ
         local_t = t
         s_row = start_row
         e_row = end_row
+        thr_alpha = alpha_threshold
 
         workers << Thread.new do
           local_histo = Array(UInt32).new(32768, 0_u32)
@@ -678,7 +683,7 @@ module PrismatIQ
               b = pixels[idx + 2]
               a = pixels[idx + 3]
 
-              if a >= 125
+              if a >= thr_alpha
                 y, i, q = quantize_yiq_from_rgb(r.to_i, g.to_i, b.to_i)
                 index = VBox.to_index(y, i, q)
                 if index >= 0 && index < local_histo.size
@@ -836,15 +841,24 @@ module PrismatIQ
   # Fiber-based async palette extraction
   def self.get_palette_async(path : String, options : Options = Options.new, &block : Array(RGB) ->)
     spawn do
-      result = get_palette(path, options)
-      block.call(result)
+      begin
+        result = get_palette(path, options)
+        block.call(result)
+      rescue ex : Exception
+        # Call block with fallback palette on error
+        block.call([RGB.new(0, 0, 0)])
+      end
     end
   end
 
   def self.get_palette_channel(path : String, options : Options = Options.new) : Channel(Array(RGB))
     ch = Channel(Array(RGB)).new(1)
     spawn do
-      ch.send(get_palette(path, options))
+      begin
+        ch.send(get_palette(path, options))
+      rescue ex : Exception
+        ch.send([RGB.new(0, 0, 0)])
+      end
     end
     ch
   end
