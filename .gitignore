@@ -6,6 +6,7 @@ result-*
 
 # Dependencies
 node_modules/
+lib/
 
 # Build artifacts
 bin/

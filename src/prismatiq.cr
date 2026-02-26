@@ -7,16 +7,44 @@ require "json"
 require "yaml"
 
 module PrismatIQ
-  VERSION = "0.3.0"
+  VERSION = "0.3.1"
+
+  module Constants
+    ALPHA_THRESHOLD_DEFAULT = 125_u8
+    HISTOGRAM_SIZE         = 32768
+    RGBA_CHANNELS          = 4
+
+    module YIQ
+      Y_FROM_R = 0.299
+      Y_FROM_G = 0.587
+      Y_FROM_B = 0.114
+      I_FROM_R = 0.596
+      I_FROM_G = -0.274
+      I_FROM_B = -0.322
+      Q_FROM_R = 0.211
+      Q_FROM_G = -0.523
+      Q_FROM_B = 0.312
+
+      R_FROM_Y = 1.0
+      R_FROM_I = 0.956
+      R_FROM_Q = 0.621
+      G_FROM_Y = 1.0
+      G_FROM_I = -0.272
+      G_FROM_Q = -0.647
+      B_FROM_Y = 1.0
+      B_FROM_I = -1.106
+      B_FROM_Q = 1.703
+    end
+  end
 
   # Configuration struct for palette extraction options
   struct Options
     property color_count : Int32 = 5
     property quality : Int32 = 10
     property threads : Int32 = 0
-    property alpha_threshold : UInt8 = 125_u8
+    property alpha_threshold : UInt8 = Constants::ALPHA_THRESHOLD_DEFAULT
 
-    def initialize(@color_count : Int32 = 5, @quality : Int32 = 10, @threads : Int32 = 0, @alpha_threshold : UInt8 = 125_u8)
+    def initialize(@color_count : Int32 = 5, @quality : Int32 = 10, @threads : Int32 = 0, @alpha_threshold : UInt8 = Constants::ALPHA_THRESHOLD_DEFAULT)
     end
 
     def validate!
@@ -54,9 +82,9 @@ module PrismatIQ
     end
 
     def self.from_rgb(r : Int32, g : Int32, b : Int32)
-      y = (0.299 * r) + (0.587 * g) + (0.114 * b)
-      i = (0.596 * r) - (0.274 * g) - (0.322 * b)
-      q = (0.211 * r) - (0.523 * g) + (0.312 * b)
+      y = (Constants::YIQ::Y_FROM_R * r) + (Constants::YIQ::Y_FROM_G * g) + (Constants::YIQ::Y_FROM_B * b)
+      i = (Constants::YIQ::I_FROM_R * r) + (Constants::YIQ::I_FROM_G * g) + (Constants::YIQ::I_FROM_B * b)
+      q = (Constants::YIQ::Q_FROM_R * r) + (Constants::YIQ::Q_FROM_G * g) + (Constants::YIQ::Q_FROM_B * b)
       new(y, i, q)
     end
 
@@ -65,9 +93,9 @@ module PrismatIQ
     end
 
     def to_rgb : Tuple(Int32, Int32, Int32)
-      r = ((@y + 0.956 * @i + 0.621 * @q).clamp(0, 255)).to_i
-      g = ((@y - 0.272 * @i - 0.647 * @q).clamp(0, 255)).to_i
-      b = ((@y - 1.106 * @i + 1.703 * @q).clamp(0, 255)).to_i
+      r = ((@y + Constants::YIQ::R_FROM_I * @i + Constants::YIQ::R_FROM_Q * @q).clamp(0, 255)).to_i
+      g = ((@y + Constants::YIQ::G_FROM_I * @i + Constants::YIQ::G_FROM_Q * @q).clamp(0, 255)).to_i
+      b = ((@y + Constants::YIQ::B_FROM_I * @i + Constants::YIQ::B_FROM_Q * @q).clamp(0, 255)).to_i
       {r, g, b}
     end
 
@@ -88,15 +116,11 @@ module PrismatIQ
   end
 
   # Quantize Y/I/Q channels into 5-bit (0..31) bins from RGB components.
-  # Y is in range ~0..255 so divide by 8.0. I/Q can be negative so shift by +128
-  # to map to unsigned range before dividing. Clamp to [0,31] to be safe.
   private def self.quantize_yiq_from_rgb(r : Int32, g : Int32, b : Int32) : Tuple(Int32, Int32, Int32)
-    y = (0.299 * r) + (0.587 * g) + (0.114 * b)
-    i = (0.596 * r) - (0.274 * g) - (0.322 * b)
-    q = (0.211 * r) - (0.523 * g) + (0.312 * b)
+    y = (Constants::YIQ::Y_FROM_R * r) + (Constants::YIQ::Y_FROM_G * g) + (Constants::YIQ::Y_FROM_B * b)
+    i = (Constants::YIQ::I_FROM_R * r) + (Constants::YIQ::I_FROM_G * g) + (Constants::YIQ::I_FROM_B * b)
+    q = (Constants::YIQ::Q_FROM_R * r) + (Constants::YIQ::Q_FROM_G * g) + (Constants::YIQ::Q_FROM_B * b)
 
-    # Preserve original behavior: convert to integer and clamp to 0..31.
-    # This matches prior implementation used by tests, while ensuring no OOB.
     y_q = (y.to_i).clamp(0, 31)
     i_q = (i.to_i).clamp(0, 31)
     q_q = (q.to_i).clamp(0, 31)
@@ -908,9 +932,9 @@ module PrismatIQ
 
   private def self.sort_by_popularity(palette : Array(RGB), histo)
     palette.sort_by do |rgb|
-      y = ((0.299 * rgb.r) + (0.587 * rgb.g) + (0.114 * rgb.b)).to_i
-      i = ((0.596 * rgb.r) - (0.274 * rgb.g) - (0.322 * rgb.b)).to_i
-      q = ((0.211 * rgb.r) - (0.523 * rgb.g) + (0.312 * rgb.b)).to_i
+      y = ((Constants::YIQ::Y_FROM_R * rgb.r) + (Constants::YIQ::Y_FROM_G * rgb.g) + (Constants::YIQ::Y_FROM_B * rgb.b)).to_i
+      i = ((Constants::YIQ::I_FROM_R * rgb.r) + (Constants::YIQ::I_FROM_G * rgb.g) + (Constants::YIQ::I_FROM_B * rgb.b)).to_i
+      q = ((Constants::YIQ::Q_FROM_R * rgb.r) + (Constants::YIQ::Q_FROM_G * rgb.g) + (Constants::YIQ::Q_FROM_B * rgb.b)).to_i
 
       y = y.clamp(0, 31)
       i = i.clamp(0, 31)
