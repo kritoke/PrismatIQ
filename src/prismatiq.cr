@@ -3,9 +3,47 @@ require "./prismatiq/color_extractor"
 require "crimage"
 require "./prismatiq/tempfile_helper"
 require "./prismatiq/ico"
+require "json"
+require "yaml"
 
 module PrismatIQ
-  VERSION = "0.2.0"
+  VERSION = "0.3.0"
+
+  # Configuration struct for palette extraction options
+  struct Options
+    property color_count : Int32 = 5
+    property quality : Int32 = 10
+    property threads : Int32 = 0
+    property alpha_threshold : UInt8 = 125_u8
+
+    def initialize(@color_count : Int32 = 5, @quality : Int32 = 10, @threads : Int32 = 0, @alpha_threshold : UInt8 = 125_u8)
+    end
+
+    def validate!
+      raise ValidationError.new("color_count must be >= 1, got #{@color_count}") if @color_count < 1
+      raise ValidationError.new("quality must be >= 1, got #{@quality}") if @quality < 1
+      raise ValidationError.new("threads must be >= 0, got #{@threads}") if @threads < 0
+    end
+  end
+
+  # Result type for palette extraction with success/failure information
+  struct PaletteResult
+    getter colors : Array(RGB)
+    getter success : Bool
+    getter error : String?
+    getter total_pixels : Int32
+
+    def initialize(@colors : Array(RGB), @success : Bool, @error : String?, @total_pixels : Int32)
+    end
+
+    def self.ok(colors : Array(RGB), total_pixels : Int32) : PaletteResult
+      new(colors, true, nil, total_pixels)
+    end
+
+    def self.err(message : String) : PaletteResult
+      new([] of RGB, false, message, 0)
+    end
+  end
 
   struct Color
     property y : Float64
@@ -66,6 +104,9 @@ module PrismatIQ
   end
 
   struct RGB
+    include JSON::Serializable
+    include YAML::Serializable
+
     property r : Int32
     property g : Int32
     property b : Int32
@@ -80,6 +121,38 @@ module PrismatIQ
         str << @g.to_s(16).rjust(2, '0')
         str << @b.to_s(16).rjust(2, '0')
       end
+    end
+
+    def self.from_hex(hex : String) : RGB
+      hex = hex.lchop('#')
+      raise ValidationError.new("Invalid hex color: #{hex}") unless hex.size == 6
+      r = hex[0, 2].to_i(16)
+      g = hex[2, 2].to_i(16)
+      b = hex[4, 2].to_i(16)
+      new(r, g, b)
+    end
+
+    def distance_to(other : RGB) : Float64
+      Math.sqrt((@r - other.r)**2 + (@g - other.g)**2 + (@b - other.b)**2)
+    end
+
+    def to_json(builder : JSON::Builder)
+      builder.string(to_hex)
+    end
+
+    def self.new(pull : JSON::PullParser)
+      from_hex(pull.read_string)
+    end
+
+    def to_yaml(yaml : YAML::Nodes::Builder)
+      yaml.scalar to_hex
+    end
+
+    def self.new(ctx : YAML::ParseContext, node : YAML::Nodes::Node)
+      unless node.is_a?(YAML::Nodes::Scalar)
+        raise ValidationError.new("Expected scalar for RGB")
+      end
+      from_hex(node.value)
     end
   end
 
@@ -637,12 +710,143 @@ module PrismatIQ
   end
 
   struct PaletteEntry
+    include JSON::Serializable
+    include YAML::Serializable
+
     property rgb : RGB
     property count : Int32
     property percent : Float64
 
     def initialize(@rgb : RGB, @count : Int32, @percent : Float64)
     end
+  end
+
+  # Accessibility module for WCAG contrast checking
+  module Accessibility
+    def self.relative_luminance(rgb : RGB) : Float64
+      r = rgb.r / 255.0
+      g = rgb.g / 255.0
+      b = rgb.b / 255.0
+
+      r = r <= 0.03928 ? r / 12.92 : ((r + 0.055) / 1.055) ** 2.4
+      g = g <= 0.03928 ? g / 12.92 : ((g + 0.055) / 1.055) ** 2.4
+      b = b <= 0.03928 ? b / 12.92 : ((b + 0.055) / 1.055) ** 2.4
+
+      0.2126 * r + 0.7152 * g + 0.0722 * b
+    end
+
+    def self.contrast_ratio(foreground : RGB, background : RGB) : Float64
+      l1 = relative_luminance(foreground)
+      l2 = relative_luminance(background)
+      lighter = {l1, l2}.max
+      darker = {l1, l2}.min
+      (lighter + 0.05) / (darker + 0.05)
+    end
+
+    def self.wcag_aa_compliant?(foreground : RGB, background : RGB) : Bool
+      contrast_ratio(foreground, background) >= 4.5
+    end
+
+    def self.wcag_aaa_compliant?(foreground : RGB, background : RGB) : Bool
+      contrast_ratio(foreground, background) >= 7.0
+    end
+  end
+
+  # Find closest color in palette to a target color
+  def self.find_closest(target : RGB, palette : Array(RGB)) : RGB?
+    return nil if palette.empty?
+    palette.min_by(&.distance_to(target))
+  end
+
+  # Find closest color in image palette to a target color
+  def self.find_closest_in_palette(target : RGB, path : String, options : Options = Options.new) : RGB?
+    palette = get_palette(path, options)
+    find_closest(target, palette)
+  end
+
+  # Get palette with Options struct (new API)
+  def self.get_palette(path : String, options : Options) : Array(RGB)
+    options.validate!
+    get_palette(path, options.color_count, options.quality)
+  end
+
+  def self.get_palette(io : IO, options : Options) : Array(RGB)
+    options.validate!
+    get_palette(io, options.color_count, options.quality)
+  end
+
+  def self.get_palette(img, options : Options) : Array(RGB)
+    options.validate!
+    get_palette(img, options.color_count, options.quality, options.threads)
+  end
+
+  def self.get_palette_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options) : Array(RGB)
+    options.validate!
+    get_palette_from_buffer(pixels, width, height, options.color_count, options.quality, options.threads)
+  end
+
+  # Get palette result with success/failure information
+  def self.get_palette_result(path : String, options : Options = Options.new) : PaletteResult
+    begin
+      options.validate!
+      colors = get_palette(path, options)
+      PaletteResult.ok(colors, 0)
+    rescue ex : Exception
+      PaletteResult.err(ex.message || "Unknown error")
+    end
+  end
+
+  def self.get_palette_result(io : IO, options : Options = Options.new) : PaletteResult
+    begin
+      options.validate!
+      colors = get_palette(io, options)
+      PaletteResult.ok(colors, 0)
+    rescue ex : Exception
+      PaletteResult.err(ex.message || "Unknown error")
+    end
+  end
+
+  def self.get_palette_result_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.new) : PaletteResult
+    begin
+      options.validate!
+      histo, total_pixels = build_histo_from_buffer(pixels, width, height, options.quality, options.threads)
+      if total_pixels == 0
+        return PaletteResult.err("No valid pixels found")
+      end
+
+      mmcq = MMCQ.new(histo)
+      vboxes = mmcq.quantize(options.color_count)
+
+      palette = Array(RGB).new
+      vboxes.each do |box|
+        if box.count > 0
+          avg_color = box.average_color
+          rgb = avg_color.to_rgb_obj
+          palette << rgb
+        end
+      end
+
+      palette = sort_by_popularity(palette, histo)
+      PaletteResult.ok(palette[0...options.color_count], total_pixels)
+    rescue ex : Exception
+      PaletteResult.err(ex.message || "Unknown error")
+    end
+  end
+
+  # Fiber-based async palette extraction
+  def self.get_palette_async(path : String, options : Options = Options.new, &block : Array(RGB) ->)
+    spawn do
+      result = get_palette(path, options)
+      block.call(result)
+    end
+  end
+
+  def self.get_palette_channel(path : String, options : Options = Options.new) : Channel(Array(RGB))
+    ch = Channel(Array(RGB)).new(1)
+    spawn do
+      ch.send(get_palette(path, options))
+    end
+    ch
   end
 
   # Public API: return palette entries with counts and percentages.
