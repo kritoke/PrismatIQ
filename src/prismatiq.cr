@@ -876,27 +876,27 @@ module PrismatIQ
   # Pure alternative using Result type - errors are explicit in return type
   def self.get_palette_or_error(path : String, options : Options = Options.new) : Result(Array(RGB), String)
     options.validate!
-    Result.ok(get_palette(path, options))
+    Result(Array(RGB), String).ok(get_palette(path, options))
   rescue ex : Exception
-    Result.err(ex.message || "Unknown error")
+    Result(Array(RGB), String).err(ex.message || "Unknown error")
   end
 
   def self.get_palette_or_error(io : IO, options : Options = Options.new) : Result(Array(RGB), String)
     options.validate!
-    Result.ok(get_palette(io, options))
+    Result(Array(RGB), String).ok(get_palette(io, options))
   rescue ex : Exception
-    Result.err(ex.message || "Unknown error")
+    Result(Array(RGB), String).err(ex.message || "Unknown error")
   end
 
   def self.get_palette_or_error(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.new) : Result(Array(RGB), String)
     options.validate!
     histo, total_pixels = build_histo_from_buffer(pixels, width, height, options.quality, options.threads, Config.default)
-    return Result.err("No valid pixels found") if total_pixels == 0
+    return Result(Array(RGB), String).err("No valid pixels found") if total_pixels == 0
 
     palette = quantize_palette(histo, options.color_count)
-    Result.ok(palette[0...options.color_count])
+    Result(Array(RGB), String).ok(palette[0...options.color_count])
   rescue ex : Exception
-    Result.err(ex.message || "Unknown error")
+    Result(Array(RGB), String).err(ex.message || "Unknown error")
   end
 
   # Fiber-based async palette extraction
