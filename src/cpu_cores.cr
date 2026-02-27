@@ -1,9 +1,12 @@
 module PrismatIQ
   # Cross-platform CPU core detection for Linux, macOS, FreeBSD
   module CPU
-    def self.cores : Int32
-      # 1) Try ENV override
-      if ENV["PRISMATIQ_THREADS"]?
+    def self.cores(config : Config? = nil) : Int32
+      debug = (config && config.debug) || ENV["PRISMATIQ_DEBUG"]? == "true" || ENV["PRISMATIQ_DEBUG"]? == "1"
+      # 1) Try ENV override (or config override)
+      if config && config.threads
+        return config.threads
+      elsif ENV["PRISMATIQ_THREADS"]?
         return ENV["PRISMATIQ_THREADS"].to_i
       end
 
@@ -27,14 +30,14 @@ module PrismatIQ
             out = (`sysctl -n hw.ncpu`)
           rescue ex : Exception
             out = nil
-            STDERR.puts "CPU.cores: sysctl probe failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+            STDERR.puts "CPU.cores: sysctl probe failed: #{ex.message}" if debug
           end
           if out && out.size > 0
             n = out.to_i
             return n if n > 0
           end
         rescue ex : Exception
-          STDERR.puts "CPU.cores: unexpected exception during sysctl probe: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+          STDERR.puts "CPU.cores: unexpected exception during sysctl probe: #{ex.message}" if debug
         end
       rescue
       end
@@ -46,14 +49,14 @@ module PrismatIQ
             out = (`sysctl -n hw.ncpu`)
           rescue ex : Exception
             out = nil
-            STDERR.puts "CPU.cores: sysctl probe failed (freebsd/path): #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+            STDERR.puts "CPU.cores: sysctl probe failed (freebsd/path): #{ex.message}" if debug
           end
           if out && out.size > 0
             n = out.to_i
             return n if n > 0
           end
         rescue ex : Exception
-          STDERR.puts "CPU.cores: unexpected exception during sysctl probe (freebsd): #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+          STDERR.puts "CPU.cores: unexpected exception during sysctl probe (freebsd): #{ex.message}" if debug
         end
       rescue
       end
@@ -63,7 +66,8 @@ module PrismatIQ
     end
 
     # Try to probe L2 cache size in bytes. Returns nil when unknown.
-    def self.l2_cache_bytes : Int32?
+    def self.l2_cache_bytes(config : Config? = nil) : Int32?
+      debug = (config && config.debug) || ENV["PRISMATIQ_DEBUG"]? == "true" || ENV["PRISMATIQ_DEBUG"]? == "1"
       # 1) macOS sysctl
       begin
         begin
@@ -71,14 +75,14 @@ module PrismatIQ
             out = (`sysctl -n hw.l2cachesize`)
           rescue ex : Exception
             out = nil
-            STDERR.puts "CPU.l2_cache_bytes: sysctl probe failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+            STDERR.puts "CPU.l2_cache_bytes: sysctl probe failed: #{ex.message}" if debug
           end
           if out && out.size > 0
             n = out.to_i
             return n if n > 0
           end
         rescue ex : Exception
-          STDERR.puts "CPU.l2_cache_bytes: unexpected exception during sysctl probe: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+          STDERR.puts "CPU.l2_cache_bytes: unexpected exception during sysctl probe: #{ex.message}" if debug
         end
       rescue
       end

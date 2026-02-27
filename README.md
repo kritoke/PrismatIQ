@@ -1,18 +1,18 @@
 # PrismatIQ
 A high-performance Crystal shard for extracting dominant color palettes from images using the YIQ color space. This is a port of the Color Thief logic (MMCQ) but optimized for Crystal's performance and perception-based color math.
 
-Getting started
+ Getting started
  - Install shards: `shards install`
  - Run tests: `crystal spec`
 
-ColorThief-like example
+ ColorThief-like example
  - Example CLI that produces a ColorThief-compatible JSON payload is at `examples/color_thief_adapter.cr`.
  - Usage: `crystal run examples/color_thief_adapter.cr -- path/to/image.jpg [count] [quality] [threads]`
    - `count` (optional): number of colors to return (default 5)
    - `quality` (optional): sampling step (default 10). Lower is higher fidelity, higher is faster.
    - `threads` (optional): number of worker threads for histogram build (default 0 = auto)
 
-APIs of interest
+ APIs of interest
  - `PrismatIQ.get_palette_from_buffer(pixels, width, height, color_count = 5, quality = 10, threads = 0)`
    - Returns `Array(PrismatIQ::RGB)` like ColorThief's palette (but as structs).
  - `PrismatIQ.get_palette_with_stats_from_buffer(pixels, width, height, color_count = 5, quality = 10, threads = 0)`
@@ -20,7 +20,33 @@ APIs of interest
  - `PrismatIQ.get_palette_color_thief_from_buffer(...)`
    - Convenience wrapper that returns `Array(String)` of hex colors (dominant first) to match ColorThief consumers.
 
-Environment knobs
+ Error Handling with Result Type
+ - `PrismatIQ.get_palette_or_error(path, options)` returns `Result(Array(RGB), String)` for explicit error handling.
+ - `Result` provides: `ok?`, `err?`, `value`, `error`, `value_or`, `map`, `flat_map`, `map_error`
+
+ Configuration
+ - `PrismatIQ::Config` struct for runtime settings:
+   - `debug : Bool` - enable debug traces
+   - `threads : Int32?` - override thread count
+   - `merge_chunk : Int32?` - override merge chunk size
+ - Use `Config.default` for environment-based config, or create explicitly:
+
+   ```crystal
+   config = PrismatIQ::Config.new(debug: true, threads: 4)
+   colors = PrismatIQ.get_palette("image.png", options, config: config)
+   ```
+
+ Testing with Config
+ - Pass `Config.new(debug: true)` to enable debug output without setting ENV vars:
+   ```crystal
+   it "extracts colors" do
+     config = PrismatIQ::Config.new(debug: false)
+     colors = PrismatIQ.get_palette("test.png", color_count: 3, config: config)
+     colors.size.should eq(3)
+   end
+   ```
+
+ Environment knobs
  - `PRISMATIQ_THREADS`: override default thread detection
  - `PRISMATIQ_MERGE_CHUNK`: override merge chunk size (for histogram merging)
  - `PRISMATIQ_DEBUG`: enable debug traces
@@ -48,7 +74,7 @@ This format makes it easy to consume the dominant palette (the `colors` array) w
 also exposing counts and percentages for richer UI or analytics use-cases.
 
 Version
- - Current library version: `0.1.0` (see `src/prismatiq.cr`)
+ - Current library version: `0.4.0` (see `src/prismatiq.cr`)
 
 Changelog
  - See `CHANGELOG.md` for a concise list of unreleased and past changes.

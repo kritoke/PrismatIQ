@@ -7,7 +7,7 @@ require "json"
 require "yaml"
 
 module PrismatIQ
-  VERSION = "0.3.1"
+  VERSION = "0.4.0"
 
   module Constants
     ALPHA_THRESHOLD_DEFAULT = 125_u8
@@ -34,6 +34,94 @@ module PrismatIQ
       B_FROM_Y = 1.0
       B_FROM_I = -1.106
       B_FROM_Q = 1.703
+    end
+  end
+
+  # Configuration struct for runtime settings (debugging, threading, performance tuning)
+  struct Config
+    property debug : Bool
+    property threads : Int32?
+    property merge_chunk : Int32?
+
+    def initialize(@debug : Bool = false, @threads : Int32? = nil, @merge_chunk : Int32? = nil)
+    end
+
+    def self.default : Config
+      new(
+        debug: ENV["PRISMATIQ_DEBUG"]? == "true" || ENV["PRISMATIQ_DEBUG"]? == "1",
+        threads: ENV["PRISMATIQ_THREADS"]?.try(&.to_i),
+        merge_chunk: ENV["PRISMATIQ_MERGE_CHUNK"]?.try(&.to_i)
+      )
+    end
+
+    def thread_count_for(height : Int32, requested : Int32) : Int32
+      t = requested <= 0 ? (threads || CPU.cores) : requested
+      {t, height}.min
+    end
+  end
+
+  # Result type for explicit error handling (inspired by Rust's Result)
+  alias Error = String | Exception
+
+  struct Result(T, E)
+    @value : T?
+    @error : E?
+
+    private def initialize(@value : T?, @error : E?)
+    end
+
+    def self.ok(value : T) : Result(T, E)
+      new(value, nil)
+    end
+
+    def self.err(error : E) : Result(T, E)
+      new(nil, error)
+    end
+
+    def ok?
+      @value != nil
+    end
+
+    def err?
+      @error != nil
+    end
+
+    def value : T
+      raise "Result is an error: #{@error}" unless @value
+      @value.as(T)
+    end
+
+    def error : E
+      raise "Result is ok: #{@value}" unless @error
+      @error.as(E)
+    end
+
+    def value_or(default : T) : T
+      @value || default
+    end
+
+    def map(&block : T -> U) : Result(U, E) forall U
+      if @value
+        Result(U, E).ok(block.call(@value.as(T)))
+      else
+        Result(U, E).err(@error.as(E))
+      end
+    end
+
+    def flat_map(&block : T -> Result(U, E)) : Result(U, E) forall U
+      if @value
+        block.call(@value.as(T))
+      else
+        Result(U, E).err(@error.as(E))
+      end
+    end
+
+    def map_error(&block : E -> F) : Result(T, F) forall F
+      if @error
+        Result(T, F).err(block.call(@error.as(E)))
+      else
+        Result(T, F).ok(@value.as(T))
+      end
     end
   end
 
@@ -74,9 +162,9 @@ module PrismatIQ
   end
 
   struct Color
-    property y : Float64
-    property i : Float64
-    property q : Float64
+    getter y : Float64
+    getter i : Float64
+    getter q : Float64
 
     def initialize(@y : Float64, @i : Float64, @q : Float64)
     end
@@ -131,9 +219,9 @@ module PrismatIQ
     include JSON::Serializable
     include YAML::Serializable
 
-    property r : Int32
-    property g : Int32
-    property b : Int32
+    getter r : Int32
+    getter g : Int32
+    getter b : Int32
 
     def initialize(@r : Int32, @g : Int32, @b : Int32)
     end
@@ -194,15 +282,14 @@ module PrismatIQ
   end
 
   struct VBox
-    property y1 : Int32
-    property y2 : Int32
-    property i1 : Int32
-    property i2 : Int32
-    property q1 : Int32
-    property q2 : Int32
-    property count : Int32
-    # fixed-size histogram (32*32*32 = 32768 entries)
-    property histo : Array(UInt32)
+    getter y1 : Int32
+    getter y2 : Int32
+    getter i1 : Int32
+    getter i2 : Int32
+    getter q1 : Int32
+    getter q2 : Int32
+    getter count : Int32
+    getter histo : Array(UInt32)
 
     def initialize(@y1 : Int32, @y2 : Int32, @i1 : Int32, @i2 : Int32, @q1 : Int32, @q2 : Int32, @count : Int32 = 0, @histo : Array(UInt32) = Array(UInt32).new(32768, 0_u32))
     end
@@ -277,11 +364,8 @@ module PrismatIQ
       box1 = VBox.new(box1_y1, box1_y2, box1_i1, box1_i2, box1_q1, box1_q2, 0, @histo)
       box2 = VBox.new(box2_y1, box2_y2, box2_i1, box2_i2, box2_q1, box2_q2, 0, @histo)
 
-      # Recalculate counts for the new boxes so MMCQ can use them
-      box1.recalc_count
-      box2.recalc_count
-
-      {box1, box2}
+      # Return new boxes with computed counts
+      {box1.recalc_count, box2.recalc_count}
     end
 
     private def find_split_axis : Int32
@@ -327,7 +411,7 @@ module PrismatIQ
       (y << 10) | (i << 5) | q
     end
 
-    def recalc_count : Int32
+    def recalc_count : VBox
       c = 0
       @histo.each_with_index do |freq, index|
         next if freq == 0
@@ -336,8 +420,7 @@ module PrismatIQ
           c += freq.to_i
         end
       end
-      @count = c
-      @count
+      VBox.new(@y1, @y2, @i1, @i2, @q1, @q2, c, @histo)
     end
   end
 
@@ -428,11 +511,12 @@ module PrismatIQ
     MAX_ITERATIONS =  1000
     SIGNIFICANCE   = 0.001
 
-    def initialize(@histo : Array(UInt32), @color_depth : Int32 = 5)
+    def initialize(@histo : Array(UInt32), @color_depth : Int32 = 5, config : Config = Config.default)
       @total = 0
       @histo.each do |v|
         @total += v.to_i
       end
+      @config = config
     end
 
     def quantize(max_colors : Int32) : Array(VBox)
@@ -441,7 +525,7 @@ module PrismatIQ
       end
 
       initial_box = build_initial_box
-      if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
+      if @config.debug
         puts "MMCQ: total=#{@total} initial_box.count=#{initial_box.count}"
       end
       boxes = [initial_box]
@@ -469,12 +553,12 @@ module PrismatIQ
       iteration = 0
       while pq.size < max_colors && iteration < MAX_ITERATIONS
         iteration += 1
-        if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
+        if @config.debug
           puts "MMCQ iter=#{iteration} pq_size=#{pq.size}"
         end
 
         box = pq.pop
-        if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
+        if @config.debug
           if box
             puts "MMCQ popped box count=#{box.count}"
           else
@@ -491,7 +575,7 @@ module PrismatIQ
           break
         end
 
-        if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
+        if @config.debug
           puts "MMCQ split -> vbox1.count=#{vbox1.count} vbox2.count=#{vbox2.count}"
         end
 
@@ -510,13 +594,7 @@ module PrismatIQ
     end
 
     private def build_initial_box : VBox
-      # initialize mins to max possible and maxs to min possible so min/max logic works
-      y1 = 31
-      y2 = 0
-      i1 = 31
-      i2 = 0
-      q1 = 31
-      q2 = 0
+      y1, y2, i1, i2, q1, q2 = 31, 0, 31, 0, 31, 0
 
       @histo.each_with_index do |freq, index|
         next if freq == 0
@@ -533,55 +611,55 @@ module PrismatIQ
     end
   end
 
-  def self.get_palette(path : String, color_count : Int32 = 5, quality : Int32 = 10) : Array(RGB)
+  def self.get_palette(path : String, color_count : Int32 = 5, quality : Int32 = 10, config : Config = Config.default) : Array(RGB)
     validate_params(color_count, quality)
-    if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
+    if config.debug
       STDERR.puts "get_palette(path): path=#{path} color_count=#{color_count} quality=#{quality}"
     end
     img = CrImage.read(path)
     # Cast to CrImage::Image to satisfy compile-time dispatch and call the
     # concrete helper which operates on CrImage::Image specifically.
-    get_palette_from_image(img.as(CrImage::Image), color_count, quality)
+    get_palette_from_image(img.as(CrImage::Image), color_count, quality, config: config)
   end
 
-  def self.get_palette(io : IO, color_count : Int32 = 5, quality : Int32 = 10) : Array(RGB)
+  def self.get_palette(io : IO, color_count : Int32 = 5, quality : Int32 = 10, config : Config = Config.default) : Array(RGB)
     validate_params(color_count, quality)
     img = CrImage.read(io)
-    get_palette_from_image(img.as(CrImage::Image), color_count, quality)
+    get_palette_from_image(img.as(CrImage::Image), color_count, quality, config: config)
   end
 
-  def self.get_palette(img, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
+  def self.get_palette(img, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0, config : Config = Config.default) : Array(RGB)
     validate_params(color_count, quality)
     # Prefer to operate on CrImage::Image directly; if the caller passed a
     # different type, attempt to coerce it into an image and delegate.
     if img.is_a?(CrImage::Image)
-      get_palette_from_image(img.as(CrImage::Image), color_count, quality, threads)
+      get_palette_from_image(img.as(CrImage::Image), color_count, quality, threads, config: config)
     else
       # Try to read it using CrImage.read if possible
       begin
         begin
           read_img = CrImage.read(img)
         rescue ex : Exception
-          STDERR.puts "get_palette: CrImage.read failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+          STDERR.puts "get_palette: CrImage.read failed: #{ex.message}" if config.debug
           read_img = nil
         end
         if read_img
-          return get_palette_from_image(read_img.as(CrImage::Image), color_count, quality, threads)
+          return get_palette_from_image(read_img.as(CrImage::Image), color_count, quality, threads, config: config)
         end
       rescue ex : Exception
-        STDERR.puts "get_palette: unexpected error while attempting fallback read: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+        STDERR.puts "get_palette: unexpected error while attempting fallback read: #{ex.message}" if config.debug
       end
       [RGB.new(0, 0, 0)]
     end
   end
 
   # Concrete implementation working with CrImage::Image (compile-time known type)
-  def self.get_palette_from_image(image, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
+  def self.get_palette_from_image(image, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0, config : Config = Config.default) : Array(RGB)
     validate_params(color_count, quality)
     # Convert image to an RGBA image via CrImage::Pipeline which provides a
     # concrete RGBA image with a contiguous `pix` buffer. This avoids compile-
     # time dispatch issues on CrImage's many image variants.
-    if ENV.has_key?("PRISMATIQ_DEBUG") && ENV["PRISMATIQ_DEBUG"]
+    if config.debug
       STDERR.puts "get_palette_from_image: image.class=#{image.class} color_count=#{color_count} quality=#{quality} threads=#{threads}"
     end
     rgba_image = CrImage::Pipeline.new(image).result
@@ -589,150 +667,98 @@ module PrismatIQ
     height = rgba_image.bounds.height.to_i32
 
     src = rgba_image.pix
-    pixels = Slice(UInt8).new(src.size)
-    i = 0_i32
-    while i < src.size
-      pixels[i] = src[i]
-      i += 1
-    end
+    pixels = Slice.new(src.size) { |i| src[i] }
     # Delegate to the buffer-based extraction now that we have an RGBA buffer.
-    get_palette_from_buffer(pixels, width, height, color_count, quality, threads)
+    get_palette_from_buffer(pixels, width, height, color_count, quality, threads, config)
   end
 
   # Helper: run palette extraction directly from an RGBA buffer (Slice(UInt8)).
   # Useful for benchmarks or when you already have raw pixel data.
-  def self.get_palette_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
+  def self.get_palette_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0, config : Config = Config.default) : Array(RGB)
     validate_params(color_count, quality)
-    histo, total_pixels = build_histo_from_buffer(pixels, width, height, quality, threads)
+    histo, total_pixels = build_histo_from_buffer(pixels, width, height, quality, threads, config)
 
     if total_pixels == 0
       return [RGB.new(0, 0, 0)]
     end
 
-    quantize_palette(histo, color_count)[0...color_count]
+    quantize_palette(histo, color_count, config)[0...color_count]
   end
 
-  private def self.quantize_palette(histo : Array(UInt32), color_count : Int32) : Array(RGB)
-    mmcq = MMCQ.new(histo)
+  private def self.quantize_palette(histo : Array(UInt32), color_count : Int32, config : Config = Config.default) : Array(RGB)
+    mmcq = MMCQ.new(histo, config: config)
     vboxes = mmcq.quantize(color_count)
 
-    palette = Array(RGB).new
-    vboxes.each do |box|
-      if box.count > 0
-        avg_color = box.average_color
-        rgb = avg_color.to_rgb_obj
-        palette << rgb
-      end
+    palette = vboxes.compact_map do |box|
+      next if box.count == 0
+      box.average_color.to_rgb_obj
     end
 
     sort_by_popularity(palette, histo)
   end
 
   # Build histogram from an RGBA buffer. Returns [histo, total_pixels].
-  private def self.build_histo_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, quality : Int32, threads : Int32, alpha_threshold : UInt8 = 125_u8) : Tuple(Array(UInt32), Int32)
-    histo = Array(UInt32).new(32768, 0_u32)
-    total_pixels = 0
-
+  private def self.build_histo_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, quality : Int32, threads : Int32, config : Config, alpha_threshold : UInt8 = Constants::ALPHA_THRESHOLD_DEFAULT) : Tuple(Array(UInt32), Int32)
+    histo = Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32)
     step = quality < 1 ? 1 : quality
 
     if threads <= 1
-      y_coord = 0
-      while y_coord < height
-        x_coord = 0
-        while x_coord < width
-          idx = (y_coord * width + x_coord) * 4
-          # Safety: guard against any index calculation issues
-          if idx + 3 >= pixels.size
-            x_coord += step
-            next
-          end
-
-          r = pixels[idx]
-          g = pixels[idx + 1]
-          b = pixels[idx + 2]
-          a = pixels[idx + 3]
-
-          if a >= alpha_threshold
-            y, i, q = quantize_yiq_from_rgb(r.to_i, g.to_i, b.to_i)
-            index = VBox.to_index(y, i, q)
-            histo[index] += 1_u32
-            total_pixels += 1
-          end
-
-          x_coord += step
-        end
-        y_coord += step
-      end
+      total_pixels = process_pixel_range(pixels, width, 0, height, step, alpha_threshold, histo)
     else
-      thread_count = threads <= 0 ? (ENV["PRISMATIQ_THREADS"]? ? ENV["PRISMATIQ_THREADS"].to_i : CPU.cores) : threads
-      thread_count = [thread_count, height].min
-
+      thread_count = config.thread_count_for(height, threads)
       locals = Array(Array(UInt32) | Nil).new(thread_count, nil)
       totals = Array(Int32).new(thread_count, 0)
       workers = Array(Thread).new
 
       rows_per = (height + thread_count - 1) // thread_count
 
-      t = 0
-      while t < thread_count
+      thread_count.times do |t|
         start_row = t * rows_per
         break if start_row >= height
-        end_row = [start_row + rows_per, height].min
+        end_row = {start_row + rows_per, height}.min
 
         local_t = t
-        s_row = start_row
-        e_row = end_row
-        thr_alpha = alpha_threshold
 
         workers << Thread.new do
           local_histo = Array(UInt32).new(32768, 0_u32)
-          local_count = 0
-
-          y_coord = s_row
-          while y_coord < e_row
-            x_coord = 0
-            while x_coord < width
-              idx = (y_coord * width + x_coord) * 4
-              # Safety: guard against any index calculation issues
-              if idx + 3 >= pixels.size
-                x_coord += step
-                next
-              end
-
-              r = pixels[idx]
-              g = pixels[idx + 1]
-              b = pixels[idx + 2]
-              a = pixels[idx + 3]
-
-              if a >= thr_alpha
-                y, i, q = quantize_yiq_from_rgb(r.to_i, g.to_i, b.to_i)
-                index = VBox.to_index(y, i, q)
-                if index >= 0 && index < local_histo.size
-                  local_histo[index] += 1_u32
-                end
-                local_count += 1
-              end
-
-              x_coord += step
-            end
-            y_coord += step
-          end
-
+          local_count = process_pixel_range(pixels, width, start_row, end_row, step, alpha_threshold, local_histo)
           locals[local_t] = local_histo
           totals[local_t] = local_count
         end
-
-        t += 1
       end
 
-      workers.each do |w|
-        w.join
-      end
-
-      total_pixels = merge_locals_chunked(histo, locals)
+      workers.each(&.join)
+      total_pixels = merge_locals_chunked(histo, locals, config)
     end
 
     {histo, total_pixels}
+  end
+
+  @[AlwaysInline]
+  private def self.process_pixel_range(pixels : Slice(UInt8), width : Int32, start_row : Int32, end_row : Int32, step : Int32, alpha_threshold : UInt8, histo : Array(UInt32)) : Int32
+    count = 0
+    y_coord = start_row
+    while y_coord < end_row
+      x_coord = 0
+      while x_coord < width
+        idx = (y_coord * width + x_coord) * 4
+        break if idx + 3 >= pixels.size
+
+        a = pixels[idx + 3]
+        if a >= alpha_threshold
+          r = pixels[idx].to_i
+          g = pixels[idx + 1].to_i
+          b = pixels[idx + 2].to_i
+          y, i, q = quantize_yiq_from_rgb(r, g, b)
+          histo[VBox.to_index(y, i, q)] += 1_u32
+          count += 1
+        end
+
+        x_coord += step
+      end
+      y_coord += step
+    end
+    count
   end
 
   struct PaletteEntry
@@ -847,6 +873,32 @@ module PrismatIQ
     end
   end
 
+  # Pure alternative using Result type - errors are explicit in return type
+  def self.get_palette_or_error(path : String, options : Options = Options.new) : Result(Array(RGB), String)
+    options.validate!
+    Result.ok(get_palette(path, options))
+  rescue ex : Exception
+    Result.err(ex.message || "Unknown error")
+  end
+
+  def self.get_palette_or_error(io : IO, options : Options = Options.new) : Result(Array(RGB), String)
+    options.validate!
+    Result.ok(get_palette(io, options))
+  rescue ex : Exception
+    Result.err(ex.message || "Unknown error")
+  end
+
+  def self.get_palette_or_error(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.new) : Result(Array(RGB), String)
+    options.validate!
+    histo, total_pixels = build_histo_from_buffer(pixels, width, height, options.quality, options.threads, Config.default)
+    return Result.err("No valid pixels found") if total_pixels == 0
+
+    palette = quantize_palette(histo, options.color_count)
+    Result.ok(palette[0...options.color_count])
+  rescue ex : Exception
+    Result.err(ex.message || "Unknown error")
+  end
+
   # Fiber-based async palette extraction
   def self.get_palette_async(path : String, options : Options = Options.new, &block : Array(RGB) ->)
     spawn do
@@ -873,26 +925,24 @@ module PrismatIQ
   end
 
   # Public API: return palette entries with counts and percentages.
-  def self.get_palette_with_stats_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Tuple(Array(PaletteEntry), Int32)
-    histo, total_pixels = build_histo_from_buffer(pixels, width, height, quality, threads)
+  def self.get_palette_with_stats_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0, config : Config = Config.default) : Tuple(Array(PaletteEntry), Int32)
+    histo, total_pixels = build_histo_from_buffer(pixels, width, height, quality, threads, config)
     if total_pixels == 0
       return {[] of PaletteEntry, 0}
     end
 
-    mmcq = MMCQ.new(histo)
+    mmcq = MMCQ.new(histo, config: config)
     vboxes = mmcq.quantize(color_count)
 
-    entries = Array(PaletteEntry).new
-    vboxes.each do |box|
+    entries = vboxes.compact_map do |box|
       next if box.count == 0
       avg_color = box.average_color
       rgb = avg_color.to_rgb_obj
       percent = box.count.to_f64 / total_pixels.to_f64
-      entries << PaletteEntry.new(rgb, box.count, percent)
-    end
+      PaletteEntry.new(rgb, box.count, percent)
+    end.sort_by(&.count).reverse
 
-    entries_sorted = entries.sort_by { |e| -e.count }
-    {entries_sorted, total_pixels}
+    {entries, total_pixels}
   end
 
   # Compatibility wrapper returning ColorThief-like hex array
@@ -943,15 +993,11 @@ module PrismatIQ
 
   # Merge local per-thread histograms into the master histogram using chunked
   # aggregation to improve cache locality. Returns total pixel count.
-  private def self.merge_locals_chunked(histo : Array(UInt32), locals : Array(Array(UInt32) | Nil), chunk_opt : Int32? = nil) : Int32
+  private def self.merge_locals_chunked(histo : Array(UInt32), locals : Array(Array(UInt32) | Nil), config : Config) : Int32
     total = 0
 
-    # Allow explicit override via param or env
-    if chunk_opt && chunk_opt > 0
-      chunk = chunk_opt
-    elsif ENV["PRISMATIQ_MERGE_CHUNK"]?
-      chunk = ENV["PRISMATIQ_MERGE_CHUNK"].to_i
-    else
+    chunk = config.merge_chunk.nil? ? nil : config.merge_chunk
+    if chunk.nil?
       # adaptive: use L2 cache size when available
       cache_bytes = ::PrismatIQ::CPU.l2_cache_bytes || 256 * 1024
       threads = [locals.size, 1].max
@@ -967,10 +1013,10 @@ module PrismatIQ
       end
       # if we overshot, step back one
       chunk >>= 1 if chunk > slots && chunk > 64
-      end
+    end
 
     start = 0
-    if ENV["PRISMATIQ_DEBUG"]?
+    if config.debug
       STDERR.puts "merge_locals_chunked: chunk=#{chunk} threads=#{locals.size}"
     end
     while start < 32768
