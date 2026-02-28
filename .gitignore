@@ -8,10 +8,6 @@ result-*
 node_modules/
 lib/
 
-# Rules and skills (external tooling)
-rules/
-skills/
-
 # Build artifacts
 bin/
 prismatiq
@@ -35,7 +31,14 @@ prismatiq
 .env
 .env.*
 !.env.example
+# Local developer overrides
 flake.private.nix
+.devshell-private.sh
+
+# AI tooling
+.opencode
+.kilocode
+.ruff_cache
 
 # Local audit todo file
 todo.md
