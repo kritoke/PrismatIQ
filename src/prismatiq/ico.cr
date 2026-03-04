@@ -1,20 +1,110 @@
 module PrismatIQ
-  # Minimal ICO reader: prefer PNG-encoded icon entries.
-  # Public helper: get_palette_from_ico(path, color_count = 5, quality = 10, threads = 0)
+  # ICO (Icon) file format support for PrismatIQ
+  #
+  # This module provides functionality to extract color palettes from Windows ICO files.
+  # It supports both modern PNG-encoded icons and legacy BMP/DIB formats.
+  #
+  # ## Supported Formats
+  #
+  # - **PNG-encoded ICO entries** (preferred, most common in modern applications)
+  # - **BMP/DIB formats**: 1bpp, 4bpp, 8bpp (paletted), 24bpp, 32bpp (RGB/RGBA)
+  # - **Bitfield compression** for 16bpp and 32bpp variants
+  # - **AND mask transparency** for classic BMP icons
+  #
+  # ## Limitations
+  #
+  # - Currently selects the largest/highest quality icon from multi-icon files
+  # - Maximum embedded image size: 50MB (configurable via code modification)
+  # - Compressed BMP formats (RLE) are not supported
+  # - ICO files must be valid and not corrupted
+  #
+  # ## Usage Examples
+  #
+  # ```crystal
+  # # Basic usage - extract palette from a favicon
+  # palette = PrismatIQ.get_palette_from_ico("favicon.ico", color_count: 5)
+  # palette.each { |color| puts color.to_hex }
+  # ```
+  #
+  # ```crystal
+  # # With custom parameters
+  # palette = PrismatIQ.get_palette_from_ico(
+  #   "app.ico",
+  #   color_count: 8,  # Extract 8 dominant colors
+  #   quality: 5,      # Higher quality (lower = more accurate, slower)
+  #   threads: 4       # Use 4 threads for processing
+  # )
+  # ```
+  #
+  # ```crystal
+  # # Handle potential errors
+  # begin
+  #   palette = PrismatIQ.get_palette_from_ico("icon.ico")
+  #   if palette.size == 1 && palette[0].r == 0 && palette[0].g == 0 && palette[0].b == 0
+  #     puts "Warning: Could not extract meaningful palette"
+  #   else
+  #     puts "Extracted #{palette.size} colors"
+  #   end
+  # rescue ex : Exception
+  #   puts "Error processing ICO: #{ex.message}"
+  # end
+  # ```
+  #
+  # ## Technical Details
+  #
+  # ICO files can contain multiple icon images at different sizes and formats. This implementation:
+  #
+  # 1. **Scans for PNG-encoded entries** (preferred for quality and modern compatibility)
+  # 2. **Falls back to BMP/DIB parsing** if no PNG found
+  # 3. **Selects the largest/highest bit-depth entry** for best color representation
+  # 4. **Handles transparency** via alpha channel (32bpp) or AND mask (classic BMP)
+  # 5. **Uses secure tempfile handling** for PNG entries to ensure safe processing
+  #
+  # ## File Format Structure
+  #
+  # An ICO file consists of:
+  # - **ICONDIR header**: 6 bytes (reserved, type, count)
+  # - **ICONDIRENTRY array**: 16 bytes per entry (width, height, colors, reserved, planes, bpp, size, offset)
+  # - **Image data**: PNG or BMP/DIB format
+  #
+  # ## Performance Considerations
+  #
+  # - PNG entries are processed via secure tempfile for stability
+  # - BMP parsing is done in-memory for efficiency
+  # - Multi-threaded histogram building available via `threads` parameter
+  # - Quality parameter controls sampling density (lower = more accurate but slower)
+  #
+  # ## Debugging
+  #
+  # Set `PRISMATIQ_DEBUG=true` environment variable to see detailed processing information:
+  #
+  # ```bash
+  # PRISMATIQ_DEBUG=true crystal run your_script.cr
+  # ```
 
+  # Read a 16-bit unsigned little-endian value from a byte slice
   private def self.read_u16_le(slice : Slice(UInt8), idx : Int) : Int32
+    if idx + 1 >= slice.size
+      raise IndexError.new("read_u16_le: index out of bounds")
+    end
     (slice[idx].to_u32 | (slice[idx + 1].to_u32 << 8)).to_i32
   end
 
   # Return a 32-bit unsigned little-endian value as UInt64 to avoid
   # accidental 32-bit signed overflows when working with file offsets/sizes.
   private def self.read_u32_le(slice : Slice(UInt8), idx : Int) : UInt64
+    if idx + 3 >= slice.size
+      raise IndexError.new("read_u32_le: index out of bounds")
+    end
     (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) | (slice[idx + 2].to_u64 << 16) | (slice[idx + 3].to_u64 << 24)).to_u64
   end
 
   # Return a 32-bit signed little-endian value as Int64 for safer arithmetic
   # when calculating dimensions and signed header fields.
   private def self.read_i32_le(slice : Slice(UInt8), idx : Int) : Int64
+    if idx + 3 >= slice.size
+      raise IndexError.new("read_i32_le: index out of bounds")
+    end
     (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) | (slice[idx + 2].to_u64 << 16) | (slice[idx + 3].to_u64 << 24)).to_i64
   end
 
@@ -34,6 +124,94 @@ module PrismatIQ
     {shift, bits}
   end
 
+  # Extract a color palette from an ICO (icon) file, returning a Result type for explicit error handling
+  #
+  # This is the robust version of get_palette_from_ico that returns explicit errors.
+  #
+  # ## Parameters
+  #
+  # - **path**: Path to the ICO file
+  # - **color_count**: Number of dominant colors to extract (default: 5)
+  # - **quality**: Sampling quality, lower = more accurate but slower (default: 10, range: 1+)
+  # - **threads**: Number of threads for processing, 0 = auto-detect (default: 0)
+  #
+  # ## Returns
+  #
+  # A `Result(Array(RGB), String)` where:
+  # - Success contains the palette array
+  # - Error contains a descriptive error message
+  #
+  # ## Examples
+  #
+  # ```crystal
+  # result = PrismatIQ.get_palette_from_ico_or_error("favicon.ico")
+  # if result.ok?
+  #   colors = result.value
+  #   colors.each { |c| puts c.to_hex }
+  # else
+  #   puts "Error: #{result.error}"
+  # end
+  # ```
+  def self.get_palette_from_ico_or_error(path : String, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Result(Array(RGB), String)
+    begin
+      palette = get_palette_from_ico(path, color_count, quality, threads)
+      # Check if it's the error sentinel
+      if palette.size == 1 && palette[0].r == 0 && palette[0].g == 0 && palette[0].b == 0
+        Result(Array(RGB), String).err("Failed to extract palette from ICO file: #{path}")
+      else
+        Result(Array(RGB), String).ok(palette)
+      end
+    rescue ex : Exception
+      Result(Array(RGB), String).err("Exception processing ICO file #{path}: #{ex.message}")
+    end
+  end
+
+  # Extract a color palette from an ICO (icon) file
+  #
+  # This is the main public API for extracting dominant colors from ICO files.
+  # It automatically handles both modern PNG-encoded and legacy BMP-encoded icons.
+  #
+  # ## Parameters
+  #
+  # - **path**: Path to the ICO file
+  # - **color_count**: Number of dominant colors to extract (default: 5)
+  # - **quality**: Sampling quality, lower = more accurate but slower (default: 10, range: 1+)
+  # - **threads**: Number of threads for processing, 0 = auto-detect (default: 0)
+  #
+  # ## Returns
+  #
+  # An `Array(RGB)` of dominant colors, sorted by prominence.
+  # Returns `[RGB.new(0, 0, 0)]` on failure (use get_palette_from_ico_or_error for explicit error handling).
+  #
+  # ## Examples
+  #
+  # ```crystal
+  # # Extract 5 dominant colors from a favicon
+  # colors = PrismatIQ.get_palette_from_ico("favicon.ico")
+  # # Note: Check for error sentinel [RGB.new(0,0,0)] or use get_palette_from_ico_or_error
+  # colors.each { |c| puts c.to_hex }
+  # ```
+  #
+  # ```crystal
+  # # Extract 10 colors with high quality
+  # colors = PrismatIQ.get_palette_from_ico("app.ico", color_count: 10, quality: 5)
+  # ```
+  #
+  # ## Algorithm
+  #
+  # 1. Reads ICO file header to validate format
+  # 2. Scans entries for PNG-encoded images (preferred)
+  # 3. Falls back to BMP/DIB parsing if no PNG found
+  # 4. Selects largest/highest quality entry
+  # 5. Extracts pixel data with transparency handling
+  # 6. Runs MMCQ quantization to find dominant colors
+  #
+  # ## Error Handling
+  #
+  # - Returns `[RGB.new(0, 0, 0)]` for invalid/corrupted files
+  # - Falls back to generic image decoding for non-ICO files
+  # - Debug output available via `PRISMATIQ_DEBUG=true` env var
+  # - For explicit error handling, use get_palette_from_ico_or_error
   def self.get_palette_from_ico(path : String, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
     begin
       data_str = File.read(path)
@@ -231,11 +409,11 @@ module PrismatIQ
     bit_count = read_u16_le(bmp_slice, 14)
     compression = read_u32_le(bmp_slice, 16)
 
-    # Reject compressed or unsupported bitfields
-    if compression != 0
-      STDERR.puts "PrismatIQ: unsupported BMP compression=#{compression} in ICO entry" if ENV["PRISMATIQ_DEBUG"]?
-      return [RGB.new(0, 0, 0)]
-    end
+     # Reject compressed or unsupported bitfields
+     if compression != 0 && compression != 3
+       STDERR.puts "PrismatIQ: unsupported BMP compression=#{compression} in ICO entry" if ENV["PRISMATIQ_DEBUG"]?
+       return [RGB.new(0, 0, 0)]
+     end
 
     # Determine top-down vs bottom-up and actual height
     h_total = read_i32_le(bmp_slice, 8)

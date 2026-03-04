@@ -1,5 +1,7 @@
 require "./cpu_cores"
 require "./prismatiq/color_extractor"
+require "./prismatiq/accessibility"
+require "./prismatiq/theme"
 require "crimage"
 require "./prismatiq/tempfile_helper"
 require "./prismatiq/ico"
@@ -773,37 +775,6 @@ module PrismatIQ
     end
   end
 
-  # Accessibility module for WCAG contrast checking
-  module Accessibility
-    def self.relative_luminance(rgb : RGB) : Float64
-      r = rgb.r / 255.0
-      g = rgb.g / 255.0
-      b = rgb.b / 255.0
-
-      r = r <= 0.03928 ? r / 12.92 : ((r + 0.055) / 1.055) ** 2.4
-      g = g <= 0.03928 ? g / 12.92 : ((g + 0.055) / 1.055) ** 2.4
-      b = b <= 0.03928 ? b / 12.92 : ((b + 0.055) / 1.055) ** 2.4
-
-      0.2126 * r + 0.7152 * g + 0.0722 * b
-    end
-
-    def self.contrast_ratio(foreground : RGB, background : RGB) : Float64
-      l1 = relative_luminance(foreground)
-      l2 = relative_luminance(background)
-      lighter = {l1, l2}.max
-      darker = {l1, l2}.min
-      (lighter + 0.05) / (darker + 0.05)
-    end
-
-    def self.wcag_aa_compliant?(foreground : RGB, background : RGB) : Bool
-      contrast_ratio(foreground, background) >= 4.5
-    end
-
-    def self.wcag_aaa_compliant?(foreground : RGB, background : RGB) : Bool
-      contrast_ratio(foreground, background) >= 7.0
-    end
-  end
-
   # Find closest color in palette to a target color
   def self.find_closest(target : RGB, palette : Array(RGB)) : RGB?
     return nil if palette.empty?
@@ -861,7 +832,7 @@ module PrismatIQ
   def self.get_palette_result_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.new) : PaletteResult
     begin
       options.validate!
-      histo, total_pixels = build_histo_from_buffer(pixels, width, height, options.quality, options.threads)
+      histo, total_pixels = build_histo_from_buffer(pixels, width, height, options.quality, options.threads, Config.default)
       if total_pixels == 0
         return PaletteResult.err("No valid pixels found")
       end
@@ -906,7 +877,6 @@ module PrismatIQ
         result = get_palette(path, options)
         block.call(result)
       rescue ex : Exception
-        # Call block with fallback palette on error
         block.call([RGB.new(0, 0, 0)])
       end
     end
