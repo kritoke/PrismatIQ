@@ -47,5 +47,5 @@ def load_rgba_fixture(path : String) : Tuple(Slice(UInt8), Int32, Int32)
     i += 1
   end
 
-  { slice, width, height }
+  {slice, width, height}
 end

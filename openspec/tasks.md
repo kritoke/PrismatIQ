@@ -54,7 +54,15 @@
 * [ ] Consider using `Slice` instead of `Hash` for histogram if profiling shows improvement.
 
 
-* [ ] **Task 4.3:** Documentation.
+* [x] **Task 4.3:** Reduce public API to minimal core set using only Options parameter.
+* [x] Consolidated all `get_palette` overloads to use `Options` struct as single source of truth
+* [x] Primary API: `get_palette(path, options)`, `get_palette(io, options)`, `get_palette(img, options)`, `get_palette(pixels, width, height, options)`
+* [x] Extended API: `get_palette_result`, `get_palette_or_error`, `get_palette_with_stats`, `get_palette_color_thief`
+* [x] Backward-compatible aliases preserved for deprecated keyword-argument versions
+* [x] All tests passing (165 examples)
+
+
+* [ ] **Task 4.4:** Documentation.
 * [ ] Generate `README.md` with usage examples.
 * [ ] Add API documentation for all public methods.
 * [ ] Create benchmark comparison vs other color extraction tools.

@@ -1,5 +1,3 @@
-require "concurrent"
-
 module PrismatIQ
   struct ThemeInfo
     getter type : Symbol
@@ -40,31 +38,24 @@ module PrismatIQ
   end
 
   module Theme
-    LUMINANCE_THRESHOLD = 0.5
+    # Thread-safe cache for theme detection results
+    # Uses Tuple(Int32, Int32, Int32) as key (r, g, b) and Symbol as value (:light or :dark)
+    @@theme_cache : ThreadSafeCache(Tuple(Int32, Int32, Int32), Symbol) = ThreadSafeCache(Tuple(Int32, Int32, Int32), Symbol).new
 
-    @@theme_cache = Hash(Tuple(Int32, Int32, Int32), Symbol).new
-    @@theme_mutex = Mutex.new
+    # Backward compatibility: alias to Constants::LUMINANCE_THRESHOLD
+    LUMINANCE_THRESHOLD = Constants::LUMINANCE_THRESHOLD
 
     def self.clear_cache : Nil
-      @@theme_mutex.synchronize do
-        @@theme_cache.clear
-      end
+      @@theme_cache.clear
     end
 
     def self.detect_theme(background : RGB) : Symbol
       key = {background.r, background.g, background.b}
-      
-      if cached = @@theme_cache[key]?
-        return cached
+
+      @@theme_cache.get_or_compute(key) do
+        lum = Accessibility.relative_luminance(background)
+        lum > LUMINANCE_THRESHOLD ? :light : :dark
       end
-      
-      @@theme_mutex.synchronize do
-        @@theme_cache[key] ||= begin
-          lum = Accessibility.relative_luminance(background)
-          lum > LUMINANCE_THRESHOLD ? :light : :dark
-        end
-      end
-      @@theme_cache[key].not_nil!
     end
 
     def self.analyze_theme(background : RGB) : ThemeInfo
@@ -76,9 +67,9 @@ module PrismatIQ
 
     def self.suggest_text_palette(background : RGB, level : WCAGLevel = WCAGLevel::AA) : TextColorPalette
       theme_type = detect_theme(background)
-      
+
       primary = Accessibility.recommend_text_color(background, level, large_text: false)
-      
+
       if theme_type == :dark
         secondary_raw = Accessibility.lighten(primary, 0.3)
         accent_raw = RGB.new(
@@ -105,20 +96,20 @@ module PrismatIQ
       return [] of ColorPair if palette.size < 2
 
       pairs = [] of ColorPair
-      
-      palette.each do |bg|
-        palette.each do |text|
-          next if bg == text
-          
-          text_level = Accessibility.wcag_level(text, bg, large_text)
+
+      palette.each do |background_color|
+        palette.each do |text_color|
+          next if background_color == text_color
+
+          text_level = Accessibility.wcag_level(text_color, background_color, large_text)
           if text_level >= level
-            ratio = Accessibility.contrast_ratio(text, bg)
-            pairs << ColorPair.new(bg, text, ratio, text_level)
+            ratio = Accessibility.contrast_ratio(text_color, background_color)
+            pairs << ColorPair.new(background_color, text_color, ratio, text_level)
           end
         end
       end
 
-      pairs.sort_by(&.contrast_ratio).reverse
+      pairs.sort_by!(&.contrast_ratio).reverse!
     end
 
     def self.filter_for_light_theme(palette : Array(RGB)) : Array(RGB)
@@ -137,14 +128,10 @@ module PrismatIQ
 
     def self.invert_for_theme(color : RGB) : RGB
       lum = Accessibility.relative_luminance(color)
-      
+
       if lum > LUMINANCE_THRESHOLD
-        inverted_lum = 1.0 - lum
-        target_lum = inverted_lum * 0.8
         Accessibility.darken(color, 0.7)
       else
-        inverted_lum = 1.0 - lum
-        target_lum = inverted_lum * 0.8
         Accessibility.lighten(color, 0.7)
       end
     end

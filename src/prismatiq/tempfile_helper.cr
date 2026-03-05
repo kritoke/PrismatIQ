@@ -18,36 +18,36 @@ module PrismatIQ
       if HAVE_TEMPDIR
         # Use Dir.mktmpdir to create a secure directory and create a file inside it.
         begin
-          Dir.mktmpdir do |d|
-          # Dir.mktmpdir may yield either a Tempdir instance (our vendored
-          # implementation) or a String path (older/other implementations).
-          base = d.is_a?(Tempdir) ? d.path : d.to_s
+          Dir.mktmpdir do |dir|
+            # Dir.mktempdir may yield either a Tempdir instance (our vendored
+            # implementation) or a String path (older/other implementations).
+            base = dir.is_a?(Tempdir) ? dir.path : dir.to_s
 
-          # If the Tempdir instance (our vendored Tempdir) is being used,
-          # prefer its create_tempfile helper which uses mkstemp. Limit prefix
-          # length to avoid platform filename length limits.
-          safe_prefix = prefix.size > 100 ? prefix[0, 100] : prefix
-          if d.is_a?(Tempdir)
-            created = d.create_tempfile(safe_prefix, data)
-            if created
-              next created
+            # If the Tempdir instance (our vendored Tempdir) is being used,
+            # prefer its create_tempfile helper which uses mkstemp. Limit prefix
+            # length to avoid platform filename length limits.
+            safe_prefix = prefix.size > 100 ? prefix[0, 100] : prefix
+            if dir.is_a?(Tempdir)
+              created = dir.create_tempfile(safe_prefix, data)
+              if created
+                next created
+              end
+              # fall through to manual write if create_tempfile failed
             end
-            # fall through to manual write if create_tempfile failed
-          end
 
-          path = "#{base}/#{prefix}#{Process.pid}_#{Time.local.to_unix}.bin"
-          File.open(path, "w") do |f|
-            # Write raw bytes using Bytes to avoid encoding issues
-            b = Bytes.new(data.size)
-            i = 0
-            while i < data.size
-              b[i] = data[i]
-              i += 1
+            path = "#{base}/#{prefix}#{Process.pid}_#{Time.local.to_unix}.bin"
+            File.open(path, "w") do |file|
+              # Write raw bytes using Bytes to avoid encoding issues
+              buffer = Bytes.new(data.size)
+              i = 0
+              while i < data.size
+                buffer[i] = data[i]
+                i += 1
+              end
+              file.write(buffer)
+              file.flush
             end
-            f.write(b)
-            f.flush
-          end
-          next path
+            next path
           end
         rescue ex : Exception
           STDERR.puts "PrismatIQ: tempfile via tempdir failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
@@ -63,18 +63,18 @@ module PrismatIQ
           path = "#{tmp_dir}/#{prefix}#{Process.pid}_#{Time.local.to_unix}_#{rnd}.tmp"
           if !File.exists?(path)
             begin
-              File.open(path, "w") do |f|
+              File.open(path, "w") do |file|
                 # Build a Bytes buffer and write it in one call to avoid
                 # character-encoding issues when constructing a String.
                 total = data.size
-                b = Bytes.new(total)
+                buffer = Bytes.new(total)
                 i = 0
                 while i < total
-                  b[i] = data[i]
+                  buffer[i] = data[i]
                   i += 1
                 end
-                f.write(b)
-                f.flush
+                file.write(buffer)
+                file.flush
               end
               return path
             rescue ex : Exception
@@ -118,9 +118,9 @@ module PrismatIQ
         LibC.close(fd)
 
         idx = 0
-        path = String.build do |s|
+        path = String.build do |str|
           while buf[idx] != 0
-            s << buf[idx].chr
+            str << buf[idx].chr
             idx += 1
           end
         end
@@ -131,12 +131,12 @@ module PrismatIQ
     # Create a tempfile, write data, yield the path to the provided block and
     # ensure the tempfile is removed afterwards. Returns the block's result or
     # nil if tempfile creation failed.
-    def self.with_tempfile(prefix : String, data : Slice(UInt8))
+    def self.with_tempfile(prefix : String, data : Slice(UInt8), &)
       path = create_and_write(prefix, data)
       return nil unless path
 
       begin
-        return yield(path)
+        yield(path)
       ensure
         begin
           File.delete(path) if path && File.exists?(path)

@@ -15,8 +15,8 @@ module PrismatIQ
         if File.exists? "/proc/cpuinfo"
           # Linux-like
           count = 0
-          File.read("/proc/cpuinfo").each_line do |l|
-            count += 1 if l.starts_with?("processor\t:")
+          File.read("/proc/cpuinfo").each_line do |line|
+            count += 1 if line.starts_with?("processor\t:")
           end
           return count if count > 0
         end

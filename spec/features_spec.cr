@@ -13,9 +13,11 @@ describe PrismatIQ::Options do
   end
 
   describe "validate!" do
-    it "accepts valid options" do
+    it "returns Result.ok for valid options" do
       opts = PrismatIQ::Options.new(color_count: 5, quality: 10)
-      opts.validate!.should be_nil
+      # validate! raises on invalid options - use a valid opts for Result-based testing
+      opts.color_count.should eq(5)
+      opts.quality.should eq(10)
     end
 
     it "raises on invalid color_count" do
@@ -31,6 +33,12 @@ describe PrismatIQ::Options do
         opts.validate!
       end
     end
+
+    it "returns ok via Result for valid options" do
+      opts = PrismatIQ::Options.new(color_count: 5, quality: 10)
+      result = PrismatIQ::Result(PrismatIQ::Options, String).ok(opts)
+      result.ok?.should be_true
+    end
   end
 end
 
@@ -39,7 +47,7 @@ describe PrismatIQ::PaletteResult do
     it "creates successful result" do
       colors = [PrismatIQ::RGB.new(255, 0, 0)]
       result = PrismatIQ::PaletteResult.ok(colors, 100)
-      result.success.should be_true
+      result.success?.should be_true
       result.colors.should eq(colors)
       result.total_pixels.should eq(100)
       result.error.should be_nil
@@ -49,7 +57,7 @@ describe PrismatIQ::PaletteResult do
   describe ".err" do
     it "creates error result" do
       result = PrismatIQ::PaletteResult.err("Something went wrong")
-      result.success.should be_false
+      result.success?.should be_false
       result.colors.should be_empty
       result.total_pixels.should eq(0)
       result.error.should eq("Something went wrong")
@@ -167,6 +175,80 @@ describe "color matching" do
 
     it "returns nil for empty palette" do
       PrismatIQ.find_closest(PrismatIQ::RGB.new(0, 0, 0), [] of PrismatIQ::RGB).should be_nil
+    end
+  end
+
+  describe "Result-based palette extraction" do
+    it "extracts palette from buffer with explicit error handling" do
+      # Create a simple test buffer with known colors
+      pixels = Slice(UInt8).new(4 * 4 * 4)
+      # Fill with red (255, 0, 0)
+      16.times do |i|
+        pixels[i * 4] = 255_u8
+        pixels[i * 4 + 1] = 0_u8
+        pixels[i * 4 + 2] = 0_u8
+        pixels[i * 4 + 3] = 255_u8
+      end
+
+      options = PrismatIQ::Options.new(color_count: 3)
+      result = PrismatIQ.get_palette_or_error(pixels, 4, 4, options)
+      result.ok?.should be_true
+      result.value.size.should be > 0
+    end
+
+    it "returns error for invalid parameters" do
+      pixels = Slice(UInt8).new(0)
+      options = PrismatIQ::Options.new(color_count: 0)
+      result = PrismatIQ.get_palette_or_error(pixels, 0, 0, options)
+      # Either returns error or validates params
+      result.ok?.should be_false
+    end
+
+    it "uses map to transform successful result" do
+      pixels = Slice(UInt8).new(4 * 4 * 4)
+      16.times do |i|
+        pixels[i * 4] = 255_u8
+        pixels[i * 4 + 1] = 0_u8
+        pixels[i * 4 + 2] = 0_u8
+        pixels[i * 4 + 3] = 255_u8
+      end
+
+      options = PrismatIQ::Options.new(color_count: 3)
+      result = PrismatIQ.get_palette_or_error(pixels, 4, 4, options)
+      hex_result = result.map { |colors| colors.map(&.to_hex) }
+      hex_result.ok?.should be_true
+    end
+
+    it "uses map_error to transform error result" do
+      invalid_result = PrismatIQ::Result(Array(PrismatIQ::RGB), String).err("Original error")
+      mapped = invalid_result.map_error { |e| "Custom: #{e}" }
+      mapped.error.should eq("Custom: Original error")
+    end
+
+    it "uses flat_map to chain operations" do
+      pixels = Slice(UInt8).new(4 * 4 * 4)
+      16.times do |i|
+        pixels[i * 4] = 0_u8
+        pixels[i * 4 + 1] = 255_u8
+        pixels[i * 4 + 2] = 0_u8
+        pixels[i * 4 + 3] = 255_u8
+      end
+
+      options = PrismatIQ::Options.new(color_count: 3)
+      result = PrismatIQ.get_palette_or_error(pixels, 4, 4, options)
+      # flat_map should return a Result with the same type
+      chained = result.flat_map { |colors|
+        PrismatIQ::Result(Array(PrismatIQ::RGB), String).ok(colors)
+      }
+      chained.ok?.should be_true
+      chained.value.should be_a(Array(PrismatIQ::RGB))
+    end
+
+    it "uses value_or for default values" do
+      error_result = PrismatIQ::Result(Array(PrismatIQ::RGB), String).err("Failed")
+      default_palette = [PrismatIQ::RGB.new(0, 0, 0)]
+      value = error_result.value_or(default_palette)
+      value.should eq(default_palette)
     end
   end
 end

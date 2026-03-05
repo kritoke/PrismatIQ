@@ -1,7 +1,7 @@
 # Delta Spec: PrismatIQ Implementation
 
-**Date:** Feb 7, 2026
-**Status:** Implemented (Phases 1-4.1 Complete)
+**Date:** Mar 4, 2026
+**Status:** Implemented (Phases 1-4.1 Complete, Refactor DRY/Functional Complete)
 **Author:** OpenSpec Workflow
 
 ## Key Design Decisions
@@ -41,11 +41,41 @@ Each VBox tracks:
 
 ### API Design
 ```crystal
-PrismatIQ.get_palette(path, color_count: 5, quality: 10)
-PrismatIQ.get_color(path)  # palette of 1
+# New Options-based API (v0.5.0+)
+options = Options.new(color_count: 5, quality: 10, threads: 0)
+result = PrismatIQ.get_palette_result("image.png", options)
+
+# Handle errors explicitly
+if result.ok?
+  palette = result.value
+  # Process palette
+else
+  error = result.error
+  # Handle error  
+end
 ```
 
 Supports String path, IO, or CrImage inputs.
+
+### Error Handling
+- Uses `Result(Array(RGB), String)` type for explicit error handling
+- Replaces ambiguous sentinel values `[RGB.new(0, 0, 0)]`
+- Provides clear error messages for different failure scenarios
+
+### Thread-Safe Caching
+- Generic `ThreadSafeCache(K, V)` class for reusable caching patterns
+- Used in Accessibility and Theme modules for luminance, contrast, and theme detection caching
+- Implements double-checked locking pattern for efficient concurrent access
+
+### Constants Centralization
+- All constants organized under `PrismatIQ::Constants` namespace
+- Includes WCAG contrast ratios, luminance threshold, YIQ coefficients, and histogram size
+- Improves maintainability and reduces code duplication
+
+### ICO File Support
+- Restructured into modular components: `ICOFile`, `ICOEntry`, `BMPParser`, `PNGExtractor`
+- Supports both modern PNG-encoded icons and legacy BMP/DIB formats
+- Uses secure temp file handling with `TempfileHelper`
 
 ## Performance Considerations
 
@@ -63,6 +93,20 @@ Pixels with alpha < 125 are skipped to ignore transparent regions.
 - VBoxes: Array of at most `color_count` entries
 - No large arrays copied in pixel loop
 
-## Remaining Work
+### Multi-threading
+- Chunked histogram merging for improved cache locality
+- Adaptive chunk size based on L2 cache size
+- Configurable thread count via `Config` struct
+
+## Completed Work
 - **Task 4.2:** Performance optimization (verify no array copies, alpha handling)
 - **Task 4.3:** Documentation (README.md with examples and benchmarks)
+- **Refactor DRY/Functional:** Complete implementation of DRY/functional improvements
+  - Error handling standardization
+  - Generic thread-safe cache
+  - YIQ conversion centralization  
+  - API surface rationalization
+  - ICO module restructuring
+  - Parallel processing cleanup
+  - Constants consolidation
+  - Comprehensive testing and verification

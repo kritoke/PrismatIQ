@@ -2,9 +2,10 @@ module PrismatIQ
   # Compatibility constant for older tests/specs expecting PrismatIQ::ColorExtractor
   module ColorExtractor
   end
+
   # Simple dominant color extractor (buffer-based)
   # Public API: extract_from_buffer(pixels, width, height, sample_size = 1000)
-  
+
   struct Options
     # Approximate number of pixels to sample (not strict); default keeps work bounded
     property sample_size : Int32 = 1000
@@ -48,13 +49,12 @@ module PrismatIQ
           if a != 255_u8
             af = a.to_f / 255.0
             if af > 0.001
-               # unpremultiply: use truncation/floor to match test expectations
-               r = (r.to_f / af).to_i32.clamp(0, 255)
-               g = (g.to_f / af).to_i32.clamp(0, 255)
-               b = (b.to_f / af).to_i32.clamp(0, 255)
+              # unpremultiply: use truncation/floor to match test expectations
+              r = (r.to_f / af).to_i32.clamp(0, 255)
+              g = (g.to_f / af).to_i32.clamp(0, 255)
+              b = (b.to_f / af).to_i32.clamp(0, 255)
             else
               # alpha extremely small, ignore pixel
-              idx += 4
               p += step
               next
             end
@@ -81,7 +81,7 @@ module PrismatIQ
     g_avg = (g_total / count.to_i64).to_i32
     b_avg = (b_total / count.to_i64).to_i32
 
-    [ r_avg.clamp(0, 255), g_avg.clamp(0, 255), b_avg.clamp(0, 255) ]
+    [r_avg.clamp(0, 255), g_avg.clamp(0, 255), b_avg.clamp(0, 255)]
   rescue ex
     if ENV["PRISMATIQ_DEBUG"]?
       STDERR.puts "DBG: extract_from_buffer: exception: #{ex.message}"

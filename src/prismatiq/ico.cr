@@ -1,4 +1,245 @@
 module PrismatIQ
+  # PNGExtractor: Helper for extracting PNG-encoded image data from ICO entries
+  #
+  # Modern ICO files often contain PNG-compressed images instead of traditional
+  # BMP/DIB data. This class provides a clean interface to decode PNG data
+  # extracted from ICO entries.
+  #
+  # ## Features
+  #
+  # - Decodes PNG data embedded in ICO files to RGBA pixels
+  # - Uses CrImage for PNG decoding
+  # - Provides both buffer and file-based decoding paths
+  # - Size validation to prevent DoS from oversized embedded images
+  #
+  # ## Usage
+  #
+  # ```
+  # # Extract PNG from ICO entry bytes
+  # extractor = PNGExtractor.new(png_bytes)
+  # if extractor.valid?
+  #   image = extractor.to_image
+  #   puts "Decoded PNG: #{image.width}x#{image.height}"
+  #   pixels = image.pixels # RGBA pixel data
+  # end
+  # ```
+  #
+  # ## Comparison with BMPParser
+  #
+  # BMPParser handles legacy BMP/DIB format while PNGExtractor handles
+  # modern PNG-compressed images. Both return a consistent `ParsedImage`
+  # structure with width, height, and RGBA pixels.
+  class PNGExtractor
+    # Result of PNG extraction containing RGBA pixel data and dimensions
+    struct ParsedImage
+      getter width : Int32
+      getter height : Int32
+      getter pixels : Slice(UInt8)
+
+      def initialize(@width, @height, @pixels)
+      end
+    end
+
+    # Error types for PNG extraction
+    class PNGExtractError < Exception
+    end
+
+    # Maximum allowed PNG size in bytes (50 MB default)
+    MAX_PNG_SIZE = 50_000_000_i64
+
+    # Whether the PNG data was successfully decoded
+    getter? valid : Bool
+
+    # Width of the decoded image in pixels
+    getter width : Int32
+
+    # Height of the decoded image in pixels
+    getter height : Int32
+
+    # Creates a new PNGExtractor from a byte slice containing PNG data
+    #
+    # The slice should contain valid PNG data as extracted from an ICO entry.
+    #
+    # ```
+    # extractor = PNGExtractor.new(png_data)
+    # ```
+    def initialize(@data : Slice(UInt8))
+      @valid = false
+      @width = 0
+      @height = 0
+      @pixels = Slice(UInt8).new(0)
+
+      decode_png
+    end
+
+    # Returns whether the PNG data was successfully decoded
+    def valid?
+      @valid
+    end
+
+    # Returns the pixel data as RGBA bytes
+    #
+    # Returns a Slice(UInt8) of size width * height * 4 containing
+    # RGBA pixel data in row-major order (top-to-bottom).
+    #
+    # Raises PNGExtractError if the image is not valid.
+    #
+    # ```
+    # pixels = extractor.to_rgba
+    # # pixels[0..3] = first pixel R, G, B, A
+    # ```
+    def to_rgba : Slice(UInt8)
+      raise PNGExtractError.new("Invalid PNG data") unless @valid
+      @pixels
+    end
+
+    # Returns a ParsedImage struct containing width, height, and RGBA pixels
+    #
+    # This is a convenience method that returns all extracted data in one call.
+    #
+    # ```
+    # image = extractor.to_image
+    # puts "Size: #{image.width}x#{image.height}"
+    # ```
+    def to_image : ParsedImage
+      raise PNGExtractError.new("Invalid PNG data") unless @valid
+      ParsedImage.new(@width, @height, @pixels)
+    end
+
+    # Creates a PNGExtractor from raw bytes, returning nil on failure
+    #
+    # This is a convenience factory method that catches exceptions.
+    #
+    # ```
+    # extractor = PNGExtractor.from_slice?(png_bytes)
+    # if extractor && extractor.valid?
+    #   # process
+    # end
+    # ```
+    def self.from_slice?(data : Slice(UInt8)) : PNGExtractor?
+      begin
+        extractor = new(data)
+        extractor.valid? ? extractor : nil
+      rescue
+        nil
+      end
+    end
+
+    # Extracts PNG data from an ICO file and returns a PNGExtractor
+    #
+    # This method searches for PNG-encoded entries in the ICO file and
+    # returns a PNGExtractor for the first PNG found.
+    #
+    # ```
+    # extractor = PNGExtractor.extract_from_ico(ico_bytes)
+    # if extractor && extractor.valid?
+    #   image = extractor.to_image
+    # end
+    # ```
+    def self.extract_from_ico(ico_data : Slice(UInt8), max_size : Int64 = MAX_PNG_SIZE) : PNGExtractor?
+      return nil if ico_data.size < 6
+
+      # Read ICONDIR header
+      reserved = ico_data[0].to_u16 | (ico_data[1].to_u16 << 8)
+      typ = ico_data[2].to_u16 | (ico_data[3].to_u16 << 8)
+      count = ico_data[4].to_u16 | (ico_data[5].to_u16 << 8)
+
+      return nil if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
+
+      # Search for PNG entries
+      entry_base = 6
+      i = 0
+      while i < count && (entry_base + 16) <= ico_data.size
+        off = entry_base + i * 16
+        width = ico_data[off].to_u32
+        height = ico_data[off + 1].to_u32
+
+        size = ico_data[off + 8].to_u64 |
+               (ico_data[off + 9].to_u64 << 8) |
+               (ico_data[off + 10].to_u64 << 16) |
+               (ico_data[off + 11].to_u64 << 24)
+
+        image_offset = ico_data[off + 12].to_u64 |
+                       (ico_data[off + 13].to_u64 << 8) |
+                       (ico_data[off + 14].to_u64 << 16) |
+                       (ico_data[off + 15].to_u64 << 24)
+
+        # Check size limit
+        if size > max_size
+          i += 1
+          next
+        end
+
+        if image_offset >= 0 && (image_offset + size) <= ico_data.size && size >= 8
+          img_slice = ico_data[image_offset, size.to_i]
+
+          # Check PNG signature: 0x89 0x50 0x4E 0x47
+          if img_slice[0] == 0x89_u8 && img_slice[1] == 0x50_u8 &&
+             img_slice[2] == 0x4E_u8 && img_slice[3] == 0x47_u8
+            return from_slice?(img_slice)
+          end
+        end
+
+        i += 1
+      end
+
+      nil
+    end
+
+    private def decode_png
+      # Validate PNG signature
+      return if @data.size < 8
+      return if @data[0] != 0x89_u8 || @data[1] != 0x50_u8 ||
+                @data[2] != 0x4E_u8 || @data[3] != 0x47_u8
+
+      # Size validation to prevent DoS
+      return if @data.size > MAX_PNG_SIZE
+
+      # Try file-based decoding (most reliable for CrImage)
+      decode_via_tempfile
+    end
+
+    private def decode_via_tempfile
+      # Create temp file for PNG decoding using with_tempfile for automatic cleanup
+      result = TempfileHelper.with_tempfile("prismatiq_png_", @data) do |png_path|
+        img = CrImage.read(png_path)
+        return unless img
+
+        # Use Pipeline to normalize to RGBA
+        rgba_image = nil
+        begin
+          rgba_image = CrImage::Pipeline.new(img).result
+        rescue ex : Exception
+          debug_log("PNGExtractor: Pipeline normalization failed: #{ex.class} #{ex.message}")
+        end
+
+        return unless rgba_image
+
+        @width = rgba_image.bounds.width.to_i32
+        @height = rgba_image.bounds.height.to_i32
+        src = rgba_image.pix
+        @pixels = Slice(UInt8).new(src.size)
+
+        # Copy pixel data
+        src.size.times do |i|
+          @pixels[i] = src[i]
+        end
+
+        @valid = true
+        true
+      end
+
+      # with_tempfile returns nil if file creation failed
+      return unless result
+    end
+
+    private def debug_log(*parts)
+      if ENV.has_key?("PRISMATIQ_DEBUG")
+        STDERR.puts "PNGExtractor: #{parts.join(" ")}"
+      end
+    end
+  end
+
   # ICO (Icon) file format support for PrismatIQ
   #
   # This module provides functionality to extract color palettes from Windows ICO files.
@@ -20,23 +261,23 @@ module PrismatIQ
   #
   # ## Usage Examples
   #
-  # ```crystal
+  # ```
   # # Basic usage - extract palette from a favicon
   # palette = PrismatIQ.get_palette_from_ico("favicon.ico", color_count: 5)
   # palette.each { |color| puts color.to_hex }
   # ```
   #
-  # ```crystal
+  # ```
   # # With custom parameters
   # palette = PrismatIQ.get_palette_from_ico(
   #   "app.ico",
-  #   color_count: 8,  # Extract 8 dominant colors
-  #   quality: 5,      # Higher quality (lower = more accurate, slower)
-  #   threads: 4       # Use 4 threads for processing
+  #   color_count: 8, # Extract 8 dominant colors
+  #   quality: 5,     # Higher quality (lower = more accurate, slower)
+  #   threads: 4      # Use 4 threads for processing
   # )
   # ```
   #
-  # ```crystal
+  # ```
   # # Handle potential errors
   # begin
   #   palette = PrismatIQ.get_palette_from_ico("icon.ico")
@@ -82,6 +323,551 @@ module PrismatIQ
   # PRISMATIQ_DEBUG=true crystal run your_script.cr
   # ```
 
+  # Represents a single icon entry (ICONDIRENTRY) within an ICO file.
+  #
+  # Each ICO file can contain multiple icon images at different sizes and color depths.
+  # This struct captures the metadata for a single icon entry as defined in the
+  # Windows ICO file format specification.
+  #
+  # ### ICO File Format
+  #
+  # ```
+  # Offset | Size | Description
+  # -------|------|-------------
+  # 0      | 1    | Width (0 = 256)
+  # 1      | 1    | Height (0 = 256)
+  # 2      | 1    | Color count (0 = 256+)
+  # 3      | 1    | Reserved (must be 0)
+  # 4      | 2    | Color planes
+  # 6      | 2    | Bits per pixel
+  # 8      | 4    | Size of image data in bytes
+  # 12     | 4    | Offset to image data from start of file
+  # ```
+  #
+  # ### Usage
+  #
+  # ```
+  # entry = ICOEntry.from_bytes(slice, offset: 6)
+  # puts "Icon size: #{entry.width}x#{entry.height}"
+  # puts "Bits per pixel: #{entry.bit_count}"
+  # puts "Image data at offset: #{entry.image_offset}"
+  # ```
+  struct ICOEntry
+    # Width of the icon in pixels (0 means 256)
+    getter width : UInt8
+
+    # Height of the icon in pixels (0 means 256)
+    getter height : UInt8
+
+    # Number of colors in the color palette (0 means 256 or no palette)
+    getter color_count : UInt8
+
+    # Reserved, always 0
+    getter reserved : UInt8
+
+    # Number of color planes (typically 1)
+    getter color_planes : UInt16
+
+    # Bits per pixel (1, 4, 8, 24, or 32)
+    getter bit_count : UInt16
+
+    # Size of the image data in bytes
+    getter size_in_bytes : UInt32
+
+    # Offset from the beginning of the ICO file to the image data
+    getter image_offset : UInt32
+
+    # Returns the actual width, where 0 is interpreted as 256
+    def actual_width : Int32
+      width == 0 ? 256 : width.to_i32
+    end
+
+    # Returns the actual height, where 0 is interpreted as 256
+    def actual_height : Int32
+      height == 0 ? 256 : height.to_i32
+    end
+
+    # Returns the approximate pixel area of this icon entry
+    def area : Int32
+      actual_width * actual_height
+    end
+
+    # Returns whether this entry contains PNG-encoded image data
+    def png? : Bool
+      size_in_bytes >= 8 &&
+        image_offset + size_in_bytes <= MaxUInt32 &&
+        true # Actual PNG check done at read time with slice access
+    end
+
+    # Creates an ICOEntry from raw bytes at the specified offset.
+    #
+    # The entry is read from a 16-byte ICONDIRENTRY structure.
+    #
+    # ```
+    # entry = ICOEntry.from_slice(bytes, offset: 6)
+    # ```
+    def self.from_slice(slice : Slice(UInt8), offset : Int) : ICOEntry
+      raise IndexError.new("ICOEntry: slice too small at offset #{offset}") if offset + 16 > slice.size
+
+      w = slice[offset]
+      h = slice[offset + 1]
+      colors = slice[offset + 2]
+      res = slice[offset + 3]
+      planes = slice[offset + 4].to_u16 | (slice[offset + 5].to_u16 << 8)
+      bpp = slice[offset + 6].to_u16 | (slice[offset + 7].to_u16 << 8)
+      size = slice[offset + 8].to_u32 |
+             (slice[offset + 9].to_u32 << 8) |
+             (slice[offset + 10].to_u32 << 16) |
+             (slice[offset + 11].to_u32 << 24)
+      img_off = slice[offset + 12].to_u32 |
+                (slice[offset + 13].to_u32 << 8) |
+                (slice[offset + 14].to_u32 << 16) |
+                (slice[offset + 15].to_u32 << 24)
+
+      new(w, h, colors, res, planes, bpp, size, img_off)
+    end
+
+    def initialize(
+      @width : UInt8,
+      @height : UInt8,
+      @color_count : UInt8,
+      @reserved : UInt8,
+      @color_planes : UInt16,
+      @bit_count : UInt16,
+      @size_in_bytes : UInt32,
+      @image_offset : UInt32,
+    )
+    end
+
+    # Returns a string representation of this entry for debugging
+    def to_s : String
+      "ICOEntry(#{actual_width}x#{actual_height} @#{image_offset}, #{bit_count}bpp, #{size_in_bytes}bytes)"
+    end
+  end
+
+  # ICOFile: Main class for parsing and processing ICO (icon) files
+  #
+  # This class encapsulates all ICO file processing, providing a clean interface
+  # for reading ICO files, selecting the best icon entry, and extracting pixel data.
+  # It supports both modern PNG-encoded entries and legacy BMP/DIB formats.
+  #
+  # ## Features
+  #
+  # - Parses ICO file headers and directory entries
+  # - Selects the best quality entry (PNG preferred, then largest BMP)
+  # - Delegates PNG extraction to PNGExtractor
+  # - Delegates BMP parsing to BMPParser
+  # - Returns RGBA pixel data for palette extraction
+  #
+  # ## Usage
+  #
+  # ```
+  # ico = ICOFile.from_path("app.ico")
+  # if ico.valid?
+  #   pixels = ico.to_rgba
+  #   width = ico.width
+  #   height = ico.height
+  #   # Extract palette from pixels
+  # end
+  # ```
+  #
+  # ```
+  # # From raw bytes
+  # ico = ICOFile.from_slice(ico_bytes)
+  # if ico.valid?
+  #   image = ico.to_image
+  # end
+  # ```
+  class ICOFile
+    # Result of ICOFile parsing containing RGBA pixel data and dimensions
+    struct ParsedImage
+      getter width : Int32
+      getter height : Int32
+      getter pixels : Slice(UInt8)
+
+      def initialize(@width, @height, @pixels)
+      end
+    end
+
+    # Error types for ICO file processing
+    class ICOError < Exception
+    end
+
+    # Maximum allowed embedded image size (50 MB)
+    MAX_ENTRY_SIZE = 50_000_000_i64
+
+    # Whether the ICO file was successfully parsed
+    getter? valid : Bool
+
+    # Width of the selected icon in pixels
+    getter width : Int32
+
+    # Height of the selected icon in pixels
+    getter height : Int32
+
+    # Number of icon entries in the ICO file
+    getter entry_count : Int32
+
+    # All entries found in the ICO file
+    getter entries : Array(ICOEntry)
+
+    # Raw bytes of the ICO file
+    private getter data : Slice(UInt8)
+
+    # Creates an ICOFile from a file path
+    #
+    # ```
+    # ico = ICOFile.from_path("favicon.ico")
+    # ```
+    def self.from_path(path : String) : ICOFile?
+      begin
+        bytes = File.read(path).to_slice
+        new(bytes)
+      rescue ex : Exception
+        debug_log("ICOFile.from_path: failed to read #{path}: #{ex.message}")
+        nil
+      end
+    end
+
+    # Creates an ICOFile from raw bytes
+    #
+    # ```
+    # ico = ICOFile.from_slice(ico_bytes)
+    # ```
+    def self.from_slice(data : Slice(UInt8)) : ICOFile?
+      return nil if data.nil?
+      new(data)
+    end
+
+    # Creates a new ICOFile from a byte slice
+    def initialize(@data : Slice(UInt8))
+      @valid = false
+      @width = 0
+      @height = 0
+      @entry_count = 0
+      @entries = [] of ICOEntry
+
+      parse
+    end
+
+    # Returns whether the ICO file was successfully parsed
+    def valid?
+      @valid
+    end
+
+    # Returns the pixel data as RGBA bytes
+    #
+    # Returns a Slice(UInt8) of size width * height * 4 containing
+    # RGBA pixel data in row-major order (top-to-bottom).
+    #
+    # Raises ICOError if the file is not valid.
+    #
+    # ```
+    # pixels = ico.to_rgba
+    # # pixels[0..3] = first pixel R, G, B, A
+    # ```
+    def to_rgba : Slice(UInt8)
+      raise ICOError.new("Invalid ICO file") unless @valid
+      extract_pixel_data
+    end
+
+    # Returns a ParsedImage struct containing width, height, and RGBA pixels
+    #
+    # This is a convenience method that returns all extracted data in one call.
+    #
+    # ```
+    # image = ico.to_image
+    # puts "Size: #{image.width}x#{image.height}"
+    # ```
+    def to_image : ParsedImage
+      raise ICOError.new("Invalid ICO file") unless @valid
+      ParsedImage.new(@width, @height, extract_pixel_data)
+    end
+
+    # Finds and returns the best PNG entry in the ICO file
+    #
+    # Returns a tuple of {width, height, PNG data slice} or nil if no PNG found.
+    #
+    # ```
+    # if png = ico.best_png_entry
+    #   w, h, data = png
+    # end
+    # ```
+    def best_png_entry : Tuple(Int32, Int32, Slice(UInt8))?
+      return nil if @data.size < 6
+
+      # Read ICONDIR header
+      reserved = @data[0].to_u16 | (@data[1].to_u16 << 8)
+      typ = @data[2].to_u16 | (@data[3].to_u16 << 8)
+      count = @data[4].to_u16 | (@data[5].to_u16 << 8)
+
+      return nil if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
+
+      entry_base = 6
+      i = 0
+      while i < count && (entry_base + 16) <= @data.size
+        png_data = find_png_at_entry(i, entry_base)
+        return png_data if png_data
+        i += 1
+      end
+
+      nil
+    end
+
+    # Check a single ICO entry for PNG data
+    private def find_png_at_entry(index : Int32, entry_base : Int32) : Tuple(Int32, Int32, Slice(UInt8))?
+      off = entry_base + index * 16
+
+      size = @data[off + 8].to_u64 |
+             (@data[off + 9].to_u64 << 8) |
+             (@data[off + 10].to_u64 << 16) |
+             (@data[off + 11].to_u64 << 24)
+
+      image_offset = @data[off + 12].to_u64 |
+                     (@data[off + 13].to_u64 << 8) |
+                     (@data[off + 14].to_u64 << 16) |
+                     (@data[off + 15].to_u64 << 24)
+
+      # Check size limit
+      return nil if size > MAX_ENTRY_SIZE
+      return nil if image_offset + size > @data.size || size < 8
+
+      img_slice = @data[image_offset, size.to_i]
+
+      # Check PNG signature: 0x89 0x50 0x4E 0x47
+      return nil unless valid_png_signature?(img_slice)
+
+      width = @data[off].to_u32
+      height = @data[off + 1].to_u32
+      w = width.to_i32 == 0 ? 256 : width.to_i32
+      h = height.to_i32 == 0 ? 256 : height.to_i32
+      {w, h, img_slice}
+    end
+
+    # Check if a slice starts with valid PNG signature
+    private def valid_png_signature?(slice : Slice(UInt8)) : Bool
+      return false if slice.size < 8
+      slice[0] == 0x89_u8 && slice[1] == 0x50_u8 &&
+        slice[2] == 0x4E_u8 && slice[3] == 0x47_u8
+    end
+
+    # Finds and returns the best BMP entry in the ICO file
+    #
+    # Prefers the largest area entry, with bit count as tiebreaker.
+    #
+    # Returns a tuple of {width, height, BMP data slice} or nil if no BMP found.
+    #
+    # ```
+    # if bmp = ico.best_bmp_entry
+    #   w, h, data = bmp
+    # end
+    # ```
+    def best_bmp_entry : Tuple(Int32, Int32, Slice(UInt8))?
+      return nil if @data.size < 6
+
+      # Read ICONDIR header
+      reserved = @data[0].to_u16 | (@data[1].to_u16 << 8)
+      typ = @data[2].to_u16 | (@data[3].to_u16 << 8)
+      count = @data[4].to_u16 | (@data[5].to_u16 << 8)
+
+      return nil if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
+
+      entry_base = 6
+      best_area = 0_i32
+      best_bitcount = 0_i32
+      best_w : Int32 = 0
+      best_h : Int32 = 0
+      best_slice = nil
+
+      i = 0
+      while i < count && (entry_base + 16) <= @data.size
+        result = find_bmp_at_entry(i, entry_base)
+        if result
+          w, h, bit_count, hdr = result
+          area = w * h
+
+          if area > best_area || (area == best_area && bit_count > best_bitcount)
+            best_area = area
+            best_bitcount = bit_count
+            best_w = w
+            best_h = h
+            best_slice = hdr
+          end
+        end
+        i += 1
+      end
+
+      return nil unless best_slice
+      {best_w, best_h, best_slice}
+    end
+
+    # Check a single ICO entry for BMP data, returns dimensions and data if valid
+    private def find_bmp_at_entry(index : Int32, entry_base : Int32) : Tuple(Int32, Int32, Int32, Slice(UInt8))?
+      off = entry_base + index * 16
+
+      size = @data[off + 8].to_u64 |
+             (@data[off + 9].to_u64 << 8) |
+             (@data[off + 10].to_u64 << 16) |
+             (@data[off + 11].to_u64 << 24)
+
+      image_offset = @data[off + 12].to_u64 |
+                     (@data[off + 13].to_u64 << 8) |
+                     (@data[off + 14].to_u64 << 16) |
+                     (@data[off + 15].to_u64 << 24)
+
+      return nil if image_offset + size > @data.size || size < 40
+
+      hdr = @data[image_offset, size.to_i]
+      header_size = read_u32_le(hdr, 0)
+      return nil if header_size < 40 || size < header_size
+
+      w = read_i32_le(hdr, 4)
+      h_total = read_i32_le(hdr, 8)
+      # ICO BMP stores height as doubled (image + AND mask)
+      h = (h_total / 2).to_i32
+      bit_count = read_u16_le(hdr, 14).to_i32
+
+      # Basic sanity checks
+      return nil if w <= 0 || h <= 0 || bit_count < 24
+
+      {w.to_i32, h, bit_count, hdr}
+    end
+
+    # Extracts RGBA pixel data from the best available entry
+    #
+    # Prefers PNG entries for quality, falls back to BMP parsing.
+    private def extract_pixel_data : Slice(UInt8)
+      # Try PNG first (preferred for quality)
+      png_entry = best_png_entry
+      return extract_from_png(png_entry) if png_entry
+
+      # Fall back to BMP parsing
+      bmp_entry = best_bmp_entry
+      return extract_from_bmp(bmp_entry) if bmp_entry
+
+      raise ICOError.new("No valid image data found in ICO file")
+    end
+
+    # Extract RGBA data from a PNG entry
+    private def extract_from_png(png_entry : Tuple(Int32, Int32, Slice(UInt8))) : Slice(UInt8)
+      w, h, png_data = png_entry
+
+      # Size guard
+      return extract_from_bmp(best_bmp_entry) if png_data.size > MAX_ENTRY_SIZE
+
+      ico_debug_log("ICOFile: using PNG entry #{w}x#{h}")
+
+      extractor = PNGExtractor.from_slice?(png_data)
+      return extract_from_bmp(best_bmp_entry) unless extractor && extractor.valid?
+
+      @width = extractor.width
+      @height = extractor.height
+      extractor.to_rgba
+    end
+
+    # Extract RGBA data from a BMP entry
+    private def extract_from_bmp(bmp_entry : Tuple(Int32, Int32, Slice(UInt8))?) : Slice(UInt8)
+      return raise ICOError.new("No valid image data found in ICO file") unless bmp_entry
+
+      w, h, bmp_data = bmp_entry
+      ico_debug_log("ICOFile: using BMP entry #{w}x#{h}")
+
+      parser = BMPParser.new(bmp_data, w, h)
+      return raise ICOError.new("BMP parsing failed") unless parser.valid?
+
+      @width = parser.width
+      @height = parser.height
+      parser.to_rgba
+    end
+
+    private def parse
+      # Minimum size for ICO header
+      return if @data.size < 6
+
+      # Read ICONDIR header
+      reserved = @data[0].to_u16 | (@data[1].to_u16 << 8)
+      typ = @data[2].to_u16 | (@data[3].to_u16 << 8)
+      count = @data[4].to_u16 | (@data[5].to_u16 << 8)
+
+      return if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
+
+      @entry_count = count.to_i32
+
+      # Parse all entries
+      entry_base = 6
+      i = 0
+      while i < count && (entry_base + 16) <= @data.size
+        entry = ICOEntry.from_slice(@data, entry_base + i * 16)
+        @entries << entry
+        i += 1
+      end
+
+      @valid = @entries.size > 0
+    end
+
+    private def read_u16_le(slice : Slice(UInt8), idx : Int) : Int32
+      if idx + 1 >= slice.size
+        raise IndexError.new("read_u16_le: index out of bounds")
+      end
+      (slice[idx].to_u32 | (slice[idx + 1].to_u32 << 8)).to_i32
+    end
+
+    private def read_u32_le(slice : Slice(UInt8), idx : Int) : UInt64
+      if idx + 3 >= slice.size
+        raise IndexError.new("read_u32_le: index out of bounds")
+      end
+      (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) |
+        slice[idx + 2].to_u64 << 16 | (slice[idx + 3].to_u64 << 24)).to_u64
+    end
+
+    private def read_i32_le(slice : Slice(UInt8), idx : Int) : Int64
+      if idx + 3 >= slice.size
+        raise IndexError.new("read_i32_le: index out of bounds")
+      end
+      (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) |
+        slice[idx + 2].to_u64 << 16 | (slice[idx + 3].to_u64 << 24)).to_i64
+    end
+
+    private def self.read_u16_le(slice : Slice(UInt8), idx : Int) : Int32
+      if idx + 1 >= slice.size
+        raise IndexError.new("read_u16_le: index out of bounds")
+      end
+      (slice[idx].to_u32 | (slice[idx + 1].to_u32 << 8)).to_i32
+    end
+
+    private def self.read_u32_le(slice : Slice(UInt8), idx : Int) : UInt64
+      if idx + 3 >= slice.size
+        raise IndexError.new("read_u32_le: index out of bounds")
+      end
+      (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) |
+        slice[idx + 2].to_u64 << 16 | (slice[idx + 3].to_u64 << 24)).to_u64
+    end
+
+    private def self.read_i32_le(slice : Slice(UInt8), idx : Int) : Int64
+      if idx + 3 >= slice.size
+        raise IndexError.new("read_i32_le: index out of bounds")
+      end
+      (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) |
+        slice[idx + 2].to_u64 << 16 | (slice[idx + 3].to_u64 << 24)).to_i64
+    end
+
+    private def self.debug_log(*parts)
+      if ENV.has_key?("PRISMATIQ_DEBUG")
+        STDERR.puts parts.join(" ")
+      end
+    end
+
+    # Debug helper for ICOFile instance methods
+    private def ico_debug_log(*parts)
+      if ENV.has_key?("PRISMATIQ_DEBUG")
+        STDERR.puts parts.join(" ")
+      end
+    end
+  end
+
+  # Maximum value for UInt32, used for bounds checking
+  private MaxUInt32 = 0xFFFFFFFF_u32
+
   # Read a 16-bit unsigned little-endian value from a byte slice
   private def self.read_u16_le(slice : Slice(UInt8), idx : Int) : Int32
     if idx + 1 >= slice.size
@@ -108,22 +894,6 @@ module PrismatIQ
     (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) | (slice[idx + 2].to_u64 << 16) | (slice[idx + 3].to_u64 << 24)).to_i64
   end
 
-  private def self.mask_to_shift_and_bits(mask : UInt32) : Tuple(Int32, Int32)
-    return {-1, 0} if mask == 0_u32
-    shift = 0
-    m = mask
-    while (m & 1_u32) == 0_u32
-      m >>= 1
-      shift += 1
-    end
-    bits = 0
-    while (m & 1_u32) == 1_u32
-      m >>= 1
-      bits += 1
-    end
-    {shift, bits}
-  end
-
   # Extract a color palette from an ICO (icon) file, returning a Result type for explicit error handling
   #
   # This is the robust version of get_palette_from_ico that returns explicit errors.
@@ -131,9 +901,7 @@ module PrismatIQ
   # ## Parameters
   #
   # - **path**: Path to the ICO file
-  # - **color_count**: Number of dominant colors to extract (default: 5)
-  # - **quality**: Sampling quality, lower = more accurate but slower (default: 10, range: 1+)
-  # - **threads**: Number of threads for processing, 0 = auto-detect (default: 0)
+  # - **options**: Options struct containing color_count, quality, and threads settings
   #
   # ## Returns
   #
@@ -143,7 +911,7 @@ module PrismatIQ
   #
   # ## Examples
   #
-  # ```crystal
+  # ```
   # result = PrismatIQ.get_palette_from_ico_or_error("favicon.ico")
   # if result.ok?
   #   colors = result.value
@@ -152,9 +920,9 @@ module PrismatIQ
   #   puts "Error: #{result.error}"
   # end
   # ```
-  def self.get_palette_from_ico_or_error(path : String, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Result(Array(RGB), String)
+  def self.get_palette_from_ico_or_error(path : String, options : Options = Options.default) : Result(Array(RGB), String)
     begin
-      palette = get_palette_from_ico(path, color_count, quality, threads)
+      palette = get_palette_from_ico(path, options)
       # Check if it's the error sentinel
       if palette.size == 1 && palette[0].r == 0 && palette[0].g == 0 && palette[0].b == 0
         Result(Array(RGB), String).err("Failed to extract palette from ICO file: #{path}")
@@ -166,6 +934,12 @@ module PrismatIQ
     end
   end
 
+  # Backward-compatible overload with keyword arguments
+  @[Deprecated("Use `get_palette_from_ico_or_error(path, Options.new(color_count: N, quality: Q, threads: T))` instead")]
+  def self.get_palette_from_ico_or_error(path : String, color_count : Int32, quality : Int32 = 10, threads : Int32 = 0) : Result(Array(RGB), String)
+    get_palette_from_ico_or_error(path, Options.new(color_count, quality, threads))
+  end
+
   # Extract a color palette from an ICO (icon) file
   #
   # This is the main public API for extracting dominant colors from ICO files.
@@ -174,27 +948,26 @@ module PrismatIQ
   # ## Parameters
   #
   # - **path**: Path to the ICO file
-  # - **color_count**: Number of dominant colors to extract (default: 5)
-  # - **quality**: Sampling quality, lower = more accurate but slower (default: 10, range: 1+)
-  # - **threads**: Number of threads for processing, 0 = auto-detect (default: 0)
+  # - **options**: Options struct containing color_count, quality, and threads settings
   #
   # ## Returns
   #
   # An `Array(RGB)` of dominant colors, sorted by prominence.
-  # Returns `[RGB.new(0, 0, 0)]` on failure (use get_palette_from_ico_or_error for explicit error handling).
+  # Returns `[RGB.new(0, 0, 0)]` for invalid/corrupted files
+  # (use get_palette_from_ico_or_error for explicit error handling).
   #
   # ## Examples
   #
-  # ```crystal
+  # ```
   # # Extract 5 dominant colors from a favicon
   # colors = PrismatIQ.get_palette_from_ico("favicon.ico")
   # # Note: Check for error sentinel [RGB.new(0,0,0)] or use get_palette_from_ico_or_error
   # colors.each { |c| puts c.to_hex }
   # ```
   #
-  # ```crystal
+  # ```
   # # Extract 10 colors with high quality
-  # colors = PrismatIQ.get_palette_from_ico("app.ico", color_count: 10, quality: 5)
+  # colors = PrismatIQ.get_palette_from_ico("app.ico", Options.new(color_count: 10, quality: 5))
   # ```
   #
   # ## Algorithm
@@ -212,444 +985,40 @@ module PrismatIQ
   # - Falls back to generic image decoding for non-ICO files
   # - Debug output available via `PRISMATIQ_DEBUG=true` env var
   # - For explicit error handling, use get_palette_from_ico_or_error
-  def self.get_palette_from_ico(path : String, color_count : Int32 = 5, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
-    begin
-      data_str = File.read(path)
-    rescue ex : Exception
-      STDERR.puts "ICO: failed to read path #{path}: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
-      return [RGB.new(0, 0, 0)]
-    end
-    bytes = data_str.to_slice
+  def self.get_palette_from_ico(path : String, options : Options = Options.default) : Array(RGB)
+    # Try to create ICOFile from path
+    ico = ICOFile.from_path(path)
 
-    # ICONDIR header must be at least 6 bytes; if not an ICO, fall back to CrImage
-    if bytes.size < 6
-      begin
-        begin
-          img = CrImage.read(path)
-        rescue ex : Exception
-          STDERR.puts "ICO: CrImage.read fallback failed for #{path}: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
-          img = nil
-        end
-        return [RGB.new(0, 0, 0)] unless img
-        # Delegate to path-based get_palette which handles IO and decoding
-        return get_palette(path, color_count, quality)
-      rescue ex : Exception
-        STDERR.puts "ICO: unexpected error in fallback decode: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
-        return [RGB.new(0, 0, 0)]
-      end
+    # Process valid ICO file
+    if ico && ico.valid?
+      return process_ico_palette(ico, options)
     end
 
-    reserved = read_u16_le(bytes, 0)
-    typ = read_u16_le(bytes, 2)
-    count = read_u16_le(bytes, 4)
+    # Fallback: try generic image decoding with CrImage
+    img = CrImage.read(path)
+    get_palette(img, options)
+  rescue ex : Exception
+    debug_log("ICO: unexpected error processing #{path}: #{ex.message}")
+    [RGB.new(0, 0, 0)]
+  end
 
-    if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
-      # Not an ICO; try generic image decoding
-      begin
-        begin
-          img = CrImage.read(path)
-        rescue ex : Exception
-          STDERR.puts "ICO: CrImage.read fallback decode failed for #{path}: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
-          img = nil
-        end
-        return [RGB.new(0, 0, 0)] unless img
-        return get_palette(path, color_count, quality)
-      rescue ex : Exception
-        STDERR.puts "ICO: unexpected error in fallback decode: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
-        return [RGB.new(0, 0, 0)]
-      end
-    end
+  # Backward-compatible overload with keyword arguments
+  @[Deprecated("Use `get_palette_from_ico(path, Options.new(color_count: N, quality: Q, threads: T))` instead")]
+  def self.get_palette_from_ico(path : String, color_count : Int32, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
+    get_palette_from_ico(path, Options.new(color_count, quality, threads))
+  end
 
-    # Read first entry that looks like PNG (search entries for PNG data)
-    entry_base = 6
-    found_slice = nil
-    found_w = 0
-    found_h = 0
-    i = 0
-    while i < count && (entry_base + 16) <= bytes.size
-      off = entry_base + i * 16
-      width = bytes[off].to_u32
-      height = bytes[off + 1].to_u32
-      size = read_u32_le(bytes, off + 8)
-      image_offset = read_u32_le(bytes, off + 12)
+  # Process palette extraction from a valid ICOFile
+  private def self.process_ico_palette(ico : ICOFile, options : Options) : Array(RGB)
+    pixels = ico.to_rgba
+    w = ico.width
+    h = ico.height
 
-      if image_offset >= 0 && (image_offset + size) <= bytes.size
-        # get image data slice
-        img_slice = bytes[image_offset, size]
-        # PNG signature
-        if size >= 8 && img_slice[0] == 0x89_u8 && img_slice[1] == 0x50_u8 && img_slice[2] == 0x4E_u8 && img_slice[3] == 0x47_u8
-          found_slice = img_slice
-          found_w = width.to_i32 == 0 ? 256 : width.to_i32
-          found_h = height.to_i32 == 0 ? 256 : height.to_i32
-          break
-        end
-      end
-
-      i += 1
-    end
-
-    # If a PNG entry was found, write the PNG bytes to a temp file and delegate
-    # to the file-based get_palette path. Writing a temp file keeps behavior
-    # deterministic and avoids fragile in-memory type dispatch at compile-time.
-    if found_slice
-      begin
-        # Size guard: avoid allocating or writing extremely large embedded images
-        max_entry_size = 50_000_000 # 50 MB default limit; make configurable later
-        if found_slice.size > max_entry_size
-          STDERR.puts "PrismatIQ: ICO PNG entry too large (#{found_slice.size} bytes)" if ENV["PRISMATIQ_DEBUG"]?
-          return [RGB.new(0, 0, 0)]
-        end
-
-        self.debug_log("ICO: found PNG entry w=#{found_w} h=#{found_h} size=#{found_slice.size}")
-
-        # Create a secure temp file and write the PNG slice atomically.
-        begin
-          png_path = PrismatIQ::TempfileHelper.create_and_write("prismatiq_ico_", found_slice)
-          if !png_path
-            STDERR.puts "PrismatIQ: failed to create secure temp PNG file" if ENV["PRISMATIQ_DEBUG"]?
-          else
-            begin
-              img = CrImage.read(png_path)
-              if img
-                # Normalize then compute palette (same as previous flow)
-                rgba_image : CrImage::RGBA? = nil
-                begin
-                  rgba_image = CrImage::Pipeline.new(img).result
-                rescue ex : Exception
-                  self.debug_log("ICO: Pipeline normalization failed: #{ex.class} #{ex.message}, falling back to file-based decoding")
-                  return get_palette(png_path, color_count, quality) rescue [RGB.new(0,0,0)]
-                end
-
-                unless rgba_image
-                  # Pipeline returned nil for some reason; delegate to file-based decoder
-                  return get_palette(png_path, color_count, quality) rescue [RGB.new(0,0,0)]
-                end
-
-                non_nil_rgba = rgba_image.not_nil!
-                w = non_nil_rgba.bounds.width.to_i32
-                h = non_nil_rgba.bounds.height.to_i32
-                src = non_nil_rgba.pix
-                pixels = Slice(UInt8).new(src.size)
-                i = 0
-                while i < src.size
-                  pixels[i] = src[i]
-                  i += 1
-                end
-
-                pal = get_palette_from_buffer(pixels, w, h, color_count, quality, threads)
-                if pal.size == 1 && pal[0].r == 0 && pal[0].g == 0 && pal[0].b == 0
-                  return get_palette(png_path, color_count, quality) rescue pal
-                end
-                return pal
-              end
-            ensure
-              File.delete(png_path) rescue nil
-            end
-          end
-        rescue ex : Exception
-          STDERR.puts "PrismatIQ: secure temp file creation failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
-        end
-      rescue ex : Exception
-        STDERR.puts "PrismatIQ: failed to create or write temp PNG from ICO: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
-        # Fall through to BMP parsing below
-      end
-    end
-
-    # No PNG entry found: attempt to parse BMP/DIB ICO entries in-memory
-    bmp_candidate = nil
-    bmp_candidate_area = 0_i32
-    bmp_candidate_bitcount = 0_i32
-    bmp_w = 0
-    bmp_h = 0
-    bmp_slice = nil
-
-    # scan entries for BMP-like BITMAPINFOHEADER
-    i = 0
-    while i < count && (entry_base + 16) <= bytes.size
-      off = entry_base + i * 16
-      width = bytes[off].to_u32
-      height = bytes[off + 1].to_u32
-      size = read_u32_le(bytes, off + 8)
-      image_offset = read_u32_le(bytes, off + 12)
-
-      if image_offset >= 0 && (image_offset + size) <= bytes.size && size >= 40
-        hdr = bytes[image_offset, size]
-        header_size = read_u32_le(hdr, 0)
-        if header_size >= 40 && size >= header_size
-          w = read_i32_le(hdr, 4)
-          h_total = read_i32_le(hdr, 8)
-          # ICO BMP stores height as doubled (image + AND mask)
-          h = (h_total / 2).to_i32
-          bit_count = read_u16_le(hdr, 14)
-          # basic sanity checks
-          if w > 0 && h > 0 && bit_count >= 24
-            area = w * h
-            if area > bmp_candidate_area || (area == bmp_candidate_area && bit_count > bmp_candidate_bitcount)
-              bmp_candidate_area = area
-              bmp_candidate_bitcount = bit_count
-              bmp_candidate = {offset: image_offset, size: size}
-              bmp_w = w
-              bmp_h = h
-              bmp_slice = hdr
-            end
-          end
-        end
-      end
-
-      i += 1
-    end
-
-    if !bmp_slice
-      # nothing found; fall back to returning default
-      return [RGB.new(0, 0, 0)]
-    end
-
-    # Parse BMP/DIB pixel data
-    header_size = read_u32_le(bmp_slice, 0)
-    bit_count = read_u16_le(bmp_slice, 14)
-    compression = read_u32_le(bmp_slice, 16)
-
-     # Reject compressed or unsupported bitfields
-     if compression != 0 && compression != 3
-       STDERR.puts "PrismatIQ: unsupported BMP compression=#{compression} in ICO entry" if ENV["PRISMATIQ_DEBUG"]?
-       return [RGB.new(0, 0, 0)]
-     end
-
-    # Determine top-down vs bottom-up and actual height
-    h_total = read_i32_le(bmp_slice, 8)
-    top_down = false
-    if h_total < 0
-      top_down = true
-      bmp_h = (-h_total) / 2
-    else
-      bmp_h = (h_total / 2)
-    end
-
-    bytes_per_pixel = (bit_count / 8).to_i32
-
-    # Prepare bitfields masks if present
-    red_mask = 0_u32
-    green_mask = 0_u32
-    blue_mask = 0_u32
-    alpha_mask = 0_u32
-    if compression == 3
-      # masks typically follow the BITMAPINFOHEADER at offset 40
-      # Ensure slice has enough bytes
-      if bmp_slice.size >= 52
-        red_mask = read_u32_le(bmp_slice, 40).to_u32
-        green_mask = read_u32_le(bmp_slice, 44).to_u32
-        blue_mask = read_u32_le(bmp_slice, 48).to_u32
-        if bmp_slice.size >= 56
-          alpha_mask = read_u32_le(bmp_slice, 52).to_u32
-        end
-      end
-    end
-
-    # Palette handling for <=8bpp
-    palette = [] of Tuple(UInt8, UInt8, UInt8, UInt8)
-    palette_entries = 0
-    if bit_count <= 8
-      # colors used field is at offset 32 in BITMAPINFOHEADER (if available)
-      colors_used = 0_u32
-      if header_size >= 40 && bmp_slice.size >= 36
-        colors_used = read_u32_le(bmp_slice, 32)
-      end
-      palette_entries = colors_used > 0 ? colors_used.to_i32 : (1 << bit_count)
-      pal_off = header_size
-      i = 0
-      while i < palette_entries
-        po = pal_off + i * 4
-        break if po + 3 >= bmp_slice.size
-        # BMP palette entries are in B G R order, with optional reserved byte
-        b = bmp_slice[po]
-        g = bmp_slice[po + 1]
-        r = bmp_slice[po + 2]
-        a = bmp_slice[po + 3]
-        palette << {r, g, b, a}
-        i += 1
-      end
-      # If the palette was not present, ensure length matches expected entries
-      while palette.size < (1 << bit_count)
-        palette << {0_u8, 0_u8, 0_u8, 255_u8}
-      end
-    end
-
-    # Pixel data offset: header + palette size (palette entries * 4)
-    pixel_data_offset = header_size + (palette_entries * 4)
-    # Row size in bytes (each scanline aligned to 4 bytes)
-    row_size = ((bmp_w * bit_count + 31) // 32) * 4
-
-    # AND mask offset follows XOR pixel data
-    xor_data_size = row_size * bmp_h
-    and_mask_offset = pixel_data_offset + xor_data_size
-    and_row_size = ((bmp_w + 31) // 32) * 4
-
-    # Build RGBA buffer
-    total = bmp_w.to_i32 * bmp_h.to_i32 * 4
-    pixels = Slice(UInt8).new(total)
-
-    # Optimized pixel extraction paths for common bpp values
-    if (bit_count == 32 || bit_count == 24) && compression == 0
-      # fast path: iterate rows and copy pixels with minimal bounds checks
-      src_size = bmp_slice.size
-      y = 0
-      while y < bmp_h
-        src_row = top_down ? y : (bmp_h - 1 - y)
-        row_start = (pixel_data_offset + src_row * row_size).to_i32
-        dest_idx = (y * bmp_w * 4).to_i32
-        if bit_count == 32
-           src_off = row_start.to_i32
-         x = 0_i32
-         while x < bmp_w
-            if src_off + 3 < src_size
-              b = bmp_slice[src_off]
-              g = bmp_slice[src_off + 1]
-              r = bmp_slice[src_off + 2]
-              a = bmp_slice[src_off + 3]
-            else
-              r = 0_u8; g = 0_u8; b = 0_u8; a = 0_u8
-            end
-            pixels[dest_idx] = r
-            pixels[dest_idx + 1] = g
-            pixels[dest_idx + 2] = b
-            pixels[dest_idx + 3] = a
-            src_off += 4
-            dest_idx += 4
-            x += 1
-          end
-        else # 24bpp
-           src_off = row_start.to_i32
-          x = 0
-          while x < bmp_w
-            if src_off + 2 < src_size
-              b = bmp_slice[src_off]
-              g = bmp_slice[src_off + 1]
-              r = bmp_slice[src_off + 2]
-            else
-              r = 0_u8; g = 0_u8; b = 0_u8
-            end
-            pixels[dest_idx] = r
-            pixels[dest_idx + 1] = g
-            pixels[dest_idx + 2] = b
-            pixels[dest_idx + 3] = 255_u8
-            src_off += 3
-            dest_idx += 4
-            x += 1
-          end
-        end
-        y += 1
-      end
-    else
-      # generic (paletted or unusual bpp) slower path
-      y = 0
-      while y < bmp_h
-         src_row = top_down ? y : (bmp_h - 1 - y)
-         row_start = (pixel_data_offset + src_row * row_size).to_i32
-        x = 0
-        while x < bmp_w
-          px_r = 0_u8
-          px_g = 0_u8
-          px_b = 0_u8
-          px_a = 255_u8
-
-          if bit_count == 8
-             off = row_start + x
-            if off < bmp_slice.size
-              idx = bmp_slice[off].to_i
-              if idx < palette.size
-                px_r, px_g, px_b, pal_a = palette[idx]
-                if pal_a && pal_a != 0_u8
-                  px_a = pal_a
-                end
-              end
-            end
-          elsif bit_count == 4
-             off = row_start + (x / 2)
-             if off < bmp_slice.size
-               byte = bmp_slice[off.to_i]
-              idx = if (x % 2) == 0
-                      (byte >> 4) & 0x0F
-                    else
-                      byte & 0x0F
-                    end
-              if idx < palette.size
-                px_r, px_g, px_b, pal_a = palette[idx]
-                if pal_a && pal_a != 0_u8
-                  px_a = pal_a
-                end
-              end
-            end
-          elsif bit_count == 1
-             off = row_start + (x / 8)
-             if off < bmp_slice.size
-               byte = bmp_slice[off.to_i]
-              shift = 7 - (x % 8)
-              idx = (byte >> shift) & 0x01
-              if idx < palette.size
-                px_r, px_g, px_b, pal_a = palette[idx]
-                if pal_a && pal_a != 0_u8
-                  px_a = pal_a
-                end
-              end
-            end
-          elsif bit_count == 32 && compression == 3 && (red_mask != 0_u32 || green_mask != 0_u32 || blue_mask != 0_u32)
-            off = row_start + x * 4
-            if off + 3 < bmp_slice.size
-              val = bmp_slice[off].to_u32 | (bmp_slice[off + 1].to_u32 << 8) | (bmp_slice[off + 2].to_u32 << 16) | (bmp_slice[off + 3].to_u32 << 24)
-              r_shift, r_bits = mask_to_shift_and_bits(red_mask)
-              g_shift, g_bits = mask_to_shift_and_bits(green_mask)
-              b_shift, b_bits = mask_to_shift_and_bits(blue_mask)
-              a_shift, a_bits = mask_to_shift_and_bits(alpha_mask)
-              if r_bits > 0
-                raw = ((val & red_mask) >> r_shift).to_i
-                px_r = ((raw * 255) / ((1 << r_bits) - 1)).to_u8
-              end
-              if g_bits > 0
-                raw = ((val & green_mask) >> g_shift).to_i
-                px_g = ((raw * 255) / ((1 << g_bits) - 1)).to_u8
-              end
-              if b_bits > 0
-                raw = ((val & blue_mask) >> b_shift).to_i
-                px_b = ((raw * 255) / ((1 << b_bits) - 1)).to_u8
-              end
-              if a_bits > 0
-                raw = ((val & alpha_mask) >> a_shift).to_i
-                px_a = ((raw * 255) / ((1 << a_bits) - 1)).to_u8
-              end
-            end
-          else
-            # unsupported/unknown bpp: leave pixel as black transparent
-            px_r = 0_u8; px_g = 0_u8; px_b = 0_u8; px_a = 0_u8
-          end
-
-          # Apply AND mask transparency if present and alpha still fully opaque
-           if (and_mask_offset + (src_row * and_row_size)).to_i32 < bmp_slice.size
-             mask_row_start = (and_mask_offset + src_row * and_row_size).to_i32
-             mask_byte = mask_row_start + (x / 8)
-             if mask_byte < bmp_slice.size
-               mask_val = bmp_slice[mask_byte.to_i]
-              bit = 7 - (x % 8)
-              if ((mask_val >> bit) & 1) == 1
-                px_a = 0_u8
-              end
-            end
-          end
-
-          dest_idx = (y * bmp_w + x) * 4
-          pixels[dest_idx] = px_r
-          pixels[dest_idx + 1] = px_g
-          pixels[dest_idx + 2] = px_b
-          pixels[dest_idx + 3] = px_a
-
-          x += 1
-        end
-
-        y += 1
-      end
-    end
-
-    # Delegate to buffer-based palette extraction
-    get_palette_from_buffer(pixels, bmp_w.to_i32, bmp_h.to_i32, color_count, quality, threads)
+    debug_log("ICO: successfully parsed ICO file, dimensions: #{w}x#{h}")
+    get_palette_from_buffer(pixels, w, h, options)
+  rescue ex : Exception
+    debug_log("ICO: ICOFile extraction failed: #{ex.message}")
+    [RGB.new(0, 0, 0)]
   end
 
   # Debug helper: gated by PRISMATIQ_DEBUG env var

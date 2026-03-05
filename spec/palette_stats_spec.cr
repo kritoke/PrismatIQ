@@ -6,7 +6,8 @@ describe "Palette stats and ColorThief compatibility" do
     fixture = File.join(__DIR__, "..", "fixtures", "palette_stats_a_4x4.bin")
     slice, width, height = load_rgba_fixture(fixture)
 
-    entries, total = PrismatIQ.get_palette_with_stats_from_buffer(slice, width, height, 3, 1, 1)
+    options = PrismatIQ::Options.new(3, 1, 1)
+    entries, total = PrismatIQ.get_palette_with_stats(slice, width, height, options)
 
     total.should eq(width * height)
 
@@ -36,8 +37,9 @@ describe "Palette stats and ColorThief compatibility" do
     fixture = File.join(__DIR__, "..", "fixtures", "palette_stats_b_4x4.bin")
     slice, width, height = load_rgba_fixture(fixture)
 
-    entries, total = PrismatIQ.get_palette_with_stats_from_buffer(slice, width, height, 4, 1, 1)
-    ct = PrismatIQ.get_palette_color_thief_from_buffer(slice, width, height, 4, 1, 1)
+    options = PrismatIQ::Options.new(4, 1, 1)
+    entries, total = PrismatIQ.get_palette_with_stats(slice, width, height, options)
+    ct = PrismatIQ.get_palette_color_thief(slice, width, height, options)
 
     expected = entries.map { |e| e.rgb.to_hex }
     ct.should eq(expected)
@@ -47,8 +49,10 @@ describe "Palette stats and ColorThief compatibility" do
     fixture = File.join(__DIR__, "..", "fixtures", "palette_threads_8x8.bin")
     slice, width, height = load_rgba_fixture(fixture)
 
-    ct1 = PrismatIQ.get_palette_color_thief_from_buffer(slice, width, height, 5, 1, 1)
-    ct4 = PrismatIQ.get_palette_color_thief_from_buffer(slice, width, height, 5, 1, 4)
+    options_single = PrismatIQ::Options.new(5, 1, 1)
+    options_multi = PrismatIQ::Options.new(5, 1, 4)
+    ct1 = PrismatIQ.get_palette_color_thief(slice, width, height, options_single)
+    ct4 = PrismatIQ.get_palette_color_thief(slice, width, height, options_multi)
 
     ct1.should eq(ct4)
   end

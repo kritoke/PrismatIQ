@@ -47,8 +47,8 @@ checker_32 = generate_checkerboard(32, 32)
 solid_100 = generate_solid(0, 0, 255, 100, 100)
 
 tests = {
-  "checker_10x10" => {checker_10, 10, 10},
-  "checker_32x32" => {checker_32, 32, 32},
+  "checker_10x10"      => {checker_10, 10, 10},
+  "checker_32x32"      => {checker_32, 32, 32},
   "solid_100x100_blue" => {solid_100, 100, 100},
 }
 
@@ -56,16 +56,19 @@ tests.each do |name, (pixels, width, height)|
   puts "--- #{name} (#{width}x#{height}) ---"
 
   # Single-thread
-  result = PrismatIQ.get_palette_from_buffer(pixels, width, height, color_count: 5, quality: 1, threads: 1)
+  options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
+  result = PrismatIQ.get_palette(pixels, width, height, options)
   puts "  Single-thread: #{result.map(&.to_hex)}"
 
   # Multi-thread
-  result = PrismatIQ.get_palette_from_buffer(pixels, width, height, color_count: 5, quality: 1, threads: 4)
+  options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 4)
+  result = PrismatIQ.get_palette(pixels, width, height, options)
   puts "  Multi-thread: #{result.map(&.to_hex)}"
 
   # Stats
-  entries, total = PrismatIQ.get_palette_with_stats_from_buffer(pixels, width, height, color_count: 5, quality: 1, threads: 1)
-  puts "  Stats: #{entries.size} entries, #{total} pixels"
+  options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
+  entries, total_pixels = PrismatIQ.get_palette_with_stats(pixels, width, height, options)
+  puts "  Stats: #{entries.size} entries, #{total_pixels} pixels"
 
   # Result type
   result = PrismatIQ.get_palette_or_error(pixels, width, height)
@@ -73,7 +76,8 @@ tests.each do |name, (pixels, width, height)|
 
   # Config
   config = PrismatIQ::Config.new(debug: false, threads: 2)
-  result = PrismatIQ.get_palette_from_buffer(pixels, width, height, color_count: 5, quality: 1, config: config)
+  options = PrismatIQ::Options.new(color_count: 5, quality: 1)
+  result = PrismatIQ.get_palette(pixels, width, height, options, config)
   puts "  With Config: #{result.map(&.to_hex)}"
 
   puts
@@ -84,12 +88,14 @@ puts
 
 # Empty
 empty = Slice(UInt8).new(0)
-result = PrismatIQ.get_palette_from_buffer(empty, 0, 0, color_count: 5)
+options = PrismatIQ::Options.new(color_count: 5)
+result = PrismatIQ.get_palette(empty, 0, 0, options)
 puts "Empty: #{result.map(&.to_hex)}"
 
 # Transparent
-transparent = Slice.new(4) { |i| i == 3 ? 0.to_u8 : 0.to_u8 }  # All transparent
-result = PrismatIQ.get_palette_from_buffer(transparent, 1, 1, color_count: 5)
+transparent = Slice.new(4) { |i| i == 3 ? 0.to_u8 : 0.to_u8 } # All transparent
+options = PrismatIQ::Options.new(color_count: 5)
+result = PrismatIQ.get_palette(transparent, 1, 1, options)
 puts "Transparent: #{result.map(&.to_hex)}"
 
 # Config.thread_count_for
