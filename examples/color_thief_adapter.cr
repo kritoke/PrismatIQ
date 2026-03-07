@@ -31,8 +31,8 @@ begin
     # We'll prefer to decode via our ICO helper and then feed the returned image into get_palette
     entries = PrismatIQ.get_palette_from_ico(path, options)
     payload = {
-      "colors"       => entries.map { |c| c.to_hex },
-      "entries"      => entries.map { |c| {"hex" => c.to_hex, "count" => 0, "percent" => 0.0} },
+      "colors"       => entries.map(&.to_hex),
+      "entries"      => entries.map { |color| {"hex" => color.to_hex, "count" => 0, "percent" => 0.0} },
       "total_pixels" => 0,
     }
     puts payload.to_json
@@ -61,7 +61,7 @@ entries_payload = entries.map do |e|
 end
 
 payload = {
-  "colors"       => entries.map { |e| e.rgb.to_hex },
+  "colors"       => entries.map(&.rgb.to_hex),
   "entries"      => entries_payload,
   "total_pixels" => total,
 }

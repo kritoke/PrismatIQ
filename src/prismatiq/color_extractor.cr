@@ -15,21 +15,34 @@ module PrismatIQ
 
   # Accept a Slice(UInt8) RGBA buffer for best compatibility with other APIs
   def self.extract_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.new) : Array(Int32)?
-    return nil if width <= 0 || height <= 0
+    return if width <= 0 || height <= 0
 
     total = width.to_i32 * height.to_i32
     expected_size = total.to_i64 * 4
-    if pixels.size < expected_size
-      if ENV["PRISMATIQ_DEBUG"]?
-        STDERR.puts "DBG: extract_from_buffer: pixel buffer too small (have=#{pixels.size} expected=#{expected_size})"
-      end
-      return nil
-    end
+    return if pixels.size < expected_size
 
     sample_size = options.sample_size > 0 ? options.sample_size : 1000
     step = (total.to_f / sample_size.to_f).ceil.to_i32
     step = 1 if step < 1
 
+    r_total, g_total, b_total, count = sample_pixels(pixels, total, step, options)
+
+    return if count == 0
+
+    # integer average: use truncation/floor to match tests' expected values
+    r_avg = (r_total / count.to_i64).to_i32
+    g_avg = (g_total / count.to_i64).to_i32
+    b_avg = (b_total / count.to_i64).to_i32
+
+    [r_avg.clamp(0, 255), g_avg.clamp(0, 255), b_avg.clamp(0, 255)]
+  rescue ex
+    if ENV["PRISMATIQ_DEBUG"]?
+      STDERR.puts "DBG: extract_from_buffer: exception: #{ex.message}"
+    end
+    nil
+  end
+
+  private def self.sample_pixels(pixels : Slice(UInt8), total : Int32, step : Int32, options : Options) : Tuple(Int64, Int64, Int64, Int32)
     r_total = 0_i64
     g_total = 0_i64
     b_total = 0_i64
@@ -46,19 +59,8 @@ module PrismatIQ
           g = pixels[idx + 1].to_i32
           b = pixels[idx + 2].to_i32
 
-          if a != 255_u8
-            af = a.to_f / 255.0
-            if af > 0.001
-              # unpremultiply: use truncation/floor to match test expectations
-              r = (r.to_f / af).to_i32.clamp(0, 255)
-              g = (g.to_f / af).to_i32.clamp(0, 255)
-              b = (b.to_f / af).to_i32.clamp(0, 255)
-            else
-              # alpha extremely small, ignore pixel
-              p += step
-              next
-            end
-          end
+          r, g, b = process_alpha_channel(r, g, b, a)
+          next unless r && g && b
 
           r_total += r.to_i64
           g_total += g.to_i64
@@ -74,19 +76,23 @@ module PrismatIQ
       p += step
     end
 
-    return nil if count == 0
+    {r_total, g_total, b_total, count}
+  end
 
-    # integer average: use truncation/floor to match tests' expected values
-    r_avg = (r_total / count.to_i64).to_i32
-    g_avg = (g_total / count.to_i64).to_i32
-    b_avg = (b_total / count.to_i64).to_i32
+  private def self.process_alpha_channel(r : Int32, g : Int32, b : Int32, a : UInt8) : Tuple(Int32?, Int32?, Int32?)
+    return {r, g, b} if a == 255_u8
 
-    [r_avg.clamp(0, 255), g_avg.clamp(0, 255), b_avg.clamp(0, 255)]
-  rescue ex
-    if ENV["PRISMATIQ_DEBUG"]?
-      STDERR.puts "DBG: extract_from_buffer: exception: #{ex.message}"
+    af = a.to_f / 255.0
+    if af > 0.001
+      # unpremultiply: use truncation/floor to match test expectations
+      r = (r.to_f / af).to_i32.clamp(0, 255)
+      g = (g.to_f / af).to_i32.clamp(0, 255)
+      b = (b.to_f / af).to_i32.clamp(0, 255)
+      {r, g, b}
+    else
+      # alpha extremely small, ignore pixel
+      {nil, nil, nil}
     end
-    nil
   end
 
   # Backwards-compatible wrapper for Array(UInt8)

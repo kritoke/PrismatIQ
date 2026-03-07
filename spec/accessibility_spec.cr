@@ -184,7 +184,7 @@ describe PrismatIQ::Accessibility do
       adjusted = PrismatIQ::Accessibility.adjust_for_compliance(light_gray, white, PrismatIQ::WCAGLevel::AA)
       adjusted.should_not be_nil
 
-      level = PrismatIQ::Accessibility.wcag_level(adjusted.not_nil!, white)
+      level = PrismatIQ::Accessibility.wcag_level(adjusted.as(PrismatIQ::RGB), white)
       level.should be >= PrismatIQ::WCAGLevel::AA
     end
 
@@ -254,7 +254,7 @@ describe PrismatIQ::Accessibility do
       lum2 = PrismatIQ::Accessibility.relative_luminance(color)
 
       lum1.should eq(lum2)
-      lum1.should be > 0  # Verify it's a valid luminance value
+      lum1.should be > 0 # Verify it's a valid luminance value
     end
 
     it "caches contrast ratio calculations" do
@@ -266,7 +266,7 @@ describe PrismatIQ::Accessibility do
       ratio2 = PrismatIQ::Accessibility.contrast_ratio(fg, bg)
 
       ratio1.should eq(ratio2)
-      ratio1.should be > 1.0  # Verify it's a valid contrast ratio
+      ratio1.should be > 1.0 # Verify it's a valid contrast ratio
     end
 
     it "clears cache when requested" do
@@ -282,14 +282,14 @@ describe PrismatIQ::Accessibility do
       PrismatIQ::Accessibility.clear_cache
 
       # Use a specific color where we can verify the exact luminance value
-      color = PrismatIQ::RGB.new(255, 255, 255)  # white has luminance of 1.0
-      
+      color = PrismatIQ::RGB.new(255, 255, 255) # white has luminance of 1.0
+
       # First call computes and caches
       lum1 = PrismatIQ::Accessibility.relative_luminance(color)
-      
+
       # Verify computation is correct
       lum1.should be_close(1.0, 0.001)
-      
+
       # Second call should return cached value
       lum2 = PrismatIQ::Accessibility.relative_luminance(color)
       lum2.should eq(lum1)
@@ -311,7 +311,7 @@ describe PrismatIQ::Accessibility do
 
       black = PrismatIQ::RGB.new(0, 0, 0)
       white = PrismatIQ::RGB.new(255, 255, 255)
-      
+
       ratio1 = PrismatIQ::Accessibility.contrast_ratio(black, white)
       ratio2 = PrismatIQ::Accessibility.contrast_ratio(black, white)
 
@@ -324,20 +324,20 @@ describe PrismatIQ::Accessibility do
 
       fg1 = PrismatIQ::RGB.new(0, 0, 0)
       bg1 = PrismatIQ::RGB.new(255, 255, 255)
-      
+
       fg2 = PrismatIQ::RGB.new(100, 100, 100)
       bg2 = PrismatIQ::RGB.new(200, 200, 200)
 
       ratio1 = PrismatIQ::Accessibility.contrast_ratio(fg1, bg1)
       ratio2 = PrismatIQ::Accessibility.contrast_ratio(fg2, bg2)
-      
+
       # Both should be cached independently
       ratio1_cached = PrismatIQ::Accessibility.contrast_ratio(fg1, bg1)
       ratio2_cached = PrismatIQ::Accessibility.contrast_ratio(fg2, bg2)
-      
+
       ratio1.should eq(ratio1_cached)
       ratio2.should eq(ratio2_cached)
-      
+
       # And have different values
       ratio1.should_not eq(ratio2)
     end
@@ -346,17 +346,17 @@ describe PrismatIQ::Accessibility do
       PrismatIQ::Accessibility.clear_cache
 
       color = PrismatIQ::RGB.new(100, 100, 100)
-      
+
       # Cache luminance
       lum = PrismatIQ::Accessibility.relative_luminance(color)
-      
+
       # Cache contrast ratio using the same color
       ratio = PrismatIQ::Accessibility.contrast_ratio(color, color)
-      
+
       # Both should work independently
       lum_cached = PrismatIQ::Accessibility.relative_luminance(color)
       ratio_cached = PrismatIQ::Accessibility.contrast_ratio(color, color)
-      
+
       lum.should eq(lum_cached)
       ratio.should eq(ratio_cached)
     end

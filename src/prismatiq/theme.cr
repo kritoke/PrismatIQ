@@ -137,7 +137,7 @@ module PrismatIQ
     end
 
     def self.generate_dual_themes(source_palette : Array(RGB), level : WCAGLevel = WCAGLevel::AA) : DualThemePalette?
-      return nil if source_palette.empty?
+      return if source_palette.empty?
 
       light_candidates = filter_for_light_theme(source_palette)
       dark_candidates = filter_for_dark_theme(source_palette)

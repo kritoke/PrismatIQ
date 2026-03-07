@@ -15,116 +15,99 @@ module PrismatIQ
     # provides an atomic directory creation helper; we'll use it to create a
     # secure directory and then create a file inside it atomically.
     def self.create_and_write(prefix : String, data : Slice(UInt8)) : String?
-      if HAVE_TEMPDIR
-        # Use Dir.mktmpdir to create a secure directory and create a file inside it.
-        begin
-          Dir.mktmpdir do |dir|
-            # Dir.mktempdir may yield either a Tempdir instance (our vendored
-            # implementation) or a String path (older/other implementations).
-            base = dir.is_a?(Tempdir) ? dir.path : dir.to_s
+      result = try_tempdir_approach(prefix, data)
+      return result if result
 
-            # If the Tempdir instance (our vendored Tempdir) is being used,
-            # prefer its create_tempfile helper which uses mkstemp. Limit prefix
-            # length to avoid platform filename length limits.
-            safe_prefix = prefix.size > 100 ? prefix[0, 100] : prefix
-            if dir.is_a?(Tempdir)
-              created = dir.create_tempfile(safe_prefix, data)
-              if created
-                next created
-              end
-              # fall through to manual write if create_tempfile failed
-            end
+      {% if flag?(:windows) %}
+        try_windows_fallback(prefix, data)
+      {% else %}
+        try_unix_mkstemp(prefix, data)
+      {% end %}
+    end
 
-            path = "#{base}/#{prefix}#{Process.pid}_#{Time.local.to_unix}.bin"
-            File.open(path, "w") do |file|
-              # Write raw bytes using Bytes to avoid encoding issues
-              buffer = Bytes.new(data.size)
-              i = 0
-              while i < data.size
-                buffer[i] = data[i]
-                i += 1
-              end
-              file.write(buffer)
-              file.flush
-            end
-            next path
+    private def self.try_tempdir_approach(prefix : String, data : Slice(UInt8)) : String?
+      return unless HAVE_TEMPDIR
+
+      begin
+        Dir.mktmpdir do |dir|
+          base = dir.is_a?(Tempdir) ? dir.path : dir.to_s
+          safe_prefix = prefix.size > 100 ? prefix[0, 100] : prefix
+
+          if dir.is_a?(Tempdir)
+            created = dir.create_tempfile(safe_prefix, data)
+            next created if created
           end
-        rescue ex : Exception
-          STDERR.puts "PrismatIQ: tempfile via tempdir failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
-          return nil
+
+          path = "#{base}/#{prefix}#{Process.pid}_#{Time.local.to_unix}.bin"
+          write_buffer_to_file(path, data)
+          path
         end
+      rescue ex : Exception
+        STDERR.puts "PrismatIQ: tempfile via tempdir failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
       end
+      nil
+    end
 
-      if {% flag?(:windows) %}
-        tmp_dir = ENV["TMPDIR"]? ? ENV["TMPDIR"] : (ENV["TEMP"]? ? ENV["TEMP"] : ".")
-        tries = 0
-        while tries < 16
-          rnd = Random.new.rand(0_u32..0xFFFF_FFFF_u32)
-          path = "#{tmp_dir}/#{prefix}#{Process.pid}_#{Time.local.to_unix}_#{rnd}.tmp"
-          if !File.exists?(path)
-            begin
-              File.open(path, "w") do |file|
-                # Build a Bytes buffer and write it in one call to avoid
-                # character-encoding issues when constructing a String.
-                total = data.size
-                buffer = Bytes.new(total)
-                i = 0
-                while i < total
-                  buffer[i] = data[i]
-                  i += 1
-                end
-                file.write(buffer)
-                file.flush
-              end
-              return path
-            rescue ex : Exception
-              STDERR.puts "PrismatIQ: windows tempfile fallback failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
-            end
+    private def self.write_buffer_to_file(path : String, data : Slice(UInt8))
+      File.open(path, "w") do |file|
+        buffer = Bytes.new(data.size)
+        data.copy_to(buffer)
+        file.write(buffer)
+        file.flush
+      end
+    end
+
+    private def self.try_windows_fallback(prefix : String, data : Slice(UInt8)) : String?
+      tmp_dir = ENV["TMPDIR"]? || ENV["TEMP"]? || "."
+      tries = 0
+      while tries < 16
+        rnd = Random.new.rand(0_u32..0xFFFF_FFFF_u32)
+        path = "#{tmp_dir}/#{prefix}#{Process.pid}_#{Time.local.to_unix}_#{rnd}.tmp"
+        unless File.exists?(path)
+          begin
+            write_buffer_to_file(path, data)
+            return path
+          rescue ex : Exception
+            STDERR.puts "PrismatIQ: windows tempfile fallback failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
           end
-          tries += 1
         end
-        nil
-      else
-        tmp_dir = ENV["TMPDIR"]? ? ENV["TMPDIR"] : "/tmp"
-        tmpl = "#{tmp_dir}/#{prefix}XXXXXX".dup
+        tries += 1
+      end
+      nil
+    end
 
-        tmpl_bytes = tmpl.to_slice
-        buf = Bytes.new(tmpl_bytes.size + 1)
-        i = 0
-        while i < tmpl_bytes.size
-          buf[i] = tmpl_bytes[i]
-          i += 1
-        end
-        buf[i] = 0
+    private def self.try_unix_mkstemp(prefix : String, data : Slice(UInt8)) : String?
+      tmp_dir = ENV["TMPDIR"]? || "/tmp"
+      tmpl = "#{tmp_dir}/#{prefix}XXXXXX".dup
 
-        fd = LibC.mkstemp(buf.to_unsafe)
-        if fd < 0
-          return nil
-        end
+      tmpl_bytes = tmpl.to_slice
+      buf = Bytes.new(tmpl_bytes.size + 1)
+      tmpl_bytes.copy_to(buf)
+      buf[tmpl_bytes.size] = 0
 
+      fd = LibC.mkstemp(buf.to_unsafe)
+      return if fd < 0
+
+      begin
         total = data.size
         written = 0
         while written < total
           ptr = data.to_unsafe + written
           left = (total - written).to_u64
           w = LibC.write(fd, ptr.as(Pointer(Void)), left)
-          if w <= 0
-            LibC.close(fd)
-            return nil
-          end
+          return if w <= 0
           written += w.to_i
         end
-
+      ensure
         LibC.close(fd)
+      end
 
-        idx = 0
-        path = String.build do |str|
-          while buf[idx] != 0
-            str << buf[idx].chr
-            idx += 1
-          end
+      idx = 0
+      String.build do |str|
+        while buf[idx] != 0
+          str << buf[idx].chr
+          idx += 1
         end
-        path
       end
     end
 
@@ -133,7 +116,7 @@ module PrismatIQ
     # nil if tempfile creation failed.
     def self.with_tempfile(prefix : String, data : Slice(UInt8), &)
       path = create_and_write(prefix, data)
-      return nil unless path
+      return unless path
 
       begin
         yield(path)

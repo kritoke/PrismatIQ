@@ -131,18 +131,18 @@ describe "PrismatIQ Edge Cases" do
   describe "Config (Result-based API)" do
     it "works with custom debug setting" do
       pixels = generate_solid(255, 128, 64, 10, 10)
-      config = PrismatIQ::Config.new(debug: false) # Disable debug output
       options = PrismatIQ::Options.new
-      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options)
+      config = PrismatIQ::Config.new(debug: false)
+      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options, config)
       result.ok?.should be_true
       result.value.size.should be > 0
     end
 
     it "works with custom thread setting" do
       pixels = generate_solid(0, 255, 0, 10, 10)
-      config = PrismatIQ::Config.new(threads: 1)
       options = PrismatIQ::Options.new
-      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options)
+      config = PrismatIQ::Config.new(threads: 1)
+      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options, config)
       result.ok?.should be_true
       result.value.size.should be > 0
     end

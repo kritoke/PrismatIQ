@@ -3,7 +3,7 @@ require "../src/prismatiq"
 
 describe "Palette stats and ColorThief compatibility" do
   it "returns entries with counts and percentages that sum to ~1 and hex format" do
-    fixture = File.join(__DIR__, "..", "fixtures", "palette_stats_a_4x4.bin")
+    fixture = File.join(__DIR__, "fixtures", "palette_stats_a_4x4.bin")
     slice, width, height = load_rgba_fixture(fixture)
 
     options = PrismatIQ::Options.new(3, 1, 1)
@@ -34,19 +34,19 @@ describe "Palette stats and ColorThief compatibility" do
   end
 
   it "compatibility wrapper returns same hex list as entries" do
-    fixture = File.join(__DIR__, "..", "fixtures", "palette_stats_b_4x4.bin")
+    fixture = File.join(__DIR__, "fixtures", "palette_stats_b_4x4.bin")
     slice, width, height = load_rgba_fixture(fixture)
 
     options = PrismatIQ::Options.new(4, 1, 1)
-    entries, total = PrismatIQ.get_palette_with_stats(slice, width, height, options)
+    entries, _ = PrismatIQ.get_palette_with_stats(slice, width, height, options)
     ct = PrismatIQ.get_palette_color_thief(slice, width, height, options)
 
-    expected = entries.map { |e| e.rgb.to_hex }
+    expected = entries.map(&.rgb.to_hex)
     ct.should eq(expected)
   end
 
   it "color thief wrapper is deterministic across thread counts" do
-    fixture = File.join(__DIR__, "..", "fixtures", "palette_threads_8x8.bin")
+    fixture = File.join(__DIR__, "fixtures", "palette_threads_8x8.bin")
     slice, width, height = load_rgba_fixture(fixture)
 
     options_single = PrismatIQ::Options.new(5, 1, 1)

@@ -117,12 +117,10 @@ module PrismatIQ
     # end
     # ```
     def self.from_slice?(data : Slice(UInt8)) : PNGExtractor?
-      begin
-        extractor = new(data)
-        extractor.valid? ? extractor : nil
-      rescue
-        nil
-      end
+      extractor = new(data)
+      extractor.valid? ? extractor : nil
+    rescue
+      nil
     end
 
     # Extracts PNG data from an ICO file and returns a PNGExtractor
@@ -137,50 +135,51 @@ module PrismatIQ
     # end
     # ```
     def self.extract_from_ico(ico_data : Slice(UInt8), max_size : Int64 = MAX_PNG_SIZE) : PNGExtractor?
-      return nil if ico_data.size < 6
+      return if ico_data.size < 6
 
       # Read ICONDIR header
       reserved = ico_data[0].to_u16 | (ico_data[1].to_u16 << 8)
       typ = ico_data[2].to_u16 | (ico_data[3].to_u16 << 8)
       count = ico_data[4].to_u16 | (ico_data[5].to_u16 << 8)
 
-      return nil if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
+      return if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
 
       # Search for PNG entries
       entry_base = 6
       i = 0
       while i < count && (entry_base + 16) <= ico_data.size
-        off = entry_base + i * 16
-        width = ico_data[off].to_u32
-        height = ico_data[off + 1].to_u32
-
-        size = ico_data[off + 8].to_u64 |
-               (ico_data[off + 9].to_u64 << 8) |
-               (ico_data[off + 10].to_u64 << 16) |
-               (ico_data[off + 11].to_u64 << 24)
-
-        image_offset = ico_data[off + 12].to_u64 |
-                       (ico_data[off + 13].to_u64 << 8) |
-                       (ico_data[off + 14].to_u64 << 16) |
-                       (ico_data[off + 15].to_u64 << 24)
-
-        # Check size limit
-        if size > max_size
-          i += 1
-          next
-        end
-
-        if image_offset >= 0 && (image_offset + size) <= ico_data.size && size >= 8
-          img_slice = ico_data[image_offset, size.to_i]
-
-          # Check PNG signature: 0x89 0x50 0x4E 0x47
-          if img_slice[0] == 0x89_u8 && img_slice[1] == 0x50_u8 &&
-             img_slice[2] == 0x4E_u8 && img_slice[3] == 0x47_u8
-            return from_slice?(img_slice)
-          end
-        end
-
+        png_extractor = try_png_entry_at(ico_data, entry_base, i, max_size)
+        return png_extractor if png_extractor
         i += 1
+      end
+
+      nil
+    end
+
+    private def self.try_png_entry_at(ico_data : Slice(UInt8), entry_base : Int32, index : Int32, max_size : Int64) : PNGExtractor?
+      off = entry_base + index * 16
+
+      size = ico_data[off + 8].to_u64 |
+             (ico_data[off + 9].to_u64 << 8) |
+             (ico_data[off + 10].to_u64 << 16) |
+             (ico_data[off + 11].to_u64 << 24)
+
+      image_offset = ico_data[off + 12].to_u64 |
+                     (ico_data[off + 13].to_u64 << 8) |
+                     (ico_data[off + 14].to_u64 << 16) |
+                     (ico_data[off + 15].to_u64 << 24)
+
+      # Check size limit
+      return if size > max_size
+
+      if image_offset >= 0 && (image_offset + size) <= ico_data.size && size >= 8
+        img_slice = ico_data[image_offset, size.to_i]
+
+        # Check PNG signature: 0x89 0x50 0x4E 0x47
+        if img_slice[0] == 0x89_u8 && img_slice[1] == 0x50_u8 &&
+           img_slice[2] == 0x4E_u8 && img_slice[3] == 0x47_u8
+          return from_slice?(img_slice)
+        end
       end
 
       nil
@@ -200,17 +199,15 @@ module PrismatIQ
     end
 
     private def decode_via_tempfile
-      # Create temp file for PNG decoding using with_tempfile for automatic cleanup
       result = TempfileHelper.with_tempfile("prismatiq_png_", @data) do |png_path|
         img = CrImage.read(png_path)
         return unless img
 
-        # Use Pipeline to normalize to RGBA
-        rgba_image = nil
-        begin
-          rgba_image = CrImage::Pipeline.new(img).result
+        rgba_image = begin
+          CrImage::Pipeline.new(img).result
         rescue ex : Exception
           debug_log("PNGExtractor: Pipeline normalization failed: #{ex.class} #{ex.message}")
+          nil
         end
 
         return unless rgba_image
@@ -520,13 +517,11 @@ module PrismatIQ
     # ico = ICOFile.from_path("favicon.ico")
     # ```
     def self.from_path(path : String) : ICOFile?
-      begin
-        bytes = File.read(path).to_slice
-        new(bytes)
-      rescue ex : Exception
-        debug_log("ICOFile.from_path: failed to read #{path}: #{ex.message}")
-        nil
-      end
+      bytes = File.read(path).to_slice
+      new(bytes)
+    rescue ex : Exception
+      debug_log("ICOFile.from_path: failed to read #{path}: #{ex.message}")
+      nil
     end
 
     # Creates an ICOFile from raw bytes
@@ -535,7 +530,7 @@ module PrismatIQ
     # ico = ICOFile.from_slice(ico_bytes)
     # ```
     def self.from_slice(data : Slice(UInt8)) : ICOFile?
-      return nil if data.nil?
+      return if data.nil?
       new(data)
     end
 
@@ -594,14 +589,14 @@ module PrismatIQ
     # end
     # ```
     def best_png_entry : Tuple(Int32, Int32, Slice(UInt8))?
-      return nil if @data.size < 6
+      return if @data.size < 6
 
       # Read ICONDIR header
       reserved = @data[0].to_u16 | (@data[1].to_u16 << 8)
       typ = @data[2].to_u16 | (@data[3].to_u16 << 8)
       count = @data[4].to_u16 | (@data[5].to_u16 << 8)
 
-      return nil if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
+      return if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
 
       entry_base = 6
       i = 0
@@ -629,13 +624,13 @@ module PrismatIQ
                      (@data[off + 15].to_u64 << 24)
 
       # Check size limit
-      return nil if size > MAX_ENTRY_SIZE
-      return nil if image_offset + size > @data.size || size < 8
+      return if size > MAX_ENTRY_SIZE
+      return if image_offset + size > @data.size || size < 8
 
       img_slice = @data[image_offset, size.to_i]
 
       # Check PNG signature: 0x89 0x50 0x4E 0x47
-      return nil unless valid_png_signature?(img_slice)
+      return unless valid_png_signature?(img_slice)
 
       width = @data[off].to_u32
       height = @data[off + 1].to_u32
@@ -663,16 +658,23 @@ module PrismatIQ
     # end
     # ```
     def best_bmp_entry : Tuple(Int32, Int32, Slice(UInt8))?
-      return nil if @data.size < 6
+      return if @data.size < 6
 
       # Read ICONDIR header
       reserved = @data[0].to_u16 | (@data[1].to_u16 << 8)
       typ = @data[2].to_u16 | (@data[3].to_u16 << 8)
       count = @data[4].to_u16 | (@data[5].to_u16 << 8)
 
-      return nil if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
+      return if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
 
       entry_base = 6
+      best_entry = find_best_bmp_entry(entry_base, count)
+
+      return unless best_entry
+      {best_entry[0], best_entry[1], best_entry[2]}
+    end
+
+    private def find_best_bmp_entry(entry_base : Int32, count : UInt16) : Tuple(Int32, Int32, Slice(UInt8))?
       best_area = 0_i32
       best_bitcount = 0_i32
       best_w : Int32 = 0
@@ -697,7 +699,7 @@ module PrismatIQ
         i += 1
       end
 
-      return nil unless best_slice
+      return unless best_slice
       {best_w, best_h, best_slice}
     end
 
@@ -715,11 +717,11 @@ module PrismatIQ
                      (@data[off + 14].to_u64 << 16) |
                      (@data[off + 15].to_u64 << 24)
 
-      return nil if image_offset + size > @data.size || size < 40
+      return if image_offset + size > @data.size || size < 40
 
       hdr = @data[image_offset, size.to_i]
       header_size = read_u32_le(hdr, 0)
-      return nil if header_size < 40 || size < header_size
+      return if header_size < 40 || size < header_size
 
       w = read_i32_le(hdr, 4)
       h_total = read_i32_le(hdr, 8)
@@ -728,7 +730,7 @@ module PrismatIQ
       bit_count = read_u16_le(hdr, 14).to_i32
 
       # Basic sanity checks
-      return nil if w <= 0 || h <= 0 || bit_count < 24
+      return if w <= 0 || h <= 0 || bit_count < 24
 
       {w.to_i32, h, bit_count, hdr}
     end
@@ -921,17 +923,15 @@ module PrismatIQ
   # end
   # ```
   def self.get_palette_from_ico_or_error(path : String, options : Options = Options.default) : Result(Array(RGB), String)
-    begin
-      palette = get_palette_from_ico(path, options)
-      # Check if it's the error sentinel
-      if palette.size == 1 && palette[0].r == 0 && palette[0].g == 0 && palette[0].b == 0
-        Result(Array(RGB), String).err("Failed to extract palette from ICO file: #{path}")
-      else
-        Result(Array(RGB), String).ok(palette)
-      end
-    rescue ex : Exception
-      Result(Array(RGB), String).err("Exception processing ICO file #{path}: #{ex.message}")
+    palette = get_palette_from_ico(path, options)
+    # Check if it's the error sentinel
+    if palette.size == 1 && palette[0].r == 0 && palette[0].g == 0 && palette[0].b == 0
+      Result(Array(RGB), String).err("Failed to extract palette from ICO file: #{path}")
+    else
+      Result(Array(RGB), String).ok(palette)
     end
+  rescue ex : Exception
+    Result(Array(RGB), String).err("Exception processing ICO file #{path}: #{ex.message}")
   end
 
   # Backward-compatible overload with keyword arguments

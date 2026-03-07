@@ -237,9 +237,9 @@ describe "color matching" do
       options = PrismatIQ::Options.new(color_count: 3)
       result = PrismatIQ.get_palette_or_error(pixels, 4, 4, options)
       # flat_map should return a Result with the same type
-      chained = result.flat_map { |colors|
+      chained = result.flat_map do |colors|
         PrismatIQ::Result(Array(PrismatIQ::RGB), String).ok(colors)
-      }
+      end
       chained.ok?.should be_true
       chained.value.should be_a(Array(PrismatIQ::RGB))
     end

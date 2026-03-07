@@ -182,8 +182,8 @@ describe PrismatIQ::YIQConverter do
         {0, 128, 255},
       ]
 
-      test_colors.each do |r, g, b|
-        y, i, q = PrismatIQ::YIQConverter.quantize_from_rgb(r, g, b)
+      test_colors.each do |red, green, blue|
+        y, i, q = PrismatIQ::YIQConverter.quantize_from_rgb(red, green, blue)
         y.should be >= 0
         y.should be <= 31
         i.should be >= 0
@@ -285,7 +285,7 @@ describe PrismatIQ::YIQConverter do
     end
 
     it "produces unique indices for different Q values" do
-      indices = (0..31).map { |q| PrismatIQ::YIQConverter.to_index(0, 0, q) }
+      indices = (0..31).map { |quantized_value| PrismatIQ::YIQConverter.to_index(0, 0, quantized_value) }
       indices.uniq.size.should eq(32)
     end
   end
@@ -304,16 +304,16 @@ describe PrismatIQ::YIQConverter do
         {50, 75, 100},
       ]
 
-      rgb_values.each do |r, g, b|
-        y, i, q = PrismatIQ::YIQConverter.quantize_from_rgb(r, g, b)
+      rgb_values.each do |red, green, blue|
+        y, i, q = PrismatIQ::YIQConverter.quantize_from_rgb(red, green, blue)
         index = PrismatIQ::YIQConverter.to_index(y, i, q)
-        
+
         # Verify the index is within valid range
         index.should be >= 0
         index.should be <= 32767
-        
+
         # Verify second call produces same result
-        y2, i2, q2 = PrismatIQ::YIQConverter.quantize_from_rgb(r, g, b)
+        y2, i2, q2 = PrismatIQ::YIQConverter.quantize_from_rgb(red, green, blue)
         index2 = PrismatIQ::YIQConverter.to_index(y2, i2, q2)
         index.should eq(index2)
       end
@@ -322,12 +322,12 @@ describe PrismatIQ::YIQConverter do
     it "maps to a reasonable number of histogram indices for diverse colors" do
       # Test a wide range of colors to ensure we cover the histogram space
       indices = [] of Int32
-      
+
       # Sample various colors across the RGB space
       r_step = 17
       g_step = 17
       b_step = 17
-      
+
       r = 0
       while r <= 255
         g = 0
@@ -343,7 +343,7 @@ describe PrismatIQ::YIQConverter do
         end
         r += r_step
       end
-      
+
       # With proper scaling, we should have good distribution
       indices.uniq.size.should be > 100
     end

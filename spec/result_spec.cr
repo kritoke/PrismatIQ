@@ -87,9 +87,6 @@ describe PrismatIQ::Result(Int32, String) do
     describe "#error" do
       it "raises when called on an ok result" do
         result = PrismatIQ::Result(Int32, String).ok(42)
-        expect_raised_message = "Result is ok: 42"
-        # The error message format is "Result is ok: #{@value}" 
-        # which includes the value's inspect output
         expect_raises(Exception, /Result is ok/) do
           result.error
         end
@@ -128,14 +125,14 @@ describe PrismatIQ::Result(Int32, String) do
 
       it "map_error transforms error in error result" do
         result = PrismatIQ::Result(Int32, String).err("original error")
-        mapped = result.map_error { |e| e.upcase }
+        mapped = result.map_error(&.upcase)
         mapped.err?.should be_true
         mapped.error.should eq("ORIGINAL ERROR")
       end
 
       it "map_error preserves value in ok result" do
         result = PrismatIQ::Result(Int32, String).ok(100)
-        mapped = result.map_error { |e| e.upcase }
+        mapped = result.map_error(&.upcase)
         mapped.ok?.should be_true
         mapped.value.should eq(100)
       end

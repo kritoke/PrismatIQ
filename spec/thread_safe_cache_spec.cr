@@ -156,7 +156,7 @@ describe PrismatIQ::ThreadSafeCache do
 
       # Only ONE computation should have occurred
       compute_count.should eq(1)
-      
+
       # All results should be 42
       results.all? { |v| v == 42 }.should be_true
     end
@@ -190,7 +190,7 @@ describe PrismatIQ::ThreadSafeCache do
 
       # All operations should have completed
       results.size.should eq(500)
-      
+
       # Cache should have all 75 unique keys (0-74)
       cache.size.should eq(75)
     end
@@ -253,7 +253,7 @@ describe PrismatIQ::ThreadSafeCache do
 
       # Each unique key should only be computed once
       compute_count.should eq(key_count)
-      
+
       # Cache should have exactly key_count entries
       cache.size.should eq(key_count)
     end
@@ -282,7 +282,7 @@ describe PrismatIQ::ThreadSafeCache do
       results.each do |arr|
         arr.should be_a(Array(Int32))
       end
-      
+
       # Cache should have exactly 5 unique arrays
       cache.size.should eq(5)
     end
@@ -317,13 +317,13 @@ describe PrismatIQ::ThreadSafeCache do
   describe "mixed access patterns" do
     it "allows mixing get_or_compute and direct access" do
       cache = PrismatIQ::ThreadSafeCache(String, Int32).new
-      
+
       # Use get_or_compute first
       cache.get_or_compute("a") { 1 }
-      
+
       # Use direct access
       cache["b"] = 2
-      
+
       # Both should work
       cache["a"].should eq(1)
       cache["b"].should eq(2)
@@ -332,10 +332,10 @@ describe PrismatIQ::ThreadSafeCache do
 
     it "get_or_compute doesn't overwrite direct assignments" do
       cache = PrismatIQ::ThreadSafeCache(String, Int32).new
-      
+
       # Set directly first
       cache["key"] = 100
-      
+
       # get_or_compute should return cached value, not recompute
       result = cache.get_or_compute("key") { 999 }
       result.should eq(100)
@@ -399,7 +399,7 @@ describe PrismatIQ::ThreadSafeCache do
     it "handles false as a valid value" do
       cache = PrismatIQ::ThreadSafeCache(String, Bool).new
       cache.get_or_compute("flag") { false }
-      cache["flag"].should eq(false)
+      cache["flag"].should be_false
     end
   end
 end

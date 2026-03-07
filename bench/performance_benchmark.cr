@@ -115,7 +115,7 @@ class BenchmarkRunner
   def initialize(@iterations : Int32 = 10)
   end
 
-  def run(name, &block)
+  def run(name, &)
     # Warmup run
     yield
 
@@ -131,7 +131,7 @@ class BenchmarkRunner
     avg_time = times.sum / times.size
     min_time = times.min
     max_time = times.max
-    std_dev = Math.sqrt(times.map { |t| (t - avg_time)**2 }.sum / times.size)
+    std_dev = Math.sqrt(times.sum { |time| (time - avg_time)**2 } / times.size)
 
     result = BenchmarkResult.new(
       name,
@@ -153,17 +153,17 @@ class BenchmarkRunner
     puts "=" * 70
     puts
 
-    @results.each do |r|
-      puts r.name
-      puts "  Avg:  #{r.avg_ms} ms  (#{r.ops_sec} ops/sec)"
-      puts "  Min:  #{r.min_ms} ms"
-      puts "  Max:  #{r.max_ms} ms"
-      puts "  Std:  #{r.std_dev_ms} ms"
+    @results.each do |result|
+      puts result.name
+      puts "  Avg:  #{result.avg_ms} ms  (#{result.ops_sec} ops/sec)"
+      puts "  Min:  #{result.min_ms} ms"
+      puts "  Max:  #{result.max_ms} ms"
+      puts "  Std:  #{result.std_dev_ms} ms"
       puts
     end
 
     puts "-" * 70
-    total_ops_sec = @results.map(&.ops_sec).sum
+    total_ops_sec = @results.sum(&.ops_sec)
     puts "Total throughput: #{total_ops_sec.round(1)} ops/sec"
     puts "-" * 70
   end
@@ -172,9 +172,9 @@ class BenchmarkRunner
     json_results = @results.map(&.to_h)
     File.write(path, JSON.build do |json|
       json.array do
-        json_results.each do |h|
+        json_results.each do |hash|
           json.object do
-            h.each do |k, v|
+            hash.each do |k, v|
               json.field k, v
             end
           end
@@ -185,7 +185,7 @@ class BenchmarkRunner
   end
 
   def load_baseline(path : String) : Array(BenchmarkResult)?
-    return nil unless File.exists?(path)
+    return unless File.exists?(path)
     JSON.parse(File.read(path)).as_a.map { |item| BenchmarkResult.from_h(item.as_h) }
   end
 
@@ -199,7 +199,7 @@ class BenchmarkRunner
 
     has_regressions = false
     baseline.each do |b|
-      current = @results.find { |r| r.name == b.name }
+      current = @results.find { |result| result.name == b.name }
       next unless current
 
       current_avg = current.avg_ms

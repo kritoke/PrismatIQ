@@ -12,14 +12,14 @@ describe "TempfileHelper" do
     end
 
     outer_path = nil
-    res = PrismatIQ::TempfileHelper.with_tempfile("prism_test_", data) do |p|
-      outer_path = p
+    res = PrismatIQ::TempfileHelper.with_tempfile("prism_test_", data) do |path|
+      outer_path = path
       outer_path.should_not be_nil
 
-      File.exists?(p).should be_true
+      File.exists?(path).should be_true
 
       # read raw bytes and compare
-      content = File.read(p)
+      content = File.read(path)
       # convert to slice for comparison
       got = content.to_slice
       got.size.should eq(arr.size)
@@ -34,7 +34,7 @@ describe "TempfileHelper" do
 
     res.should be_true
     outer_path.should_not be_nil
-    File.exists?(outer_path.not_nil!).should be_false
+    File.exists?(outer_path.as(String)).should be_false
   end
 
   it "returns nil on repeated failure to create tempfile" do

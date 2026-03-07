@@ -4,6 +4,10 @@ require "./prismatiq/yiq_converter"
 require "./prismatiq/color_extractor"
 require "./prismatiq/accessibility"
 require "./prismatiq/theme"
+require "./prismatiq/config"
+require "./prismatiq/result"
+require "./prismatiq/options"
+require "./prismatiq/rgb"
 require "crimage"
 require "./prismatiq/tempfile_helper"
 require "./prismatiq/bmp_parser"
@@ -50,141 +54,6 @@ module PrismatIQ
       B_FROM_Y =    1.0
       B_FROM_I = -1.106
       B_FROM_Q =  1.703
-    end
-  end
-
-  # Configuration struct for runtime settings (debugging, threading, performance tuning)
-  struct Config
-    property? debug : Bool
-    property threads : Int32?
-    property merge_chunk : Int32?
-
-    def initialize(@debug : Bool = false, @threads : Int32? = nil, @merge_chunk : Int32? = nil)
-    end
-
-    def self.default : Config
-      new(
-        debug: ENV["PRISMATIQ_DEBUG"]? == "true" || ENV["PRISMATIQ_DEBUG"]? == "1",
-        threads: ENV["PRISMATIQ_THREADS"]?.try(&.to_i),
-        merge_chunk: ENV["PRISMATIQ_MERGE_CHUNK"]?.try(&.to_i)
-      )
-    end
-
-    def thread_count_for(height : Int32, requested : Int32) : Int32
-      t = requested <= 0 ? (threads || CPU.cores) : requested
-      {t, height}.min
-    end
-  end
-
-  # Result type for explicit error handling (inspired by Rust's Result)
-  alias Error = String | Exception
-
-  struct Result(T, E)
-    @value : T?
-    @error : E?
-
-    private def initialize(@value : T?, @error : E?)
-    end
-
-    def self.ok(value : T) : Result(T, E)
-      new(value, nil)
-    end
-
-    def self.err(error : E) : Result(T, E)
-      new(nil, error)
-    end
-
-    def ok?
-      @value != nil
-    end
-
-    def err?
-      @error != nil
-    end
-
-    def value : T
-      raise "Result is an error: #{@error}" unless @value
-      @value.as(T)
-    end
-
-    def error : E
-      raise "Result is ok: #{@value}" unless @error
-      @error.as(E)
-    end
-
-    def value_or(default : T) : T
-      @value || default
-    end
-
-    def map(&block : T -> U) : Result(U, E) forall U
-      if @value
-        Result(U, E).ok(block.call(@value.as(T)))
-      else
-        Result(U, E).err(@error.as(E))
-      end
-    end
-
-    def flat_map(&block : T -> Result(U, E)) : Result(U, E) forall U
-      if @value
-        block.call(@value.as(T))
-      else
-        Result(U, E).err(@error.as(E))
-      end
-    end
-
-    def map_error(&block : E -> F) : Result(T, F) forall F
-      if @error
-        Result(T, F).err(block.call(@error.as(E)))
-      else
-        Result(T, F).ok(@value.as(T))
-      end
-    end
-  end
-
-  # Configuration struct for palette extraction options
-  struct Options
-    property color_count : Int32 = 5
-    property quality : Int32 = 10
-    property threads : Int32 = 0
-    property alpha_threshold : UInt8 = Constants::ALPHA_THRESHOLD_DEFAULT
-
-    def initialize(
-      @color_count : Int32 = 5,
-      @quality : Int32 = 10,
-      @threads : Int32 = 0,
-      @alpha_threshold : UInt8 = Constants::ALPHA_THRESHOLD_DEFAULT,
-    )
-    end
-
-    def validate!
-      raise ValidationError.new("color_count must be >= 1, got #{@color_count}") if @color_count < 1
-      raise ValidationError.new("quality must be >= 1, got #{@quality}") if @quality < 1
-      raise ValidationError.new("threads must be >= 0, got #{@threads}") if @threads < 0
-    end
-
-    # Create a new Options with only color_count modified
-    def with_color_count(color_count : Int32) : Options
-      Options.new(color_count, quality, threads, alpha_threshold)
-    end
-
-    # Create a new Options with only quality modified
-    def with_quality(quality : Int32) : Options
-      Options.new(color_count, quality, threads, alpha_threshold)
-    end
-
-    # Create a new Options with only threads modified
-    def with_threads(threads : Int32) : Options
-      Options.new(color_count, quality, threads, alpha_threshold)
-    end
-
-    # Create a new Options with only alpha_threshold modified
-    def with_alpha_threshold(alpha_threshold : UInt8) : Options
-      Options.new(color_count, quality, threads, alpha_threshold)
-    end
-
-    # Default Options instance (avoids creating new instances repeatedly)
-    def self.default : Options
-      @@default ||= new
     end
   end
 
@@ -266,63 +135,6 @@ module PrismatIQ
   # Quantize Y/I/Q channels into 5-bit (0..31) bins from RGB components.
   private def self.quantize_yiq_from_rgb(r : Int32, g : Int32, b : Int32) : Tuple(Int32, Int32, Int32)
     YIQConverter.quantize_from_rgb(r, g, b)
-  end
-
-  struct RGB
-    include JSON::Serializable
-    include YAML::Serializable
-
-    getter r : Int32
-    getter g : Int32
-    getter b : Int32
-
-    def initialize(@r : Int32, @g : Int32, @b : Int32)
-    end
-
-    def to_hex : String
-      String.build do |str|
-        str << '#'
-        str << @r.to_s(16).rjust(2, '0')
-        str << @g.to_s(16).rjust(2, '0')
-        str << @b.to_s(16).rjust(2, '0')
-      end
-    end
-
-    def self.from_hex(hex : String) : RGB
-      hex = hex.lchop('#')
-      raise ValidationError.new("Invalid hex color: #{hex}") unless hex.size == 6
-      begin
-        r = hex[0, 2].to_i(16)
-        g = hex[2, 2].to_i(16)
-        b = hex[4, 2].to_i(16)
-        new(r, g, b)
-      rescue
-        raise ValidationError.new("Invalid hex color characters: #{hex}")
-      end
-    end
-
-    def distance_to(other : RGB) : Float64
-      Math.sqrt((@r - other.r)**2 + (@g - other.g)**2 + (@b - other.b)**2)
-    end
-
-    def to_json(builder : JSON::Builder)
-      builder.string(to_hex)
-    end
-
-    def self.new(pull : JSON::PullParser)
-      from_hex(pull.read_string)
-    end
-
-    def to_yaml(yaml : YAML::Nodes::Builder)
-      yaml.scalar to_hex
-    end
-
-    def self.new(ctx : YAML::ParseContext, node : YAML::Nodes::Node)
-      unless node.is_a?(YAML::Nodes::Scalar)
-        raise ValidationError.new("Expected scalar for RGB")
-      end
-      from_hex(node.value)
-    end
   end
 
   # Validation exception for invalid input parameters
@@ -527,7 +339,7 @@ module PrismatIQ
     end
 
     def pop : T?
-      return nil if @data.empty?
+      return if @data.empty?
 
       top = @data[0]
       last = @data.pop
@@ -608,81 +420,84 @@ module PrismatIQ
     end
 
     def quantize(max_colors : Int32) : Array(VBox)
-      if max_colors < 1 || @total == 0
-        return [] of VBox
-      end
-
-      # Special case: if only 1 color requested, return the initial box
-      if max_colors == 1
-        initial_box = build_initial_box
-        return [initial_box]
-      end
+      return [] of VBox if max_colors < 1 || @total == 0
+      return [build_initial_box] if max_colors == 1
 
       initial_box = build_initial_box
-      if @config.debug?
-        puts "MMCQ: total=#{@total} initial_box.count=#{initial_box.count}"
-      end
+      log_debug_initial(initial_box)
 
-      pq = PriorityQueue(VBox).new do |a, b|
-        # Primary sort by priority (higher first). Tie-break deterministically by count
-        # and then by the box coordinates to ensure stable behavior across runs.
-        cmp = b.priority <=> a.priority
-        if cmp == 0
-          cmp2 = b.count <=> a.count
-          if cmp2 == 0
-            cmp3 = a.y1 <=> b.y1
-            cmp3 = a.i1 <=> b.i1 if cmp3 == 0
-            cmp3 = a.q1 <=> b.q1 if cmp3 == 0
-            cmp3
-          else
-            cmp2
-          end
-        else
-          cmp
-        end
-      end
+      pq = PriorityQueue(VBox).new(&box_comparator)
       pq.push(initial_box)
 
       iteration = 0
       while pq.size < max_colors && iteration < MAX_ITERATIONS
         iteration += 1
-        if @config.debug?
-          puts "MMCQ iter=#{iteration} pq_size=#{pq.size}"
-        end
+        log_debug_iteration(iteration, pq.size)
 
         box = pq.pop
-        if @config.debug?
-          if box
-            puts "MMCQ popped box count=#{box.count}"
-          else
-            puts "MMCQ popped nil box"
-          end
-        end
         break unless box
+        log_debug_popped_box(box)
 
         vbox1, vbox2 = box.split
 
         if vbox1 == box
-          # can't split further, push original back and stop
           pq.push(box)
           break
         end
 
-        if @config.debug?
-          puts "MMCQ split -> vbox1.count=#{vbox1.count} vbox2.count=#{vbox2.count}"
-        end
+        log_debug_split_result(vbox1, vbox2)
 
-        # Only push non-empty boxes
         pq.push(vbox1) if vbox1.count > 0
         pq.push(vbox2) if vbox2.count > 0
       end
 
+      collect_final_boxes(pq)
+    end
+
+    private def box_comparator
+      ->(a : VBox, b : VBox) {
+        cmp = b.priority <=> a.priority
+        return cmp if cmp != 0
+        cmp2 = b.count <=> a.count
+        return cmp2 if cmp2 != 0
+        cmp3 = a.y1 <=> b.y1
+        return cmp3 if cmp3 != 0
+        cmp3 = a.i1 <=> b.i1
+        return cmp3 if cmp3 != 0
+        a.q1 <=> b.q1
+      }
+    end
+
+    private def log_debug_initial(initial_box : VBox)
+      if @config.debug?
+        puts "MMCQ: total=#{@total} initial_box.count=#{initial_box.count}"
+      end
+    end
+
+    private def log_debug_iteration(iteration : Int32, pq_size : Int32)
+      if @config.debug?
+        puts "MMCQ iter=#{iteration} pq_size=#{pq_size}"
+      end
+    end
+
+    private def log_debug_popped_box(box : VBox?)
+      if @config.debug?
+        puts box ? "MMCQ popped box count=#{box.count}" : "MMCQ popped nil box"
+      end
+    end
+
+    private def log_debug_split_result(vbox1 : VBox, vbox2 : VBox)
+      if @config.debug?
+        puts "MMCQ split -> vbox1.count=#{vbox1.count} vbox2.count=#{vbox2.count}"
+      end
+    end
+
+    private def collect_final_boxes(pq : PriorityQueue(VBox)) : Array(VBox)
       boxes = Array(VBox).new
       while !pq.empty?
         box = pq.pop
         boxes << box if box && box.count > 0
       end
-
       boxes
     end
 
@@ -907,7 +722,7 @@ module PrismatIQ
 
   # Find closest color in palette to a target color
   def self.find_closest(target : RGB, palette : Array(RGB)) : RGB?
-    return nil if palette.empty?
+    return if palette.empty?
     palette.min_by(&.distance_to(target))
   end
 
@@ -927,13 +742,11 @@ module PrismatIQ
   # @param options [Options] Configuration options
   # @return [PaletteResult] Result containing colors, success status, and error message
   def self.get_palette_result(path : String, options : Options = Options.default) : PaletteResult
-    begin
-      options.validate!
-      colors = get_palette(path, options)
-      PaletteResult.ok(colors, 0)
-    rescue ex : Exception
-      PaletteResult.err(ex.message || "Unknown error")
-    end
+    options.validate!
+    colors = get_palette(path, options)
+    PaletteResult.ok(colors, 0)
+  rescue ex : Exception
+    PaletteResult.err(ex.message || "Unknown error")
   end
 
   # Get palette result from IO source
@@ -941,13 +754,11 @@ module PrismatIQ
   # @param options [Options] Configuration options
   # @return [PaletteResult] Result containing colors, success status, and error message
   def self.get_palette_result(io : IO, options : Options = Options.default) : PaletteResult
-    begin
-      options.validate!
-      colors = get_palette(io, options)
-      PaletteResult.ok(colors, 0)
-    rescue ex : Exception
-      PaletteResult.err(ex.message || "Unknown error")
-    end
+    options.validate!
+    colors = get_palette(io, options)
+    PaletteResult.ok(colors, 0)
+  rescue ex : Exception
+    PaletteResult.err(ex.message || "Unknown error")
   end
 
   # Get palette result from raw pixel buffer
@@ -958,18 +769,16 @@ module PrismatIQ
   # @param config [Config] Runtime configuration
   # @return [PaletteResult] Result containing colors, success status, and error message
   def self.get_palette_result(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.default, config : Config = Config.default) : PaletteResult
-    begin
-      options.validate!
-      histo, total_pixels = build_histo_from_buffer(pixels, width, height, options, config)
-      if total_pixels == 0
-        return PaletteResult.err("No valid pixels found")
-      end
-
-      palette = quantize_palette(histo, options, config)
-      PaletteResult.ok(palette[0...options.color_count], total_pixels)
-    rescue ex : Exception
-      PaletteResult.err(ex.message || "Unknown error")
+    options.validate!
+    histo, total_pixels = build_histo_from_buffer(pixels, width, height, options, config)
+    if total_pixels == 0
+      return PaletteResult.err("No valid pixels found")
     end
+
+    palette = quantize_palette(histo, options, config)
+    PaletteResult.ok(palette[0...options.color_count], total_pixels)
+  rescue ex : Exception
+    PaletteResult.err(ex.message || "Unknown error")
   end
 
   # Extract palette with explicit error handling using Result type

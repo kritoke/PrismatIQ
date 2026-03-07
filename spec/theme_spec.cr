@@ -169,12 +169,13 @@ describe PrismatIQ::Theme do
       ]
 
       dual = PrismatIQ::Theme.generate_dual_themes(source)
-      dual.should_not be_nil
+      theme = dual || raise "Expected dual theme"
+      theme.should_not be_nil
 
-      dual.not_nil!.light.should be_a(PrismatIQ::TextColorPalette)
-      dual.not_nil!.dark.should be_a(PrismatIQ::TextColorPalette)
-      dual.not_nil!.light.theme_type.should eq(:light)
-      dual.not_nil!.dark.theme_type.should eq(:dark)
+      theme.light.should be_a(PrismatIQ::TextColorPalette)
+      theme.dark.should be_a(PrismatIQ::TextColorPalette)
+      theme.light.theme_type.should eq(:light)
+      theme.dark.theme_type.should eq(:dark)
     end
 
     it "returns nil for empty palette" do
@@ -189,15 +190,16 @@ describe PrismatIQ::Theme do
       ]
 
       dual = PrismatIQ::Theme.generate_dual_themes(source, PrismatIQ::WCAGLevel::AA)
-      dual.should_not be_nil
+      theme = dual || raise "Expected dual theme"
+      theme.should_not be_nil
 
       light_primary_level = PrismatIQ::Accessibility.wcag_level(
-        dual.not_nil!.light.primary,
-        dual.not_nil!.light.background
+        theme.light.primary,
+        theme.light.background
       )
       dark_primary_level = PrismatIQ::Accessibility.wcag_level(
-        dual.not_nil!.dark.primary,
-        dual.not_nil!.dark.background
+        theme.dark.primary,
+        theme.dark.background
       )
 
       light_primary_level.should be >= PrismatIQ::WCAGLevel::AA
@@ -232,30 +234,30 @@ describe PrismatIQ::Theme do
       light_color = PrismatIQ::RGB.new(200, 200, 200)
       theme1 = PrismatIQ::Theme.detect_theme(light_color)
       theme2 = PrismatIQ::Theme.detect_theme(light_color)
-      
+
       theme1.should eq(:light)
       theme1.should eq(theme2)
-      
+
       # Test dark theme caching (luminance <= 0.5)
       PrismatIQ::Theme.clear_cache
-      
+
       dark_color = PrismatIQ::RGB.new(30, 30, 30)
       theme3 = PrismatIQ::Theme.detect_theme(dark_color)
       theme4 = PrismatIQ::Theme.detect_theme(dark_color)
-      
+
       theme3.should eq(:dark)
       theme3.should eq(theme4)
     end
 
     it "caches boundary luminance values correctly" do
       PrismatIQ::Theme.clear_cache
-      
+
       # Test exactly at threshold (0.5 luminance should be :dark)
       # RGB(128, 128, 128) has luminance ~0.216 which is < 0.5, so should be :dark
       threshold_color = PrismatIQ::RGB.new(128, 128, 128)
       theme1 = PrismatIQ::Theme.detect_theme(threshold_color)
       theme2 = PrismatIQ::Theme.detect_theme(threshold_color)
-      
+
       theme1.should eq(:dark)
       theme1.should eq(theme2)
     end
@@ -268,14 +270,14 @@ describe PrismatIQ::Theme do
 
       light_theme1 = PrismatIQ::Theme.detect_theme(light_color)
       dark_theme1 = PrismatIQ::Theme.detect_theme(dark_color)
-      
+
       # Verify both cached correctly
       light_theme2 = PrismatIQ::Theme.detect_theme(light_color)
       dark_theme2 = PrismatIQ::Theme.detect_theme(dark_color)
-      
+
       light_theme1.should eq(light_theme2)
       dark_theme1.should eq(dark_theme2)
-      
+
       # Verify they're different themes
       light_theme1.should eq(:light)
       dark_theme1.should eq(:dark)
@@ -284,13 +286,13 @@ describe PrismatIQ::Theme do
 
     it "cache works with analyze_theme which uses cached luminance" do
       PrismatIQ::Theme.clear_cache
-      
+
       color = PrismatIQ::RGB.new(100, 100, 100)
-      
+
       # analyze_theme internally uses Accessibility.relative_luminance which is also cached
       info1 = PrismatIQ::Theme.analyze_theme(color)
       info2 = PrismatIQ::Theme.analyze_theme(color)
-      
+
       info1.type.should eq(info2.type)
       info1.luminance.should eq(info2.luminance)
       info1.perceived_brightness.should eq(info2.perceived_brightness)
@@ -301,7 +303,7 @@ describe PrismatIQ::Theme do
 
       palette = [
         PrismatIQ::RGB.new(255, 255, 255), # light
-        PrismatIQ::RGB.new(0, 0, 0),        # dark
+        PrismatIQ::RGB.new(0, 0, 0),       # dark
         PrismatIQ::RGB.new(240, 240, 240), # light
         PrismatIQ::RGB.new(30, 30, 30),    # dark
       ]
@@ -312,7 +314,7 @@ describe PrismatIQ::Theme do
 
       light_colors.size.should eq(2)
       dark_colors.size.should eq(2)
-      
+
       # Verify cached results are consistent
       light_colors.should contain(PrismatIQ::RGB.new(255, 255, 255))
       light_colors.should contain(PrismatIQ::RGB.new(240, 240, 240))
