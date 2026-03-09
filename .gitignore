@@ -10,7 +10,7 @@ lib/
 
 # Build artifacts
 bin/
-prismatiq
+/prismatiq
 *.beam
 *.o
 *.so
