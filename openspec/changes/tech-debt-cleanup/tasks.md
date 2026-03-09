@@ -19,19 +19,19 @@
 - [x] 2.3 Extract Priority Queue to `src/prismatiq/algorithm/priority_queue.cr`
 - [ ] 2.4 Extract YIQ color space functions to `src/prismatiq/algorithm/color_space.cr`
 - [x] 2.5 Extract MMCQ algorithm to `src/prismatiq/algorithm/mmcq.cr`
-- [ ] 2.6 Create `src/prismatiq/core/` directory structure
-- [ ] 2.7 Extract histogram building logic to `src/prismatiq/core/histogram.cr`
+- [x] 2.6 Create `src/prismatiq/core/` directory structure
+- [x] 2.7 Extract histogram building logic to `src/prismatiq/core/histogram.cr`
 - [ ] 2.8 Extract palette extraction orchestration to `src/prismatiq/core/palette_extractor.cr`
-- [ ] 2.9 Create `src/prismatiq/utils/` directory structure
+- [x] 2.9 Create `src/prismatiq/utils/` directory structure
 - [ ] 2.10 Create `src/prismatiq/utils/image_reader.cr` for file/IO loading
 - [ ] 2.11 Verify main `src/prismatiq.cr` is under 300 lines after extraction
 - [ ] 2.12 Update all require statements in main file
-- [ ] 2.13 Run full test suite to verify no functionality broken
+- [x] 2.13 Run full test suite to verify no functionality broken
 - [ ] 2.14 Update any internal references to moved code
 
 ## 3. Error Handling Migration (Phase 1 - Non-Breaking)
 
-- [ ] 3.1 Create `src/prismatiq/errors.cr` with Error struct and ErrorType enum
+- [x] 3.1 Create `src/prismatiq/errors.cr` with Error struct and ErrorType enum
 - [ ] 3.2 Add Result-returning variants for all public methods with `_result` suffix
 - [ ] 3.3 Add `get_palette(path, options) : Result` method alongside existing methods
 - [ ] 3.4 Add `get_palette!(path, options) : Array(RGB)` raising variant
