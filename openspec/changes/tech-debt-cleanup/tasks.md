@@ -62,10 +62,10 @@
 
 ## 5. Memory Optimization
 
-- [ ] 5.1 Create `src/prismatiq/core/histogram_pool.cr` class
-- [ ] 5.2 Implement HistogramPool with acquire/release methods
+- [x] 5.1 Create `src/prismatiq/core/histogram_pool.cr` class
+- [x] 5.2 Implement HistogramPool with acquire/release methods
 - [ ] 5.3 Add lazy histogram initialization logic
-- [ ] 5.4 Implement adaptive chunk sizing based on image size
+- [x] 5.4 Implement adaptive chunk sizing based on image size
 - [ ] 5.5 Update histogram building to use pool instead of pre-allocation
 - [ ] 5.6 Implement in-place histogram merging (no intermediate copies)
 - [ ] 5.7 Add memory usage metrics logging (debug mode only)
@@ -76,8 +76,8 @@
 
 ## 6. Thread Safety Improvements
 
-- [ ] 6.1 Convert Accessibility module from class variables to instance variables
-- [ ] 6.2 Create AccessibilityCalculator class with instance-based caching
+- [x] 6.1 Convert Accessibility module from class variables to instance variables
+- [x] 6.2 Create AccessibilityCalculator class with instance-based caching
 - [ ] 6.3 Add module-level convenience methods that delegate to singleton
 - [ ] 6.4 Convert Theme module from class variables to instance variables
 - [ ] 6.5 Create ThemeDetector class with instance-based caching
