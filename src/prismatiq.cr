@@ -1,4 +1,7 @@
 require "./cpu_cores"
+require "./prismatiq/types"
+require "./prismatiq/algorithm/priority_queue"
+require "./prismatiq/algorithm/mmcq"
 require "./prismatiq/thread_safe_cache"
 require "./prismatiq/yiq_converter"
 require "./prismatiq/color_extractor"
