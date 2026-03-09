@@ -64,14 +64,14 @@
 
 - [x] 5.1 Create `src/prismatiq/core/histogram_pool.cr` class
 - [x] 5.2 Implement HistogramPool with acquire/release methods
-- [ ] 5.3 Add lazy histogram initialization logic
+- [x] 5.3 Add lazy histogram initialization logic
 - [x] 5.4 Implement adaptive chunk sizing based on image size
-- [ ] 5.5 Update histogram building to use pool instead of pre-allocation
-- [ ] 5.6 Implement in-place histogram merging (no intermediate copies)
-- [ ] 5.7 Add memory usage metrics logging (debug mode only)
-- [ ] 5.8 Benchmark memory usage before and after optimization
-- [ ] 5.9 Verify 25-40% memory reduction on typical workloads
-- [ ] 5.10 Ensure no memory leaks (all histograms returned to pool)
+- [x] 5.5 Update histogram building to use pool instead of pre-allocation
+- [x] 5.6 Implement in-place histogram merging (no intermediate copies)
+- [x] 5.7 Add memory usage metrics logging (debug mode only)
+- [x] 5.8 Benchmark memory usage before and after optimization
+- [x] 5.9 Verify 25-40% memory reduction on typical workloads
+- [x] 5.10 Ensure no memory leaks (all histograms returned to pool)
 - [x] 5.11 Test with various image sizes (small, medium, large)
 
 ## 6. Thread Safety Improvements
@@ -79,13 +79,13 @@
 - [x] 6.1 Convert Accessibility module from class variables to instance variables
 - [x] 6.2 Create AccessibilityCalculator class with instance-based caching
 - [x] 6.3 Add module-level convenience methods that delegate to singleton
-- [ ] 6.4 Convert Theme module from class variables to instance variables
+- [x] 6.4 Convert Theme module from class variables to instance variables
 - [x] 6.5 Create ThemeDetector class with instance-based caching
 - [x] 6.6 Add module-level convenience methods that delegate to singleton
-- [ ] 6.7 Replace Thread.new with spawn for parallel processing
-- [ ] 6.8 Implement channel-based histogram result collection
-- [ ] 6.9 Remove all shared mutable state between fibers
-- [ ] 6.10 Verify ThreadSafeCache works correctly with new instance pattern
+- [x] 6.7 Replace Thread.new with spawn for parallel processing
+- [x] 6.8 Implement channel-based histogram result collection
+- [x] 6.9 Remove all shared mutable state between fibers
+- [x] 6.10 Verify ThreadSafeCache works correctly with new instance pattern
 - [ ] 6.11 Write concurrent access tests (100 fibers accessing same cache)
 - [ ] 6.12 Write concurrent palette extraction tests
 - [ ] 6.13 Document thread safety guarantees in code comments
