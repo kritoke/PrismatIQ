@@ -360,20 +360,65 @@ module PrismatIQ
     Result(Array(RGB), String).err(ex.message || "Unknown error")
   end
 
-  # Fiber-based async palette extraction
+  # ============================================================================
+  # NEW v2 API - Result-based with Error struct
+  # ============================================================================
+
+  # Extract palette with new Result type using Error struct
   # @param path [String] Path to the image file
   # @param options [Options] Configuration options
-  # @param &block [Proc(Array(RGB), Nil)] Callback block invoked with the palette result
-  def self.get_palette_async(path : String, options : Options = Options.default, &block : Array(RGB) ->)
-    spawn do
-      begin
-        result = get_palette(path, options)
-        block.call(result)
-      rescue
-        block.call([RGB.new(0, 0, 0)])
-      end
-    end
+  # @return [Result(Array(RGB), Error)] Result containing palette or Error
+  def self.get_palette_v2(path : String, options : Options = Options.default) : Result(Array(RGB), Error)
+    result = get_palette(path, options)
+    Result(Array(RGB), Error).ok(result)
+  rescue ex : Exception
+    Result(Array(RGB), Error).err(Error.file_not_found(path, ex.message || "File not found"))
   end
+
+  # Extract palette with raising on exception on error
+  # @param path [String] Path to the image file
+  # @param options [Options] Configuration options
+  # @return [Array(RGB)] Array of dominant colors
+  # @raise [ValidationError] If options validation fails
+  # @raise [Exception] If image loading or processing fails
+  def self.get_palette_v2!(path : String, options : Options = Options.default) : Array(RGB)
+    result = get_palette(path, options)
+    result
+  rescue ex : ValidationError
+    raise ex
+  rescue ex : Exception
+    raise Exception.new("Failed to extract palette: #{ex.message}")
+  end
+
+  # Extract palette from IO with new Result type
+  # @param io [IO] IO object containing image data
+  # @param options [Options] Configuration options
+  # @return [Result(Array(RGB), Error)] Result containing palette or Error
+  def self.get_palette_v2(io : IO, options : Options = Options.default) : Result(Array(RGB), Error)
+    result = get_palette(io, options)
+    Result(Array(RGB), Error).ok(result)
+  rescue ex : Exception
+    Result(Array(RGB), Error).err(Error.corrupted_image(ex.message))
+  end
+
+  # Extract palette from buffer with new Result type
+  # @param pixels [Slice(UInt8)] RGBA pixel data
+  # @param width [Int32] Image width
+  # @param height [Int32] Image height
+  # @param options [Options] Configuration options
+  # @param config [Config] Runtime configuration
+  # @return [Result(Array(RGB), Error)] Result containing palette or Error
+  def self.get_palette_v2(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.default, config : Config = Config.default) : Result(Array(RGB), Error)
+    histo, total_pixels = build_histo_from_buffer(pixels, width, height, options, config)
+    return Result(Array(RGB), Error).err(Error.invalid_options("pixels", "0", "No valid pixels found")) if total_pixels == 0
+
+    palette = quantize_palette(histo, options, config)
+    Result(Array(RGB), Error).ok(palette[0...options.color_count])
+  rescue ex : Exception
+    Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "Processing failed"))
+  end
+
+  # Channel-based async palette extraction
 
   # Channel-based async palette extraction
   # @param path [String] Path to the image file

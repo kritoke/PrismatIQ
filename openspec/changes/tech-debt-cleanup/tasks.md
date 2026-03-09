@@ -46,11 +46,11 @@
 
 ## 4. Security Improvements
 
-- [ ] 4.1 Create `src/prismatiq/utils/system_info.cr` module
-- [ ] 4.2 Implement CPU count detection for macOS using LibC.sysctlbyname
-- [ ] 4.3 Implement CPU count detection for Linux using /proc/cpuinfo
-- [ ] 4.4 Add fallback CPU count for unknown platforms
-- [ ] 4.5 Replace all backtick shell commands with new SystemInfo module
+- [x] 4.1 Create `src/prismatiq/utils/system_info.cr` module
+- [x] 4.2 Implement CPU count detection using Crystal's System.cpu_count (no shell)
+- [x] 4.3 Implement CPU count detection for Linux using /proc/cpuinfo (secure)
+- [x] 4.4 Add fallback CPU count for unknown platforms
+- [x] 4.5 Replace all backtick shell commands with new SystemInfo module
 - [ ] 4.6 Add file path validation to prevent directory traversal
 - [ ] 4.7 Add file extension validation for supported formats
 - [ ] 4.8 Add maximum file size check (100MB limit)
