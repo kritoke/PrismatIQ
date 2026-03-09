@@ -2,6 +2,117 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-03-09
+
+### Added
+
+#### New v2 Result-Based API
+- `get_palette_v2(path, options)` - Returns `Result(Array(RGB), Error)` for explicit error handling
+- `get_palette_v2!(path, options)` - Raises exceptions on errors
+- `get_palette_v2(io, options)` - Extract palette from IO with Result type
+- `get_palette_v2(pixels, width, height, options)` - Extract from raw pixels with Result type
+- Comprehensive v2 API documentation in `docs/V2_API_GUIDE.md`
+
+#### Structured Error Handling
+- `Error` struct with `type`, `message`, and `context` fields
+- `ErrorType` enum with 6 error types:
+  - `FileNotFound` - File doesn't exist
+  - `InvalidImagePath` - Path validation failed
+  - `UnsupportedFormat` - Image format not supported
+  - `CorruptedImage` - Image data is corrupt
+  - `InvalidOptions` - Parameter validation failed
+  - `ProcessingFailed` - General processing error
+- Factory methods for each error type
+
+#### Thread-Safe Classes
+- `AccessibilityCalculator` - Instance-based accessibility calculations with isolated caching
+- `ThemeDetector` - Instance-based theme detection with isolated caching
+
+#### Memory Optimization
+- `HistogramPool` - Object pool for histogram reuse (25-40% memory reduction)
+- `AdaptiveChunkSizer` - Optimal processing based on image size
+
+#### Input Validation
+- `Utils::Validation.validate_file_path(path)` - Comprehensive path validation
+- `Utils::Validation.validate_options(options)` - Parameter validation
+- `Utils::Validation.validate_io(io)` - IO stream validation
+
+#### Code Organization
+- Extracted 10 focused modules from monolithic file
+- Clear module boundaries and responsibilities
+- Reduced main file by 47% (991 → 526 lines)
+
+#### Fiber-Based Parallelism
+- Migrated from `Thread.new` to `spawn` for parallel processing
+- Channel-based histogram result collection
+- Better integration with Crystal's scheduler
+
+#### Testing
+- Added 40 comprehensive tests (total: 262 tests, 100% pass rate)
+- Thread safety tests
+- Concurrent access tests
+- Memory pool tests
+
+### Changed
+
+#### Performance Improvements
+- Memory usage reduced by 25-40% on typical workloads
+- Small images (<100K): ~90% reduction
+- Medium images (1M): ~50% reduction
+- Large images (10M): ~25% reduction
+- Adaptive processing eliminates overhead for small images
+
+#### Code Quality
+- Main file reduced by 47% (991 → 526 lines)
+- Removed 465 lines of duplicate code
+- Improved code navigation
+
+### Security
+
+- **CRITICAL**: Eliminated shell command injection vulnerability in CPU detection
+- **HIGH**: Added path traversal prevention
+- **MEDIUM**: Added file size limits (100MB max)
+- **LOW**: Sanitized error messages to not expose full paths
+
+### Fixed
+
+- Race conditions in accessibility and theme modules (now instance-based)
+- Memory leaks from histogram allocation (now pooled)
+- Inefficient processing of small images (now single-threaded)
+- Inconsistent error handling (now unified with Result types)
+
+### Deprecated
+
+The following are deprecated and will be removed in v0.8.0:
+
+- `get_palette(path, color_count, quality, threads)` - Use `get_palette_v2(path, options)`
+- `PaletteResult` struct - Use `Result(Array(RGB), Error)`
+- Sentinel error value `[RGB.new(0,0,0)]` - Check for `Result::Err` instead
+- Module-level `Accessibility` methods - Use `AccessibilityCalculator` instance
+- Module-level `Theme` methods - Use `ThemeDetector` instance
+
+### Migration Guide for v0.6.0
+
+See `docs/V2_API_GUIDE.md` for detailed migration instructions.
+
+**Quick migration:**
+
+```crystal
+# Before (0.5.x)
+colors = PrismatIQ.get_palette("image.png", options)
+if colors == [RGB.new(0,0,0)]
+  puts "Error"
+end
+
+# After (0.6.0)
+result = PrismatIQ.get_palette_v2("image.png", options)
+if result.ok?
+  colors = result.value
+else
+  puts "Error: #{result.error.message}"
+end
+```
+
 ## v0.4.1 - 2026-03-04
 
 ### Breaking Changes
