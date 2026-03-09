@@ -78,9 +78,9 @@ describe PrismatIQ::VBox do
   end
 end
 
-describe PrismatIQ::PriorityQueue do
+describe PrismatIQ::Algorithm::PriorityQueue do
   it "maintains priority order" do
-    pq = PrismatIQ::PriorityQueue(Int32).new { |a, b| b <=> a }
+    pq = PrismatIQ::Algorithm::PriorityQueue(Int32).new { |a, b| b <=> a }
     pq.push(3)
     pq.push(1)
     pq.push(4)
