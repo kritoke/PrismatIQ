@@ -6,11 +6,14 @@ require "./prismatiq/thread_safe_cache"
 require "./prismatiq/yiq_converter"
 require "./prismatiq/color_extractor"
 require "./prismatiq/accessibility"
+require "./prismatiq/accessibility_calculator"
 require "./prismatiq/theme"
+require "./prismatiq/theme_detector"
 require "./prismatiq/config"
 require "./prismatiq/result"
 require "./prismatiq/options"
 require "./prismatiq/rgb"
+require "./prismatiq/core/histogram_pool"
 require "crimage"
 require "./prismatiq/tempfile_helper"
 require "./prismatiq/bmp_parser"
@@ -199,36 +202,50 @@ module PrismatIQ
     step = options.quality < 1 ? 1 : options.quality
     alpha_threshold = options.alpha_threshold
 
-    if options.threads <= 1
+    image_size = width * height
+    use_parallel = Core::AdaptiveChunkSizer.should_use_parallel?(image_size) && options.threads != 1
+
+    if !use_parallel || options.threads <= 1
       total_pixels = process_pixel_range(pixels, width, 0, height, step, alpha_threshold, histo)
     else
-      thread_count = config.thread_count_for(height, options.threads)
-      locals = Array(Array(UInt32)?).new(thread_count, nil)
-      totals = Array(Int32).new(thread_count, 0)
-      workers = Array(Thread).new
-
+      thread_count = Core::AdaptiveChunkSizer.optimal_thread_count(image_size, config.thread_count_for(height, options.threads))
+      
+      channel = Channel(Tuple(Array(UInt32)?, Int32)).new(thread_count)
+      
       rows_per = (height + thread_count - 1) // thread_count
-
+      
+      pool = Core::HistogramPool.new(thread_count * 2)
+      
       thread_count.times do |thread_idx|
         start_row = thread_idx * rows_per
         break if start_row >= height
         end_row = {start_row + rows_per, height}.min
-
-        local_idx = thread_idx
-
-        workers << Thread.new do
-          local_histo = Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32)
+        
+        spawn do
+          local_histo = pool.acquire
           local_count = process_pixel_range(pixels, width, start_row, end_row, step, alpha_threshold, local_histo)
-          locals[local_idx] = local_histo
-          totals[local_idx] = local_count
+          channel.send({local_histo, local_count})
         end
       end
-
-      workers.each(&.join)
-      total_pixels = merge_locals_chunked(histo, locals, config)
+      
+      total_pixels = 0
+      thread_count.times do
+        local_histo, local_count = channel.receive
+        if local_histo
+          merge_histograms(histo, local_histo)
+          total_pixels += local_count
+          pool.release(local_histo)
+        end
+      end
     end
 
     {histo, total_pixels}
+  end
+
+  private def self.merge_histograms(dest : Array(UInt32), src : Array(UInt32)) : Nil
+    dest.size.times do |i|
+      dest[i] += src[i]
+    end
   end
 
   @[AlwaysInline]

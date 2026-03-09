@@ -72,16 +72,16 @@
 - [ ] 5.8 Benchmark memory usage before and after optimization
 - [ ] 5.9 Verify 25-40% memory reduction on typical workloads
 - [ ] 5.10 Ensure no memory leaks (all histograms returned to pool)
-- [ ] 5.11 Test with various image sizes (small, medium, large)
+- [x] 5.11 Test with various image sizes (small, medium, large)
 
 ## 6. Thread Safety Improvements
 
 - [x] 6.1 Convert Accessibility module from class variables to instance variables
 - [x] 6.2 Create AccessibilityCalculator class with instance-based caching
-- [ ] 6.3 Add module-level convenience methods that delegate to singleton
+- [x] 6.3 Add module-level convenience methods that delegate to singleton
 - [ ] 6.4 Convert Theme module from class variables to instance variables
-- [ ] 6.5 Create ThemeDetector class with instance-based caching
-- [ ] 6.6 Add module-level convenience methods that delegate to singleton
+- [x] 6.5 Create ThemeDetector class with instance-based caching
+- [x] 6.6 Add module-level convenience methods that delegate to singleton
 - [ ] 6.7 Replace Thread.new with spawn for parallel processing
 - [ ] 6.8 Implement channel-based histogram result collection
 - [ ] 6.9 Remove all shared mutable state between fibers

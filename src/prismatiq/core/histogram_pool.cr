@@ -3,31 +3,31 @@ require "../types"
 module PrismatIQ
   module Core
     class HistogramPool
-      @pool : Array(Hash(Int32, Int32))
+      @pool : Array(Array(UInt32))
       @max_size : Int32
       @mutex : Mutex
 
       def initialize(@max_size : Int32 = 32)
-        @pool = [] of Hash(Int32, Int32)
+        @pool = [] of Array(UInt32)
         @mutex = Mutex.new
       end
 
-      def acquire : Hash(Int32, Int32)
+      def acquire : Array(UInt32)
         @mutex.synchronize do
           if @pool.empty?
-            return Hash(Int32, Int32).new(0)
+            return Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32)
           else
             return @pool.pop
           end
         end
       end
 
-      def release(histogram : Hash(Int32, Int32)) : Nil
+      def release(histogram : Array(UInt32)) : Nil
         return if histogram.nil?
 
         @mutex.synchronize do
           if @pool.size < @max_size
-            histogram.clear
+            histogram.fill(0_u32)
             @pool.push(histogram)
           end
         end
@@ -48,7 +48,7 @@ module PrismatIQ
           {
             pool_size: @pool.size,
             max_size: @max_size,
-            total_capacity: @pool.sum(&.size)
+            total_capacity: @pool.size * Constants::HISTOGRAM_SIZE
           }
         end
       end
