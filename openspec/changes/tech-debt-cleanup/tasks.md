@@ -14,11 +14,11 @@
 
 ## 2. Module Extraction (Non-Breaking)
 
-- [ ] 2.1 Create `src/prismatiq/types.cr` and move RGB, VBox, Options structs
-- [ ] 2.2 Create `src/prismatiq/algorithm/` directory structure
-- [ ] 2.3 Extract Priority Queue to `src/prismatiq/algorithm/priority_queue.cr`
+- [x] 2.1 Create `src/prismatiq/types.cr` and move RGB, VBox, Options structs
+- [x] 2.2 Create `src/prismatiq/algorithm/` directory structure
+- [x] 2.3 Extract Priority Queue to `src/prismatiq/algorithm/priority_queue.cr`
 - [ ] 2.4 Extract YIQ color space functions to `src/prismatiq/algorithm/color_space.cr`
-- [ ] 2.5 Extract MMCQ algorithm to `src/prismatiq/algorithm/mmcq.cr`
+- [x] 2.5 Extract MMCQ algorithm to `src/prismatiq/algorithm/mmcq.cr`
 - [ ] 2.6 Create `src/prismatiq/core/` directory structure
 - [ ] 2.7 Extract histogram building logic to `src/prismatiq/core/histogram.cr`
 - [ ] 2.8 Extract palette extraction orchestration to `src/prismatiq/core/palette_extractor.cr`
