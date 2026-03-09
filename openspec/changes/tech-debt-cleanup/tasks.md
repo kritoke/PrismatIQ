@@ -24,10 +24,10 @@
 - [ ] 2.8 Extract palette extraction orchestration to `src/prismatiq/core/palette_extractor.cr`
 - [x] 2.9 Create `src/prismatiq/utils/` directory structure
 - [ ] 2.10 Create `src/prismatiq/utils/image_reader.cr` for file/IO loading
-- [ ] 2.11 Verify main `src/prismatiq.cr` is under 300 lines after extraction
-- [ ] 2.12 Update all require statements in main file
+- [ ] 2.11 Verify main `src/prismatiq.cr` is under 300 lines after extraction (currently 526)
+- [x] 2.12 Update all require statements in main file
 - [x] 2.13 Run full test suite to verify no functionality broken
-- [ ] 2.14 Update any internal references to moved code
+- [x] 2.14 Update any internal references to moved code
 
 ## 3. Error Handling Migration (Phase 1 - Non-Breaking)
 
