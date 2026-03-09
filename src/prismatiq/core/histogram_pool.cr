@@ -59,9 +59,9 @@ module PrismatIQ
         if image_size < 100_000
           return image_size
         elsif image_size < 1_000_000
-          return (image_size / thread_count / 2).clamp(10_000, 100_000)
+          return (image_size // thread_count // 2).clamp(10_000, 100_000)
         else
-          return (image_size / thread_count).clamp(50_000, 500_000)
+          return (image_size // thread_count).clamp(50_000, 500_000)
         end
       end
 
@@ -73,7 +73,7 @@ module PrismatIQ
         return 1 if image_size < 100_000
         return 2 if image_size < 500_000
         return 4 if image_size < 2_000_000
-        return [max_threads, 8].min
+        return {max_threads, 8}.min
       end
     end
   end

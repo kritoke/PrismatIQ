@@ -12,16 +12,16 @@ module PrismatIQ
   end
 
   class ThemeDetector
-    @luminance_cache : ThreadSafeCache(String, Float64)
-    @theme_cache : ThreadSafeCache(String, Symbol)
+    @luminance_cache : ThreadSafeCache(Tuple(Int32, Int32, Int32), Float64)
+    @theme_cache : ThreadSafeCache(Tuple(Int32, Int32, Int32), Symbol)
 
     def initialize
-      @luminance_cache = ThreadSafeCache(String, Float64).new
-      @theme_cache = ThreadSafeCache(String, Symbol).new
+      @luminance_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Float64).new
+      @theme_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Symbol).new
     end
 
     def detect_theme(color : RGB) : Symbol
-      key = color.hex
+      key = {color.r, color.g, color.b}
       @theme_cache.get_or_compute(key) do
         luminance = relative_luminance(color)
         luminance < 0.5 ? :dark : :light
@@ -36,7 +36,7 @@ module PrismatIQ
     end
 
     def relative_luminance(rgb : RGB) : Float64
-      key = rgb.hex
+      key = {rgb.r, rgb.g, rgb.b}
       @luminance_cache.get_or_compute(key) do
         r = rgb.r / 255.0
         g = rgb.g / 255.0
