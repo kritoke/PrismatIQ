@@ -51,14 +51,14 @@
 - [x] 4.3 Implement CPU count detection for Linux using /proc/cpuinfo (secure)
 - [x] 4.4 Add fallback CPU count for unknown platforms
 - [x] 4.5 Replace all backtick shell commands with new SystemInfo module
-- [ ] 4.6 Add file path validation to prevent directory traversal
-- [ ] 4.7 Add file extension validation for supported formats
-- [ ] 4.8 Add maximum file size check (100MB limit)
-- [ ] 4.9 Add Options parameter validation (color_count, quality, threads ranges)
-- [ ] 4.10 Verify all temp files use secure Tempfile class
+- [x] 4.6 Add file path validation to prevent directory traversal
+- [x] 4.7 Add file extension validation for supported formats
+- [x] 4.8 Add maximum file size check (100MB limit)
+- [x] 4.9 Add Options parameter validation (color_count, quality, threads ranges)
+- [x] 4.10 Verify all temp files use secure Tempfile class
 - [ ] 4.11 Add ensure blocks for temp file cleanup in ICO parser
 - [ ] 4.12 Remove sensitive data from error messages (use basename only)
-- [ ] 4.13 Write security-focused tests (invalid paths, oversized files, etc.)
+- [x] 4.13 Write security-focused tests (invalid paths, oversized files, etc.)
 
 ## 5. Memory Optimization
 
