@@ -37,7 +37,7 @@ describe "PrismatIQ ICO helper" do
 
   it "returns Result type from get_palette_from_ico_or_error" do
     ico_path = "spec/fixtures/ico/png_icon_32x32.ico"
-    
+
     first_result = PrismatIQ.get_palette_from_ico_or_error(ico_path)
     second_result = PrismatIQ.get_palette_from_ico_or_error(ico_path)
 
