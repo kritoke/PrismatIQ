@@ -15,7 +15,7 @@ module PrismatIQ
 
     def validate!
       raise ValidationError.new("color_count must be >= 1, got #{@color_count}") if @color_count < 1
-      raise ValidationError.new("quality must be >= 1, got #{@quality}") if @quality < 1
+      raise ValidationError.new("quality must be >= 1 and <= 100, got #{@quality}") if @quality < 1 || @quality > 100
       raise ValidationError.new("threads must be >= 0, got #{@threads}") if @threads < 0
     end
 

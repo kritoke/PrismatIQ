@@ -940,6 +940,34 @@ module PrismatIQ
     get_palette_from_ico_or_error(path, Options.new(color_count, quality, threads))
   end
 
+  # Extract palette from ICO file with explicit Error type (v2 API)
+  # @param path [String] Path to the ICO file
+  # @param options [Options] Configuration options
+  # @return [Result(Array(RGB), Error)] Result containing palette or Error
+  def self.get_palette_from_ico_v2(path : String, options : Options = Options.default) : Result(Array(RGB), Error)
+    ico = ICOFile.from_path(path)
+
+    if !ico
+      return Result(Array(RGB), Error).err(Error.file_not_found(path, "Failed to read ICO file"))
+    end
+
+    if !ico.valid?
+      return Result(Array(RGB), Error).err(Error.invalid_image_path(path, "Invalid or corrupted ICO file"))
+    end
+
+    begin
+      pixels = ico.to_rgba
+      w = ico.width
+      h = ico.height
+      palette = get_palette_from_buffer(pixels, w, h, options)
+      Result(Array(RGB), Error).ok(palette)
+    rescue ex : Exception
+      Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "ICO processing failed"))
+    end
+  rescue ex : Exception
+    Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "Failed to extract palette from ICO"))
+  end
+
   # Extract a color palette from an ICO (icon) file
   #
   # This is the main public API for extracting dominant colors from ICO files.
@@ -984,7 +1012,9 @@ module PrismatIQ
   # - Returns `[RGB.new(0, 0, 0)]` for invalid/corrupted files
   # - Falls back to generic image decoding for non-ICO files
   # - Debug output available via `PRISMATIQ_DEBUG=true` env var
-  # - For explicit error handling, use get_palette_from_ico_or_error
+  # - For explicit error handling, use get_palette_from_ico_or_error or get_palette_from_ico_v2
+  # @deprecated Use `get_palette_from_ico_v2` for explicit error handling
+  @[Deprecated("Use `get_palette_from_ico_v2(path, options)` for explicit error handling")]
   def self.get_palette_from_ico(path : String, options : Options = Options.default) : Array(RGB)
     # Try to create ICOFile from path
     ico = ICOFile.from_path(path)

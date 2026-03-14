@@ -205,4 +205,39 @@ describe "PrismatIQ Edge Cases" do
       end
     end
   end
+
+  describe "get_palette_v2 error handling" do
+    it "returns ok result for valid pixel buffer" do
+      pixels = generate_solid(255, 0, 0, 10, 10)
+      options = PrismatIQ::Options.new(color_count: 3)
+      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options)
+      result.ok?.should be_true
+      result.value.size.should eq(1)
+    end
+
+    it "returns error for empty pixel buffer" do
+      pixels = Slice(UInt8).new(0)
+      options = PrismatIQ::Options.new(color_count: 3)
+      result = PrismatIQ.get_palette_v2(pixels, 0, 0, options)
+      result.err?.should be_true
+      result.error.should be_a(PrismatIQ::Error)
+    end
+  end
+
+  describe "get_palette_v2! raising" do
+    it "returns palette for valid pixel buffer" do
+      pixels = generate_solid(0, 255, 0, 10, 10)
+      options = PrismatIQ::Options.new(color_count: 3)
+      palette = PrismatIQ.get_palette_v2!(pixels, 10, 10, options)
+      palette.size.should eq(1)
+    end
+
+    it "raises for invalid quality parameter" do
+      pixels = generate_solid(0, 255, 0, 10, 10)
+      options = PrismatIQ::Options.new(color_count: 3, quality: 0)
+      expect_raises(PrismatIQ::ValidationError) do
+        PrismatIQ.get_palette_v2!(pixels, 10, 10, options)
+      end
+    end
+  end
 end

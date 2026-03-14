@@ -14,7 +14,12 @@ module PrismatIQ
     # Prefer using the installed crtemp shard when available. Dir.mktmpdir
     # provides an atomic directory creation helper; we'll use it to create a
     # secure directory and then create a file inside it atomically.
+    # Returns nil if data exceeds 50MB limit.
+    MAX_DATA_SIZE = 50_000_000_i64
+
     def self.create_and_write(prefix : String, data : Slice(UInt8)) : String?
+      return if data.size > MAX_DATA_SIZE
+
       result = try_crtemp_approach(prefix, data)
       return result if result
 

@@ -67,6 +67,8 @@ module PrismatIQ
   # @param path [String] Path to the image file
   # @param options [Options] Configuration options (color_count, quality, threads, alpha_threshold)
   # @return [Array(RGB)] Array of dominant colors
+  # @deprecated Use `get_palette_v2(path, options)` for explicit error handling
+  @[Deprecated("Use `get_palette_v2(path, options)` for explicit error handling")]
   def self.get_palette(path : String, options : Options = Options.default) : Array(RGB)
     Core::PaletteExtractor.new.extract_from_path(path, options)
   end
@@ -75,6 +77,8 @@ module PrismatIQ
   # @param io [IO] IO object containing image data
   # @param options [Options] Configuration options
   # @return [Array(RGB)] Array of dominant colors
+  # @deprecated Use `get_palette_v2(io, options)` for explicit error handling
+  @[Deprecated("Use `get_palette_v2(io, options)` for explicit error handling")]
   def self.get_palette(io : IO, options : Options = Options.default) : Array(RGB)
     Core::PaletteExtractor.new.extract_from_io(io, options)
   end
@@ -83,6 +87,8 @@ module PrismatIQ
   # @param img [CrImage::Image | String | IO] Image source (CrImage::Image, file path, or IO)
   # @param options [Options] Configuration options
   # @return [Array(RGB)] Array of dominant colors
+  # @deprecated Use `get_palette_v2` for explicit error handling. This method returns `[RGB.new(0,0,0)]` on error.
+  @[Deprecated("Use `get_palette_v2(path, options)` for explicit error handling")]
   def self.get_palette(img, options : Options = Options.default) : Array(RGB)
     if img.is_a?(CrImage::Image)
       Core::PaletteExtractor.new.extract_from_image(img.as(CrImage::Image), options)
@@ -208,6 +214,9 @@ module PrismatIQ
   # @return [Result(Array(RGB), Error)] Result containing palette or Error
   def self.get_palette_v2(path : String, options : Options = Options.default) : Result(Array(RGB), Error)
     result = get_palette(path, options)
+    if result.size == 1 && result[0] == RGB.new(0, 0, 0)
+      return Result(Array(RGB), Error).err(Error.file_not_found(path, "Failed to extract palette"))
+    end
     Result(Array(RGB), Error).ok(result)
   rescue ex : Exception
     Result(Array(RGB), Error).err(Error.file_not_found(path, ex.message || "File not found"))
@@ -228,12 +237,48 @@ module PrismatIQ
     raise Exception.new("Failed to extract palette: #{ex.message}")
   end
 
+  # Extract palette from IO with raising on exception on error
+  # @param io [IO] IO object containing image data
+  # @param options [Options] Configuration options
+  # @return [Array(RGB)] Array of dominant colors
+  # @raise [ValidationError] If options validation fails
+  # @raise [Exception] If image loading or processing fails
+  def self.get_palette_v2!(io : IO, options : Options = Options.default) : Array(RGB)
+    result = get_palette(io, options)
+    result
+  rescue ex : ValidationError
+    raise ex
+  rescue ex : Exception
+    raise Exception.new("Failed to extract palette: #{ex.message}")
+  end
+
+  # Extract palette from buffer with raising on exception on error
+  # @param pixels [Slice(UInt8)] RGBA pixel data
+  # @param width [Int32] Image width
+  # @param height [Int32] Image height
+  # @param options [Options] Configuration options
+  # @param config [Config] Runtime configuration
+  # @return [Array(RGB)] Array of dominant colors
+  # @raise [ValidationError] If options validation fails
+  # @raise [Exception] If image processing fails
+  def self.get_palette_v2!(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.default, config : Config = Config.default) : Array(RGB)
+    extractor = Core::PaletteExtractor.new(config)
+    extractor.extract_from_buffer(pixels, width, height, options)
+  rescue ex : ValidationError
+    raise ex
+  rescue ex : Exception
+    raise Exception.new("Failed to extract palette: #{ex.message}")
+  end
+
   # Extract palette from IO with new Result type
   # @param io [IO] IO object containing image data
   # @param options [Options] Configuration options
   # @return [Result(Array(RGB), Error)] Result containing palette or Error
   def self.get_palette_v2(io : IO, options : Options = Options.default) : Result(Array(RGB), Error)
     result = get_palette(io, options)
+    if result.size == 1 && result[0] == RGB.new(0, 0, 0)
+      return Result(Array(RGB), Error).err(Error.corrupted_image("Failed to extract palette from IO"))
+    end
     Result(Array(RGB), Error).ok(result)
   rescue ex : Exception
     Result(Array(RGB), Error).err(Error.corrupted_image(ex.message))
@@ -255,6 +300,20 @@ module PrismatIQ
     Result(Array(RGB), Error).ok(palette)
   rescue ex : Exception
     Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "Processing failed"))
+  end
+
+  # Extract palette from a CrImage::Image with new Result type
+  # @param image [CrImage::Image] Image object
+  # @param options [Options] Configuration options
+  # @return [Result(Array(RGB), Error)] Result containing palette or Error
+  def self.get_palette_v2(image : CrImage::Image, options : Options = Options.default) : Result(Array(RGB), Error)
+    result = get_palette_from_image(image, options)
+    if result.size == 1 && result[0] == RGB.new(0, 0, 0)
+      return Result(Array(RGB), Error).err(Error.corrupted_image("Failed to extract palette from image"))
+    end
+    Result(Array(RGB), Error).ok(result)
+  rescue ex : Exception
+    Result(Array(RGB), Error).err(Error.corrupted_image(ex.message))
   end
 
   def self.get_palette_channel(path : String, options : Options = Options.default) : Channel(Array(RGB))
