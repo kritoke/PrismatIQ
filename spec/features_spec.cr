@@ -95,47 +95,53 @@ describe PrismatIQ::RGB do
   end
 end
 
-describe PrismatIQ::Accessibility do
-  describe ".relative_luminance" do
-    it "returns 1.0 for white" do
-      white = PrismatIQ::RGB.new(255, 255, 255)
-      PrismatIQ::Accessibility.relative_luminance(white).should be_close(1.0, 0.001)
+  describe "AccessibilityCalculator" do
+    describe "#relative_luminance" do
+      it "returns 1.0 for white" do
+        calculator = PrismatIQ::AccessibilityCalculator.new
+        white = PrismatIQ::RGB.new(255, 255, 255)
+        calculator.relative_luminance(white).should be_close(1.0, 0.001)
+      end
+
+      it "returns 0.0 for black" do
+        calculator = PrismatIQ::AccessibilityCalculator.new
+        black = PrismatIQ::RGB.new(0, 0, 0)
+        calculator.relative_luminance(black).should be_close(0.0, 0.001)
+      end
     end
 
-    it "returns 0.0 for black" do
-      black = PrismatIQ::RGB.new(0, 0, 0)
-      PrismatIQ::Accessibility.relative_luminance(black).should be_close(0.0, 0.001)
+    describe "#contrast_ratio" do
+      it "returns 21:1 for black on white" do
+        calculator = PrismatIQ::AccessibilityCalculator.new
+        black = PrismatIQ::RGB.new(0, 0, 0)
+        white = PrismatIQ::RGB.new(255, 255, 255)
+        ratio = calculator.contrast_ratio(black, white)
+        ratio.should be_close(21.0, 0.1)
+      end
+
+      it "returns 1:1 for same color" do
+        calculator = PrismatIQ::AccessibilityCalculator.new
+        gray = PrismatIQ::RGB.new(128, 128, 128)
+        calculator.contrast_ratio(gray, gray).should be_close(1.0, 0.01)
+      end
+    end
+
+    describe "#wcag_aa_compliant?" do
+      it "passes for high contrast" do
+        calculator = PrismatIQ::AccessibilityCalculator.new
+        black = PrismatIQ::RGB.new(0, 0, 0)
+        white = PrismatIQ::RGB.new(255, 255, 255)
+        calculator.wcag_aa_compliant?(black, white).should be_true
+      end
+
+      it "fails for low contrast" do
+        calculator = PrismatIQ::AccessibilityCalculator.new
+        gray1 = PrismatIQ::RGB.new(100, 100, 100)
+        gray2 = PrismatIQ::RGB.new(120, 120, 120)
+        calculator.wcag_aa_compliant?(gray1, gray2).should be_false
+      end
     end
   end
-
-  describe ".contrast_ratio" do
-    it "returns 21:1 for black on white" do
-      black = PrismatIQ::RGB.new(0, 0, 0)
-      white = PrismatIQ::RGB.new(255, 255, 255)
-      ratio = PrismatIQ::Accessibility.contrast_ratio(black, white)
-      ratio.should be_close(21.0, 0.1)
-    end
-
-    it "returns 1:1 for same color" do
-      gray = PrismatIQ::RGB.new(128, 128, 128)
-      PrismatIQ::Accessibility.contrast_ratio(gray, gray).should be_close(1.0, 0.01)
-    end
-  end
-
-  describe ".wcag_aa_compliant?" do
-    it "passes for high contrast" do
-      black = PrismatIQ::RGB.new(0, 0, 0)
-      white = PrismatIQ::RGB.new(255, 255, 255)
-      PrismatIQ::Accessibility.wcag_aa_compliant?(black, white).should be_true
-    end
-
-    it "fails for low contrast" do
-      gray1 = PrismatIQ::RGB.new(100, 100, 100)
-      gray2 = PrismatIQ::RGB.new(120, 120, 120)
-      PrismatIQ::Accessibility.wcag_aa_compliant?(gray1, gray2).should be_false
-    end
-  end
-end
 
 describe "color matching" do
   describe ".find_closest" do
@@ -168,7 +174,7 @@ describe "color matching" do
       end
 
       options = PrismatIQ::Options.new(color_count: 3)
-      result = PrismatIQ.get_palette_or_error(pixels, 4, 4, options)
+      result = PrismatIQ.get_palette_v2(pixels, 4, 4, options)
       result.ok?.should be_true
       result.value.size.should be > 0
     end
@@ -176,9 +182,9 @@ describe "color matching" do
     it "returns error for invalid parameters" do
       pixels = Slice(UInt8).new(0)
       options = PrismatIQ::Options.new(color_count: 0)
-      result = PrismatIQ.get_palette_or_error(pixels, 0, 0, options)
+      result = PrismatIQ.get_palette_v2(pixels, 0, 0, options)
       # Either returns error or validates params
-      result.ok?.should be_false
+      result.err?.should be_true
     end
 
     it "uses map to transform successful result" do
@@ -191,15 +197,16 @@ describe "color matching" do
       end
 
       options = PrismatIQ::Options.new(color_count: 3)
-      result = PrismatIQ.get_palette_or_error(pixels, 4, 4, options)
+      result = PrismatIQ.get_palette_v2(pixels, 4, 4, options)
       hex_result = result.map { |colors| colors.map(&.to_hex) }
       hex_result.ok?.should be_true
     end
 
     it "uses map_error to transform error result" do
-      invalid_result = PrismatIQ::Result(Array(PrismatIQ::RGB), String).err("Original error")
-      mapped = invalid_result.map_error { |e| "Custom: #{e}" }
-      mapped.error.should eq("Custom: Original error")
+      original_error = PrismatIQ::Error.invalid_options("test", "test", "Original error")
+      invalid_result = PrismatIQ::Result(Array(PrismatIQ::RGB), PrismatIQ::Error).err(original_error)
+      mapped = invalid_result.map_error { |e| PrismatIQ::Error.processing_failed("Custom transformed error") }
+      mapped.error.message.should contain("Custom transformed error")
     end
 
     it "uses flat_map to chain operations" do
@@ -212,17 +219,17 @@ describe "color matching" do
       end
 
       options = PrismatIQ::Options.new(color_count: 3)
-      result = PrismatIQ.get_palette_or_error(pixels, 4, 4, options)
+      result = PrismatIQ.get_palette_v2(pixels, 4, 4, options)
       # flat_map should return a Result with the same type
       chained = result.flat_map do |colors|
-        PrismatIQ::Result(Array(PrismatIQ::RGB), String).ok(colors)
+        PrismatIQ::Result(Array(PrismatIQ::RGB), PrismatIQ::Error).ok(colors)
       end
       chained.ok?.should be_true
       chained.value.should be_a(Array(PrismatIQ::RGB))
     end
 
     it "uses value_or for default values" do
-      error_result = PrismatIQ::Result(Array(PrismatIQ::RGB), String).err("Failed")
+      error_result = PrismatIQ::Result(Array(PrismatIQ::RGB), PrismatIQ::Error).err(PrismatIQ::Error.processing_failed("Failed"))
       default_palette = [PrismatIQ::RGB.new(0, 0, 0)]
       value = error_result.value_or(default_palette)
       value.should eq(default_palette)

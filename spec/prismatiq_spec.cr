@@ -130,7 +130,7 @@ describe "multithreaded histogram parity" do
     # Use Result-based API for explicit error handling
     # Test with single thread for deterministic results
     options = PrismatIQ::Options.new(color_count: 3, threads: 1)
-    result = PrismatIQ.get_palette_or_error(slice, width, height, options)
+      result = PrismatIQ.get_palette_v2(slice, width, height, options)
 
     # Verify result is successful
     result.ok?.should be_true
@@ -163,7 +163,7 @@ describe "concurrent palette extraction" do
       spawn do
         begin
           options = PrismatIQ::Options.new(color_count: 5, quality: 5, threads: 2)
-          palette = PrismatIQ.get_palette(pixels, width, height, options)
+          palette = PrismatIQ.get_palette_v2!(pixels, width, height, options)
           results.send(palette)
           errors.send(nil)
         rescue ex : Exception
@@ -197,14 +197,14 @@ describe "concurrent palette extraction" do
     end
 
     options = PrismatIQ::Options.new(color_count: 3, quality: 1, threads: 1)
-    reference = PrismatIQ.get_palette(pixels, width, height, options)
+    reference = PrismatIQ.get_palette_v2!(pixels, width, height, options)
 
     results = Channel(Array(PrismatIQ::RGB)).new(20)
 
     20.times do
       spawn do
         opts = PrismatIQ::Options.new(color_count: 3, quality: 1, threads: 1)
-        results.send(PrismatIQ.get_palette(pixels, width, height, opts))
+        results.send(PrismatIQ.get_palette_v2!(pixels, width, height, opts))
       end
     end
 
@@ -238,7 +238,7 @@ describe "concurrent palette extraction" do
     thread_counts.each do |threads|
       spawn do
         options = PrismatIQ::Options.new(color_count: 5, quality: 3, threads: threads)
-        results.send(PrismatIQ.get_palette(pixels, width, height, options))
+        results.send(PrismatIQ.get_palette_v2!(pixels, width, height, options))
       end
     end
 

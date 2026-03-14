@@ -27,9 +27,13 @@ options = PrismatIQ::Options.new(
 begin
   # Accept ICO files: if path ends with .ico use the ICO helper which picks the best PNG entry
   if path.ends_with?(".ico")
-    # get_palette_from_ico returns an RGB palette; but we want entries + counts, so use CrImage path
-    # We'll prefer to decode via our ICO helper and then feed the returned image into get_palette
-    entries = PrismatIQ.get_palette_from_ico(path, options)
+    # Use the new v2 API with explicit error handling
+    result = PrismatIQ.get_palette_from_ico_v2(path, options)
+    if result.err?
+      STDERR.puts "failed to extract palette from ICO: #{result.error.message}"
+      exit 2
+    end
+    entries = result.value
     payload = {
       "colors"       => entries.map(&.to_hex),
       "entries"      => entries.map { |color| {"hex" => color.to_hex, "count" => 0, "percent" => 0.0} },

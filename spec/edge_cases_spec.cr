@@ -40,32 +40,32 @@ end
 
 describe "PrismatIQ Edge Cases" do
   describe "empty and minimal inputs (Result-based API)" do
-    it "handles empty pixel buffer using get_palette_or_error" do
+    it "handles empty pixel buffer using get_palette_v2" do
       empty = Slice(UInt8).new(0)
       options = PrismatIQ::Options.new(color_count: 5)
-      result = PrismatIQ.get_palette_or_error(empty, 0, 0, options)
+      result = PrismatIQ.get_palette_v2(empty, 0, 0, options)
       # Empty buffer returns fallback palette with black
-      result.ok?.should be_true
-      result.value.size.should eq(1)
+      result.err?.should be_true
+      result.error.message.should contain("No valid pixels")
     end
 
-    it "handles single pixel using get_palette_or_error" do
+    it "handles single pixel using get_palette_v2" do
       pixels = Slice.new(4) { |i| i == 3 ? 255.to_u8 : 0.to_u8 }
       options = PrismatIQ::Options.new(color_count: 3)
-      result = PrismatIQ.get_palette_or_error(pixels, 1, 1, options)
+      result = PrismatIQ.get_palette_v2(pixels, 1, 1, options)
       result.ok?.should be_true
       result.value.size.should eq(1)
     end
 
-    it "handles 1x1 transparent pixel using get_palette_or_error" do
+    it "handles 1x1 transparent pixel using get_palette_v2" do
       pixels = Slice.new(4, 0.to_u8)
       options = PrismatIQ::Options.new(color_count: 5)
-      result = PrismatIQ.get_palette_or_error(pixels, 1, 1, options)
+      result = PrismatIQ.get_palette_v2(pixels, 1, 1, options)
       # Transparent pixel may return error or empty palette
       if result.ok?
         result.value.size.should eq(1)
       else
-        result.error.should contain("No valid pixels")
+        result.error.message.should contain("No valid pixels")
       end
     end
   end
@@ -74,7 +74,7 @@ describe "PrismatIQ Edge Cases" do
     it "handles color_count of 1" do
       pixels = generate_checkerboard(10, 10)
       options = PrismatIQ::Options.new(color_count: 1)
-      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options)
+      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options)
       result.ok?.should be_true
       # color_count = 1 now correctly returns 1 color
       result.value.size.should eq(1)
@@ -83,7 +83,7 @@ describe "PrismatIQ Edge Cases" do
     it "handles large color_count" do
       pixels = generate_solid(255, 0, 0, 10, 10)
       options = PrismatIQ::Options.new(color_count: 100)
-      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options)
+      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options)
       result.ok?.should be_true
       result.value.size.should be > 0
     end
@@ -93,7 +93,7 @@ describe "PrismatIQ Edge Cases" do
     it "handles quality of 1 (every pixel)" do
       pixels = generate_checkerboard(10, 10)
       options = PrismatIQ::Options.new(quality: 1)
-      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options)
+      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options)
       result.ok?.should be_true
       result.value.size.should be > 0
     end
@@ -101,7 +101,7 @@ describe "PrismatIQ Edge Cases" do
     it "handles high quality (skip pixels)" do
       pixels = generate_checkerboard(100, 100)
       options = PrismatIQ::Options.new(quality: 10)
-      result = PrismatIQ.get_palette_or_error(pixels, 100, 100, options)
+      result = PrismatIQ.get_palette_v2(pixels, 100, 100, options)
       result.ok?.should be_true
       result.value.size.should be > 0
     end
@@ -111,7 +111,7 @@ describe "PrismatIQ Edge Cases" do
     it "works with threads = 0 (auto)" do
       pixels = generate_checkerboard(20, 20)
       options = PrismatIQ::Options.new(threads: 0)
-      result = PrismatIQ.get_palette_or_error(pixels, 20, 20, options)
+      result = PrismatIQ.get_palette_v2(pixels, 20, 20, options)
       result.ok?.should be_true
       result.value.size.should be > 0
     end
@@ -119,12 +119,12 @@ describe "PrismatIQ Edge Cases" do
     it "works with negative threads (uses default)" do
       pixels = generate_solid(10, 20, 30, 10, 10)
       options = PrismatIQ::Options.new(threads: -1)
-      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options)
+      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options)
       # Negative threads may cause validation error - handle both cases
       if result.ok?
         result.value.size.should be > 0
       else
-        result.error.should contain("threads")
+        result.error.message.should contain("threads")
       end
     end
   end
@@ -134,7 +134,7 @@ describe "PrismatIQ Edge Cases" do
       pixels = generate_solid(255, 128, 64, 10, 10)
       options = PrismatIQ::Options.new
       config = PrismatIQ::Config.new(debug: false)
-      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options, config)
+      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options, config)
       result.ok?.should be_true
       result.value.size.should be > 0
     end
@@ -143,26 +143,26 @@ describe "PrismatIQ Edge Cases" do
       pixels = generate_solid(0, 255, 0, 10, 10)
       options = PrismatIQ::Options.new
       config = PrismatIQ::Config.new(threads: 1)
-      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options, config)
+      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options, config)
       result.ok?.should be_true
       result.value.size.should be > 0
     end
   end
 
   describe "Result type with edge cases" do
-    it "returns palette for empty buffer using get_palette_or_error" do
+    it "returns error for empty buffer using get_palette_v2" do
       empty = Slice(UInt8).new(0)
       options = PrismatIQ::Options.new(color_count: 5)
-      result = PrismatIQ.get_palette_or_error(empty, 0, 0, options)
-      # Empty buffer returns fallback palette with black
-      result.ok?.should be_true
-      result.value.size.should eq(1)
+      result = PrismatIQ.get_palette_v2(empty, 0, 0, options)
+      # Empty buffer returns error
+      result.err?.should be_true
+      result.error.message.should contain("No valid pixels")
     end
 
-    it "returns ok for valid input using get_palette_or_error" do
+    it "returns ok for valid input using get_palette_v2" do
       pixels = generate_solid(100, 100, 100, 10, 10)
       options = PrismatIQ::Options.new(color_count: 3)
-      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options)
+      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options)
       result.ok?.should be_true
       result.value.size.should be > 0
     end
@@ -178,7 +178,7 @@ describe "PrismatIQ Edge Cases" do
     it "demonstrates value_or for default handling" do
       empty = Slice(UInt8).new(0)
       options = PrismatIQ::Options.new(color_count: 5)
-      result = PrismatIQ.get_palette_or_error(empty, 0, 0, options)
+      result = PrismatIQ.get_palette_v2(empty, 0, 0, options)
       default = [PrismatIQ::RGB.new(0, 0, 0)]
       palette = result.value_or(default)
       palette.should eq(default)
@@ -187,7 +187,7 @@ describe "PrismatIQ Edge Cases" do
     it "demonstrates map for result transformation" do
       pixels = generate_solid(200, 50, 100, 10, 10)
       options = PrismatIQ::Options.new(color_count: 3)
-      result = PrismatIQ.get_palette_or_error(pixels, 10, 10, options)
+      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options)
       # Map transforms the successful result
       hex_result = result.map { |colors| colors.map(&.to_hex) }
       hex_result.ok?.should be_true
@@ -197,11 +197,11 @@ describe "PrismatIQ Edge Cases" do
     it "demonstrates map_error for error transformation" do
       empty = Slice(UInt8).new(0)
       options = PrismatIQ::Options.new(color_count: 5)
-      result = PrismatIQ.get_palette_or_error(empty, 0, 0, options)
+      result = PrismatIQ.get_palette_v2(empty, 0, 0, options)
       # Map error transforms the error case
       if result.err?
-        mapped = result.map_error { |e| "Custom error: #{e}" }
-        mapped.error.should contain("Custom error:")
+        mapped = result.map_error { |e| PrismatIQ::Error.invalid_options("test", "test", "Custom error: #{e.message}") }
+        mapped.error.message.should contain("Custom error:")
       end
     end
   end

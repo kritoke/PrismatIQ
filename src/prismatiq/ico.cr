@@ -260,31 +260,25 @@ module PrismatIQ
   #
   # ```
   # # Basic usage - extract palette from a favicon
-  # palette = PrismatIQ.get_palette_from_ico("favicon.ico", color_count: 5)
+  # palette = PrismatIQ.get_palette_from_ico_v2("favicon.ico", color_count: 5)
   # palette.each { |color| puts color.to_hex }
   # ```
   #
   # ```
   # # With custom parameters
-  # palette = PrismatIQ.get_palette_from_ico(
+  # palette = PrismatIQ.get_palette_from_ico_v2(
   #   "app.ico",
-  #   color_count: 8, # Extract 8 dominant colors
-  #   quality: 5,     # Higher quality (lower = more accurate, slower)
-  #   threads: 4      # Use 4 threads for processing
+  #   Options.new(color_count: 8, quality: 5, threads: 4)
   # )
   # ```
   #
   # ```
   # # Handle potential errors
-  # begin
-  #   palette = PrismatIQ.get_palette_from_ico("icon.ico")
-  #   if palette.size == 1 && palette[0].r == 0 && palette[0].g == 0 && palette[0].b == 0
-  #     puts "Warning: Could not extract meaningful palette"
-  #   else
-  #     puts "Extracted #{palette.size} colors"
-  #   end
-  # rescue ex : Exception
-  #   puts "Error processing ICO: #{ex.message}"
+  # result = PrismatIQ.get_palette_from_ico_v2("icon.ico")
+  # if result.ok?
+  #   puts "Extracted #{result.value.size} colors"
+  # else
+  #   puts "Error: #{result.error.message}"
   # end
   # ```
   #
@@ -337,7 +331,7 @@ module PrismatIQ
   # 3      | 1    | Reserved (must be 0)
   # 4      | 2    | Color planes
   # 6      | 2    | Bits per pixel
-  # 8      | 4    | Size of image data in bytes
+  # 8      | 4    | Size of image data inbytes
   # 12     | 4    | Offset to image data from start of file
   # ```
   #
@@ -896,50 +890,6 @@ module PrismatIQ
     (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) | (slice[idx + 2].to_u64 << 16) | (slice[idx + 3].to_u64 << 24)).to_i64
   end
 
-  # Extract a color palette from an ICO (icon) file, returning a Result type for explicit error handling
-  #
-  # This is the robust version of get_palette_from_ico that returns explicit errors.
-  #
-  # ## Parameters
-  #
-  # - **path**: Path to the ICO file
-  # - **options**: Options struct containing color_count, quality, and threads settings
-  #
-  # ## Returns
-  #
-  # A `Result(Array(RGB), String)` where:
-  # - Success contains the palette array
-  # - Error contains a descriptive error message
-  #
-  # ## Examples
-  #
-  # ```
-  # result = PrismatIQ.get_palette_from_ico_or_error("favicon.ico")
-  # if result.ok?
-  #   colors = result.value
-  #   colors.each { |c| puts c.to_hex }
-  # else
-  #   puts "Error: #{result.error}"
-  # end
-  # ```
-  def self.get_palette_from_ico_or_error(path : String, options : Options = Options.default) : Result(Array(RGB), String)
-    palette = get_palette_from_ico(path, options)
-    # Check if it's the error sentinel
-    if palette.size == 1 && palette[0].r == 0 && palette[0].g == 0 && palette[0].b == 0
-      Result(Array(RGB), String).err("Failed to extract palette from ICO file: #{path}")
-    else
-      Result(Array(RGB), String).ok(palette)
-    end
-  rescue ex : Exception
-    Result(Array(RGB), String).err("Exception processing ICO file #{path}: #{ex.message}")
-  end
-
-  # Backward-compatible overload with keyword arguments
-  @[Deprecated("Use `get_palette_from_ico_or_error(path, Options.new(color_count: N, quality: Q, threads: T))` instead")]
-  def self.get_palette_from_ico_or_error(path : String, color_count : Int32, quality : Int32 = 10, threads : Int32 = 0) : Result(Array(RGB), String)
-    get_palette_from_ico_or_error(path, Options.new(color_count, quality, threads))
-  end
-
   # Extract palette from ICO file with explicit Error type (v2 API)
   # @param path [String] Path to the ICO file
   # @param options [Options] Configuration options
@@ -966,89 +916,6 @@ module PrismatIQ
     end
   rescue ex : Exception
     Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "Failed to extract palette from ICO"))
-  end
-
-  # Extract a color palette from an ICO (icon) file
-  #
-  # This is the main public API for extracting dominant colors from ICO files.
-  # It automatically handles both modern PNG-encoded and legacy BMP-encoded icons.
-  #
-  # ## Parameters
-  #
-  # - **path**: Path to the ICO file
-  # - **options**: Options struct containing color_count, quality, and threads settings
-  #
-  # ## Returns
-  #
-  # An `Array(RGB)` of dominant colors, sorted by prominence.
-  # Returns `[RGB.new(0, 0, 0)]` for invalid/corrupted files
-  # (use get_palette_from_ico_or_error for explicit error handling).
-  #
-  # ## Examples
-  #
-  # ```
-  # # Extract 5 dominant colors from a favicon
-  # colors = PrismatIQ.get_palette_from_ico("favicon.ico")
-  # # Note: Check for error sentinel [RGB.new(0,0,0)] or use get_palette_from_ico_or_error
-  # colors.each { |c| puts c.to_hex }
-  # ```
-  #
-  # ```
-  # # Extract 10 colors with high quality
-  # colors = PrismatIQ.get_palette_from_ico("app.ico", Options.new(color_count: 10, quality: 5))
-  # ```
-  #
-  # ## Algorithm
-  #
-  # 1. Reads ICO file header to validate format
-  # 2. Scans entries for PNG-encoded images (preferred)
-  # 3. Falls back to BMP/DIB parsing if no PNG found
-  # 4. Selects largest/highest quality entry
-  # 5. Extracts pixel data with transparency handling
-  # 6. Runs MMCQ quantization to find dominant colors
-  #
-  # ## Error Handling
-  #
-  # - Returns `[RGB.new(0, 0, 0)]` for invalid/corrupted files
-  # - Falls back to generic image decoding for non-ICO files
-  # - Debug output available via `PRISMATIQ_DEBUG=true` env var
-  # - For explicit error handling, use get_palette_from_ico_or_error or get_palette_from_ico_v2
-  # @deprecated Use `get_palette_from_ico_v2` for explicit error handling
-  @[Deprecated("Use `get_palette_from_ico_v2(path, options)` for explicit error handling")]
-  def self.get_palette_from_ico(path : String, options : Options = Options.default) : Array(RGB)
-    # Try to create ICOFile from path
-    ico = ICOFile.from_path(path)
-
-    # Process valid ICO file
-    if ico && ico.valid?
-      return process_ico_palette(ico, options)
-    end
-
-    # Fallback: try generic image decoding with CrImage
-    img = CrImage.read(path)
-    get_palette(img, options)
-  rescue ex : Exception
-    debug_log("ICO: unexpected error processing #{path}: #{ex.message}")
-    [RGB.new(0, 0, 0)]
-  end
-
-  # Backward-compatible overload with keyword arguments
-  @[Deprecated("Use `get_palette_from_ico(path, Options.new(color_count: N, quality: Q, threads: T))` instead")]
-  def self.get_palette_from_ico(path : String, color_count : Int32, quality : Int32 = 10, threads : Int32 = 0) : Array(RGB)
-    get_palette_from_ico(path, Options.new(color_count, quality, threads))
-  end
-
-  # Process palette extraction from a valid ICOFile
-  private def self.process_ico_palette(ico : ICOFile, options : Options) : Array(RGB)
-    pixels = ico.to_rgba
-    w = ico.width
-    h = ico.height
-
-    debug_log("ICO: successfully parsed ICO file, dimensions: #{w}x#{h}")
-    get_palette_from_buffer(pixels, w, h, options)
-  rescue ex : Exception
-    debug_log("ICO: ICOFile extraction failed: #{ex.message}")
-    [RGB.new(0, 0, 0)]
   end
 
   # Debug helper: gated by PRISMATIQ_DEBUG env var

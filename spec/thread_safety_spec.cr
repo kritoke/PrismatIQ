@@ -56,7 +56,7 @@ describe "Thread Safety" do
 
       # Run extraction multiple times
       5.times do
-        result = PrismatIQ.get_palette(pixels, width, height, options)
+        result = PrismatIQ.get_palette_v2!(pixels, width, height, options)
         results << result
       end
 
@@ -102,12 +102,12 @@ describe "Thread Safety" do
 
       # Concurrent extractions
       spawn do
-        result1 = PrismatIQ.get_palette(pixels1, width1, height1, options)
+        result1 = PrismatIQ.get_palette_v2!(pixels1, width1, height1, options)
         channel1.send(result1)
       end
 
       spawn do
-        result2 = PrismatIQ.get_palette(pixels2, width2, height2, options)
+        result2 = PrismatIQ.get_palette_v2!(pixels2, width2, height2, options)
         channel2.send(result2)
       end
 

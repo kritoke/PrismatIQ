@@ -2,152 +2,119 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.6.0] - 2026-03-11
+## [0.5.0] - 2026-03-14
+
+### Breaking Changes
+
+#### Clean API Break
+- **Complete removal of all deprecated v1 APIs** that used sentinel error values `[RGB.new(0,0,0)]`
+- **Removal of module-level `Accessibility` and `Theme` methods** - users must now create `AccessibilityCalculator` and `ThemeDetector` instances
+- **All APIs now return explicit error handling** using `Result(Array(RGB), Error)` types or raise exceptions
+
+#### Removed Methods
+- `PrismatIQ.get_palette(path, options)` - Use `get_palette_v2(path, options)` or `get_palette_v2!(path, options)`
+- `PrismatIQ.get_palette(io, options)` - Use `get_palette_v2(io, options)` or `get_palette_v2!(io, options)`
+- `PrismatIQ.get_palette_from_ico(path, options)` - Use `get_palette_from_ico_v2(path, options)`
+- `PrismatIQ.get_palette_from_ico_or_error(path, options)` - Use `get_palette_from_ico_v2(path, options)`
+- All deprecated positional parameter APIs (e.g., `get_palette(path, color_count, quality, threads)`)
+- Module-level `PrismatIQ::Accessibility` methods - Use `AccessibilityCalculator` instance
+- Module-level `PrismatIQ::Theme` methods - Use `ThemeDetector` instance
 
 ### Added
 
-#### New v2 Result-Based API
-- `get_palette_v2(path, options)` - Returns `Result(Array(RGB), Error)` for explicit error handling
-- `get_palette_v2!(path, options)` - Raises exceptions on errors
-- `get_palette_v2(io, options)` - Extract palette from IO with Result type
-- `get_palette_v2(pixels, width, height, options)` - Extract from raw pixels with Result type
-- Comprehensive v2 API documentation in `docs/V2_API_GUIDE.md`
+#### Modern Result-Based API
+- **Primary API**: `get_palette_v2` returns `Result(Array(RGB), Error)` with structured error information
+- **Exception-based API**: `get_palette_v2!` raises exceptions on errors for simpler error handling
+- **Comprehensive Error struct** with `type`, `message`, and `context` fields for precise error handling
 
-#### Structured Error Handling
-- `Error` struct with `type`, `message`, and `context` fields
-- `ErrorType` enum with 6 error types:
-  - `FileNotFound` - File doesn't exist or cannot be accessed
-  - `InvalidImagePath` - Path validation failed (directory traversal, system directories, etc.)
-  - `UnsupportedFormat` - Image format not supported
-  - `CorruptedImage` - Image data is corrupt or empty
-  - `InvalidOptions` - Parameter validation failed (out of range values)
-  - `ProcessingFailed` - General processing error
-- Factory methods for each error type
-- Input validation for file paths, options, and IO streams
-
-#### Code Organization Improvements
-- Extracted `Core::PaletteExtractor` class for palette extraction logic
-- Extracted `Core::PaletteConvenience` class for async and convenience methods
-- Extracted `Constants` module for WCAG and YIQ constants
-- Reduced main file from 588 to 295 lines (under 300 target)
-- Clear module boundaries and responsibilities
-
-#### Thread-Safe Classes
-- `AccessibilityCalculator` - Instance-based accessibility calculations with isolated caching
-- `ThemeDetector` - Instance-based theme detection with isolated caching
-
-#### Memory Optimization
-- `HistogramPool` - Object pool for histogram reuse (25-40% memory reduction)
-- `AdaptiveChunkSizer` - Optimal processing based on image size
-
-#### Fiber-Based Parallelism
-- Migrated from `Thread.new` to `spawn` for parallel processing
-- Channel-based histogram result collection
-- Better integration with Crystal's scheduler
-
-#### Testing
-- Added 43 comprehensive tests (total: 290 tests, 100% pass rate)
-- Thread safety tests
-- Concurrent access tests
-- Memory pool tests
-- Edge case tests (zero-byte files, system directories, corrupted images)
+#### Instance-Based Utility Classes
+- **`AccessibilityCalculator`** - Instance-based accessibility calculations with isolated caching
+- **`ThemeDetector`** - Instance-based theme detection with isolated caching
+- **Thread-safe by design** - no shared mutable state between instances
 
 ### Changed
 
-#### Performance Improvements
-- Memory usage reduced by 25-40% on typical workloads
-- Small images (<100K): ~90% reduction
-- Medium images (1M): ~50% reduction
-- Large images (10M): ~25% reduction
-- Adaptive processing eliminates overhead for small images
+#### API Design Philosophy
+- **Explicit over implicit** - All errors are explicitly handled through Result types
+- **Instance-based over module-based** - Better encapsulation and thread safety
+- **Modern Crystal patterns** - Leverages Crystal's type system and functional programming features
 
-#### Code Quality
-- Main file reduced by 50% (588 → 295 lines)
-- Removed 465+ lines of duplicate code
-- Improved code navigation and maintainability
+#### Performance and Security
+- **Maintains all v0.4.x improvements**: Memory optimization, thread safety, security fixes
+- **Continues using Options struct** as the single source of truth for configuration
+- **Preserves all existing performance optimizations** and security measures
 
-### Security
+### Migration Guide for v0.5.0
 
-- **CRITICAL**: Eliminated shell command injection vulnerability in CPU detection
-- **HIGH**: Added path traversal prevention
-- **MEDIUM**: Added file size limits (100MB max)
-- **LOW**: Sanitized error messages to not expose full paths
-
-### Fixed
-
-- Race conditions in accessibility and theme modules (now instance-based)
-- Memory leaks from histogram allocation (now pooled)
-- Inefficient processing of small images (now single-threaded)
-- Inconsistent error handling (now unified with Result types)
-
-### Deprecated
-
-The following are deprecated and will be removed in v0.7.0:
-- `get_palette(path, color_count, quality, threads)` - Use `get_palette_v2(path, options)`
-- `PaletteResult` struct - Use `Result(Array(RGB), Error)`
-- Sentinel error value `[RGB.new(0,0,0)]` - Check for `Result::Err` instead
-- Module-level `Accessibility` methods - Use `AccessibilityCalculator` instance
-- Module-level `Theme` methods - Use `ThemeDetector` instance
-
-### Changed
-
-#### Performance Improvements
-- Memory usage reduced by 25-40% on typical workloads
-- Small images (<100K): ~90% reduction
-- Medium images (1M): ~50% reduction
-- Large images (10M): ~25% reduction
-- Adaptive processing eliminates overhead for small images
-
-#### Code Quality
-- Main file reduced by 47% (991 → 526 lines)
-- Removed 465 lines of duplicate code
-- Improved code navigation
-
-### Security
-
-- **CRITICAL**: Eliminated shell command injection vulnerability in CPU detection
-- **HIGH**: Added path traversal prevention
-- **MEDIUM**: Added file size limits (100MB max)
-- **LOW**: Sanitized error messages to not expose full paths
-
-### Fixed
-
-- Race conditions in accessibility and theme modules (now instance-based)
-- Memory leaks from histogram allocation (now pooled)
-- Inefficient processing of small images (now single-threaded)
-- Inconsistent error handling (now unified with Result types)
-
-### Deprecated
-
-The following are deprecated and will be removed in v0.8.0:
-
-- `get_palette(path, color_count, quality, threads)` - Use `get_palette_v2(path, options)`
-- `PaletteResult` struct - Use `Result(Array(RGB), Error)`
-- Sentinel error value `[RGB.new(0,0,0)]` - Check for `Result::Err` instead
-- Module-level `Accessibility` methods - Use `AccessibilityCalculator` instance
-- Module-level `Theme` methods - Use `ThemeDetector` instance
-
-### Migration Guide for v0.6.0
-
-See `docs/V2_API_GUIDE.md` for detailed migration instructions.
-
-**Quick migration:**
-
+#### Palette Extraction
 ```crystal
-# Before (0.5.x)
+# Before (v0.4.x)
 colors = PrismatIQ.get_palette("image.png", options)
 if colors == [RGB.new(0,0,0)]
   puts "Error"
 end
 
-# After (0.6.0)
+# After (v0.5.0) - Result-based
 result = PrismatIQ.get_palette_v2("image.png", options)
 if result.ok?
   colors = result.value
 else
   puts "Error: #{result.error.message}"
 end
+
+# After (v0.5.0) - Exception-based  
+colors = PrismatIQ.get_palette_v2!("image.png", options) # Raises on error
 ```
+
+#### ICO File Support
+```crystal
+# Before (v0.4.x)
+colors = PrismatIQ.get_palette_from_ico("icon.ico", options)
+
+# After (v0.5.0)
+result = PrismatIQ.get_palette_from_ico_v2("icon.ico", options)
+if result.ok?
+  colors = result.value
+else
+  puts "ICO error: #{result.error.message}"
+end
+```
+
+#### Accessibility Calculations
+```crystal
+# Before (v0.4.x)
+lum = PrismatIQ::Accessibility.relative_luminance(color)
+level = PrismatIQ::Accessibility.wcag_level(fg, bg)
+
+# After (v0.5.0)
+calculator = PrismatIQ::AccessibilityCalculator.new
+lum = calculator.relative_luminance(color)
+level = calculator.wcag_level(fg, bg)
+```
+
+#### Theme Detection
+```crystal
+# Before (v0.4.x)
+theme = PrismatIQ::Theme.detect_theme(background)
+palette = PrismatIQ::Theme.suggest_text_palette(background)
+
+# After (v0.5.0)
+detector = PrismatIQ::ThemeDetector.new
+theme = detector.detect_theme(background)
+palette = detector.suggest_text_palette(background)
+```
+
+#### Buffer-based Extraction (unchanged)
+```crystal
+# This API remains the same since it was already modern
+options = PrismatIQ::Options.new(color_count: 5, quality: 10)
+palette = PrismatIQ.get_palette_from_buffer(pixels, width, height, options)
+```
+
+### Examples Updated
+- All examples and documentation updated to use v0.5.0 APIs
+- ColorThief adapter example uses v2 APIs for ICO files
+- Comprehensive test coverage for new APIs
 
 ## v0.4.1 - 2026-03-04
 
@@ -173,7 +140,7 @@ result = PrismatIQ.get_palette_result_from_buffer(pixels, w, h, 5, 10, 1)
 hex_colors = PrismatIQ.get_palette_color_thief_from_buffer(pixels, w, h, 5, 10)
 ```
 
-**After (v0.5.0+):**
+**After (v0.4.0+):**
 ```crystal
 options = PrismatIQ::Options.new(color_count: 5, quality: 10)
 palette = PrismatIQ.get_palette(path, options)
