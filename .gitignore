@@ -42,3 +42,4 @@ flake.private.nix
 
 # Local audit todo file
 todo.md
+docs/

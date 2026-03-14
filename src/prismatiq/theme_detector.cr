@@ -11,6 +11,50 @@ module PrismatIQ
     end
   end
 
+  # Thread-safe theme detector with instance-based caching.
+  #
+  # This class detects whether a color scheme is light or dark based on
+  # relative luminance calculations. Results are cached for performance.
+  #
+  # ## Thread Safety Guarantees
+  #
+  # - **Instance Isolation**: Each `ThemeDetector` instance has its own cache.
+  #   Multiple threads can safely use different instances without coordination.
+  # - **Internal Synchronization**: Caches use `ThreadSafeCache` with mutex synchronization.
+  # - **No Global State**: No class variables or shared mutable state between instances.
+  # - **Safe Concurrent Access**: Multiple fibers/threads can call methods on the same
+  #   instance simultaneously without race conditions.
+  #
+  # ## Usage Patterns
+  #
+  # Create instances as needed - they can be safely shared across threads:
+  #
+  # ```
+  # # Safe to share across multiple fibers
+  # detector = ThemeDetector.new
+  # spawn { detector.detect_theme(color1) }
+  # spawn { detector.detect_theme(color2) }
+  # ```
+  #
+  # ## Migration Note
+  #
+  # This replaces the deprecated module-level `PrismatIQ::Theme` methods which
+  # were not thread-safe due to shared global state.
+  # - Each instance has its own cache (no shared global state)
+  # - Safe to share a single instance across fibers, or create per-fiber instances
+  # - Caching uses `ThreadSafeCache` with mutex synchronization
+  #
+  # ### Example
+  # ```
+  # detector = ThemeDetector.new
+  #
+  # # These calls are thread-safe
+  # theme = detector.detect_theme(color)
+  # info = detector.detect_theme_info(color)
+  #
+  # # Clear cache when done (also thread-safe)
+  # detector.clear_cache
+  # ```
   class ThemeDetector
     @luminance_cache : ThreadSafeCache(Tuple(Int32, Int32, Int32), Float64)
     @theme_cache : ThreadSafeCache(Tuple(Int32, Int32, Int32), Symbol)
@@ -54,24 +98,58 @@ module PrismatIQ
       (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255.0
     end
 
-    def is_dark?(color : RGB) : Bool
+    def dark?(color : RGB) : Bool
       detect_theme(color) == :dark
     end
 
-    def is_light?(color : RGB) : Bool
+    def light?(color : RGB) : Bool
       detect_theme(color) == :light
     end
 
     def suggest_foreground(background : RGB) : RGB
-      if is_dark?(background)
+      if dark?(background)
         RGB.new(255, 255, 255) # White for dark backgrounds
       else
         RGB.new(0, 0, 0) # Black for light backgrounds
       end
     end
 
+    def analyze_theme(background : RGB) : ThemeInfo
+      lum = relative_luminance(background)
+      perceived = perceived_brightness(background)
+      type = detect_theme(background)
+      ThemeInfo.new(type, lum, perceived)
+    end
+
+    def suggest_text_palette(background : RGB, level : WCAGLevel = WCAGLevel::AA) : TextColorPalette
+      theme_type = detect_theme(background)
+
+      primary = AccessibilityCalculator.new.recommend_text_color(background, level, large_text: false)
+
+      if theme_type == :dark
+        secondary_raw = AccessibilityCalculator.new.lighten(primary, 0.3)
+        accent_raw = RGB.new(
+          (primary.r * 0.8 + 100).to_i.clamp(0, 255),
+          (primary.g * 0.8 + 150).to_i.clamp(0, 255),
+          (primary.b * 0.8 + 255).to_i.clamp(0, 255)
+        )
+      else
+        secondary_raw = AccessibilityCalculator.new.darken(primary, 0.3)
+        accent_raw = RGB.new(
+          (primary.r * 0.6).to_i.clamp(0, 255),
+          (primary.g * 0.6 + 50).to_i.clamp(0, 255),
+          (primary.b * 0.6 + 150).to_i.clamp(0, 255)
+        )
+      end
+
+      secondary_adjusted = AccessibilityCalculator.new.find_nearest_compliant(secondary_raw, background, level, large_text: true) || secondary_raw
+      accent_adjusted = AccessibilityCalculator.new.find_nearest_compliant(accent_raw, background, level, large_text: true) || accent_raw
+
+      TextColorPalette.new(primary, secondary_adjusted, accent_adjusted, background, theme_type)
+    end
+
     def suggest_background(foreground : RGB) : RGB
-      if is_dark?(foreground)
+      if dark?(foreground)
         RGB.new(255, 255, 255) # White background for dark foreground
       else
         RGB.new(0, 0, 0) # Black background for light foreground
@@ -89,11 +167,11 @@ module PrismatIQ
 
     def dominant_theme(palette : Array(RGB)) : Symbol
       return :light if palette.empty?
-      
+
       themes = analyze_palette(palette)
       dark_count = themes[:dark].size
       light_count = themes[:light].size
-      
+
       dark_count > light_count ? :dark : :light
     end
 
@@ -105,7 +183,7 @@ module PrismatIQ
     def cache_stats : NamedTuple(luminance: Int32, theme: Int32)
       {
         luminance: @luminance_cache.size,
-        theme: @theme_cache.size
+        theme:     @theme_cache.size,
       }
     end
   end

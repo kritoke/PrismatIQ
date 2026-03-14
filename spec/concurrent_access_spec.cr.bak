@@ -1,0 +1,206 @@
+require "./spec_helper"
+
+describe "Concurrent access tests" do
+  pending "AccessibilityCalculator concurrent access" do
+    it "handles 100 fibers accessing same instance" do
+      calculator = PrismatIQ::AccessibilityCalculator.new
+      results = Channel(Float64).new(100)
+      errors = Channel(Exception?).new(100)
+      
+      100.times do |i|
+        spawn do
+          begin
+            color = PrismatIQ::RGB.new(i % 256, (i * 2) % 256, (i * 3) % 256)
+            lum = calculator.relative_luminance(color)
+            results.send(lum)
+          rescue ex
+            errors.send(ex)
+          end
+        end
+      end
+      
+      # Collect all results
+      collected_results = 100.times.map { results.receive }.to_a
+      collected_errors = 100.times.map { errors.receive }.to_a
+      
+      # Verify no errors
+      collected_errors.compact.should be_empty
+      
+      # Verify all results are valid
+      collected_results.all? { |r| r >= 0.0 && r <= 1.0 }.should be_true
+    end
+
+    it "handles concurrent contrast ratio calculations" do
+      calculator = PrismatIQ::AccessibilityCalculator.new
+      results = Channel(Float64).new(50)
+      
+      50.times do |i|
+        spawn do
+          fg = PrismatIQ::RGB.new(i % 256, (i * 2) % 256, (i * 3) % 256)
+          bg = PrismatIQ::RGB.new((255 - i) % 256, (255 - i * 2) % 256, (i * 4) % 256)
+          ratio = calculator.contrast_ratio(fg, bg)
+          results.send(ratio)
+        end
+      end
+      
+      collected = 50.times.map { results.receive }
+      collected.all? { |r| r >= 1.0 && r <= 21.0 }.should be_true
+    end
+
+    it "maintains cache consistency" do
+      calculator = PrismatIQ::AccessibilityCalculator.new
+      color = PrismatIQ::RGB.new(128, 128, 128)
+      
+      # Multiple fibers calculate same color
+      results = Channel(Float64).new(10)
+      
+      10.times do
+        spawn do
+          lum = calculator.relative_luminance(color)
+          results.send(lum)
+        end
+      end
+      
+      collected = 10.times.map { results.receive }
+      # All should return the same value (from cache)
+      collected.uniq.size.should eq(1)
+    end
+  end
+
+  describe "ThemeDetector concurrent access" do
+    it "handles 100 fibers accessing same instance" do
+      detector = PrismatIQ::ThemeDetector.new
+      results = Channel(Symbol).new(100)
+      
+      100.times do |i|
+        spawn do
+          color = PrismatIQ::RGB.new(i % 256, (i * 2) % 256, (i * 3) % 256)
+          theme = detector.detect_theme(color)
+          results.send(theme)
+        end
+      end
+      
+      collected = 100.times.map { results.receive }
+      collected.all? { |t| t == :dark || t == :light }.should be_true
+    end
+
+    it "handles concurrent palette analysis" do
+      detector = PrismatIQ::ThemeDetector.new
+      results = Channel(Hash(Symbol, Array(PrismatIQ::RGB))).new(10)
+      
+      10.times do
+        spawn do
+          palette = (0...10).map { |i| PrismatIQ::RGB.new(i * 25, i * 10, 255 - i * 20) }
+          analysis = detector.analyze_palette(palette)
+          results.send(analysis)
+        end
+      end
+      
+      10.times.map { results.receive }
+      # If we got here without errors, the test passes
+    end
+
+    it "maintains cache consistency" do
+      detector = PrismatIQ::ThemeDetector.new
+      color = PrismatIQ::RGB.new(100, 150, 200)
+      
+      results = Channel(Symbol).new(10)
+      
+      10.times do
+        spawn do
+          theme = detector.detect_theme(color)
+          results.send(theme)
+        end
+      end
+      
+      collected = 10.times.map { results.receive }
+      collected.uniq.size.should eq(1)
+    end
+  end
+
+  describe "HistogramPool concurrent access" do
+    it "handles concurrent acquire/release from multiple fibers" do
+      pool = PrismatIQ::Core::HistogramPool.new(50)
+      results = Channel(Bool).new(100)
+      
+      100.times do |i|
+        spawn do
+          begin
+            histo = pool.acquire
+            histo[i % 32768] = (i % 256).to_u32
+            pool.release(histo)
+            results.send(true)
+          rescue
+            results.send(false)
+          end
+        end
+      end
+      
+      collected = 100.times.map { results.receive }
+      collected.all?.should be_true
+    end
+
+    it "maintains pool integrity under load" do
+      pool = PrismatIQ::Core::HistogramPool.new(20)
+      
+      # Simulate high contention
+      50.times.map do
+        spawn do
+          10.times do
+            histo = pool.acquire
+            pool.release(histo)
+          end
+        end
+      end
+      
+      # Wait for all fibers
+      ::sleep(0.1)
+      
+      pool.size.should be <= 20
+    end
+  end
+
+  describe "AdaptiveChunkSizer thread safety" do
+    it "returns consistent results under concurrent access" do
+      results = Channel(Int32).new(100)
+      
+      100.times do
+        spawn do
+          size = PrismatIQ::Core::AdaptiveChunkSizer.calculate(1_000_000, 8)
+          results.send(size)
+        end
+      end
+      
+      collected = 100.times.map { results.receive }
+      collected.uniq.size.should eq(1)
+    end
+  end
+
+  describe "Parallel palette extraction" do
+    it "handles multiple simultaneous extractions" do
+      # Create test pixels
+      pixels = Slice(UInt8).new(100 * 100 * 4) { |i| (i % 256).to_u8 }
+      options = PrismatIQ::Options.new(color_count: 5, quality: 10, threads: 0)
+      
+      results = Channel(Array(PrismatIQ::RGB)).new(5)
+      errors = Channel(Exception?).new(5)
+      
+      5.times do
+        spawn do
+          begin
+            palette = PrismatIQ.get_palette(pixels, 100, 100, options)
+            results.send(palette)
+          rescue ex
+            errors.send(ex)
+          end
+        end
+      end
+      
+      palettes = 5.times.map { results.receive }.to_a
+      error_count = 5.times.map { errors.receive }.to_a.compact.size
+      
+      error_count.should eq(0)
+      palettes.all? { |p| p.is_a?(Array(PrismatIQ::RGB)) }.should be_true
+    end
+  end
+end

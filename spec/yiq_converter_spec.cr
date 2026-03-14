@@ -1,5 +1,5 @@
 require "./spec_helper"
-require "../src/prismatiq/yiq_converter"
+require "../src/prismatiq/algorithm/color_space"
 
 describe PrismatIQ::YIQConverter do
   describe "from_rgb" do

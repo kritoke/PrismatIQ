@@ -36,7 +36,7 @@ module PrismatIQ
     end
 
     def self.default : Options
-      @@default ||= new
+      new
     end
   end
 end

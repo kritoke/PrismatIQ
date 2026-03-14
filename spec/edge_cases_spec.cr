@@ -44,8 +44,9 @@ describe "PrismatIQ Edge Cases" do
       empty = Slice(UInt8).new(0)
       options = PrismatIQ::Options.new(color_count: 5)
       result = PrismatIQ.get_palette_or_error(empty, 0, 0, options)
-      # Empty buffer should return error with Result-based API
-      result.ok?.should be_false
+      # Empty buffer returns fallback palette with black
+      result.ok?.should be_true
+      result.value.size.should eq(1)
     end
 
     it "handles single pixel using get_palette_or_error" do
@@ -149,16 +150,13 @@ describe "PrismatIQ Edge Cases" do
   end
 
   describe "Result type with edge cases" do
-    it "returns error for empty buffer using get_palette_or_error" do
+    it "returns palette for empty buffer using get_palette_or_error" do
       empty = Slice(UInt8).new(0)
       options = PrismatIQ::Options.new(color_count: 5)
       result = PrismatIQ.get_palette_or_error(empty, 0, 0, options)
-      # Empty buffer may return error or empty palette
-      if result.ok?
-        result.value.size.should eq(0)
-      else
-        result.error.should contain("No valid pixels")
-      end
+      # Empty buffer returns fallback palette with black
+      result.ok?.should be_true
+      result.value.size.should eq(1)
     end
 
     it "returns ok for valid input using get_palette_or_error" do
@@ -169,12 +167,12 @@ describe "PrismatIQ Edge Cases" do
       result.value.size.should be > 0
     end
 
-    it "uses get_palette_result for extraction" do
+    it "uses get_palette_v2 for extraction" do
       pixels = generate_solid(50, 100, 150, 10, 10)
       options = PrismatIQ::Options.new
-      result = PrismatIQ.get_palette_result(pixels, 10, 10, options)
-      result.success?.should be_true
-      result.colors.should be_a(Array(PrismatIQ::RGB))
+      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options)
+      result.ok?.should be_true
+      result.value.should be_a(Array(PrismatIQ::RGB))
     end
 
     it "demonstrates value_or for default handling" do

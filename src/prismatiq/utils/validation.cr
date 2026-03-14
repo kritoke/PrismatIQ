@@ -1,9 +1,39 @@
 require "../errors"
 
 module PrismatIQ
+  # Input validation utilities for secure image processing.
+  #
+  # This module provides comprehensive validation for file paths, options,
+  # and IO streams to prevent security vulnerabilities like path traversal,
+  # directory access, and resource exhaustion.
+  #
+  # # Thread Safety
+  #
+  # - **Pure Functions**: All validation methods are pure functions with no side effects
+  # - **Fully Thread-Safe**: Can be called concurrently from multiple fibers
+  # - **No Shared State**: No mutable state between method calls
+  #
+  # # Security Features
+  #
+  # - **Path Traversal Prevention**: Blocks `..` and `~` in file paths
+  # - **System Directory Protection**: Prevents access to `/etc`, `/sys`, `/proc`
+  # - **File Size Limits**: Enforces 100MB maximum file size
+  # - **Format Validation**: Only allows supported image formats
+  # - **Options Validation**: Validates parameter ranges (color_count, quality, etc.)
+  #
+  # # Usage
+  #
+  # ```
+  # # Validate file path before processing
+  # result = Validation.validate_file_path(user_input)
+  # if result.ok?
+  #   safe_path = result.value
+  #   # Process image...
+  # end
+  # ```
   module Utils
     module Validation
-      MAX_FILE_SIZE = 100 * 1024 * 1024 # 100MB
+      MAX_FILE_SIZE        = 100 * 1024 * 1024 # 100MB
       SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tiff", ".tif"]
 
       def self.validate_file_path(path : String) : Result(String, Error)
@@ -95,28 +125,26 @@ module PrismatIQ
 
       def self.validate_io(io : IO) : Result(IO, Error)
         # Check if IO is readable
-        begin
-          # Try to peek at the first few bytes to validate it's an image
-          pos = io.pos rescue 0
-          header = io.peek(8) rescue nil
+        # Try to peek at the first few bytes to validate it's an image
+        pos = io.pos rescue 0
+        header = io.peek(8) rescue nil
 
-          if header && header.size > 0
-            # Check for common image file signatures
-            unless is_image_header?(header)
-              return Result(IO, Error).err(Error.unsupported_format("Unknown image format"))
-            end
+        if header && header.size > 0
+          # Check for common image file signatures
+          unless image_header?(header)
+            return Result(IO, Error).err(Error.unsupported_format("Unknown image format"))
           end
-
-          # Reset position if possible
-          io.pos = pos rescue nil
-
-          Result(IO, Error).ok(io)
-        rescue ex : Exception
-          Result(IO, Error).err(Error.corrupted_image("Cannot read from IO: #{ex.message}"))
         end
+
+        # Reset position if possible
+        io.pos = pos rescue nil
+
+        Result(IO, Error).ok(io)
+      rescue ex : Exception
+        Result(IO, Error).err(Error.corrupted_image("Cannot read from IO: #{ex.message}"))
       end
 
-      private def self.is_image_header?(header : Bytes) : Bool
+      private def self.image_header?(header : Bytes) : Bool
         # PNG: 89 50 4E 47 0D 0A 1A 0A
         return true if header[0..3] == Bytes[0x89, 0x50, 0x4E, 0x47]
 

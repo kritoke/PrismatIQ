@@ -42,29 +42,6 @@ describe PrismatIQ::Options do
   end
 end
 
-describe PrismatIQ::PaletteResult do
-  describe ".ok" do
-    it "creates successful result" do
-      colors = [PrismatIQ::RGB.new(255, 0, 0)]
-      result = PrismatIQ::PaletteResult.ok(colors, 100)
-      result.success?.should be_true
-      result.colors.should eq(colors)
-      result.total_pixels.should eq(100)
-      result.error.should be_nil
-    end
-  end
-
-  describe ".err" do
-    it "creates error result" do
-      result = PrismatIQ::PaletteResult.err("Something went wrong")
-      result.success?.should be_false
-      result.colors.should be_empty
-      result.total_pixels.should eq(0)
-      result.error.should eq("Something went wrong")
-    end
-  end
-end
-
 describe PrismatIQ::RGB do
   describe "serialization" do
     it "serializes to JSON as hex" do

@@ -1,6 +1,4 @@
 module PrismatIQ
-  alias Error = String | Exception
-
   struct Result(T, E)
     @value : T?
     @error : E?

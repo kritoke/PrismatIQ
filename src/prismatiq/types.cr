@@ -1,7 +1,7 @@
 require "./rgb"
 require "./options"
 require "./result"
-require "./yiq_converter"
+require "./algorithm/color_space"
 
 module PrismatIQ
   struct Color
@@ -225,24 +225,6 @@ module PrismatIQ
         end
       end
       VBox.new(@y1, @y2, @i1, @i2, @q1, @q2, c, @histo)
-    end
-  end
-
-  struct PaletteResult
-    getter colors : Array(RGB)
-    getter? success : Bool
-    getter error : String?
-    getter total_pixels : Int32
-
-    def initialize(@colors : Array(RGB), @success : Bool, @error : String?, @total_pixels : Int32)
-    end
-
-    def self.ok(colors : Array(RGB), total_pixels : Int32) : PaletteResult
-      new(colors, true, nil, total_pixels)
-    end
-
-    def self.err(message : String) : PaletteResult
-      new([] of RGB, false, message, 0)
     end
   end
 

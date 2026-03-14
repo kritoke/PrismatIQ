@@ -1,5 +1,5 @@
 require "../types"
-require "../yiq_converter"
+require "../algorithm/color_space"
 
 module PrismatIQ
   module Core
@@ -79,8 +79,6 @@ module PrismatIQ
         if chunk.nil?
           cache_bytes = ::PrismatIQ::CPU.l2_cache_bytes || 256 * 1024
           chunk = [(cache_bytes // 4 // locals.size), 1024].max
-        else
-          chunk = chunk.not_nil!
         end
 
         start = 0

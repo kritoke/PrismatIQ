@@ -6,7 +6,7 @@ describe PrismatIQ::AccessibilityCalculator do
       calc = PrismatIQ::AccessibilityCalculator.new
       white = PrismatIQ::RGB.new(255, 255, 255)
       lum = calc.relative_luminance(white)
-      
+
       lum.should be_close(1.0, 0.01)
     end
 
@@ -14,17 +14,17 @@ describe PrismatIQ::AccessibilityCalculator do
       calc = PrismatIQ::AccessibilityCalculator.new
       black = PrismatIQ::RGB.new(0, 0, 0)
       lum = calc.relative_luminance(black)
-      
+
       lum.should be_close(0.0, 0.01)
     end
 
     it "caches luminance values" do
       calc = PrismatIQ::AccessibilityCalculator.new
       color = PrismatIQ::RGB.new(128, 128, 128)
-      
+
       lum1 = calc.relative_luminance(color)
       lum2 = calc.relative_luminance(color)
-      
+
       lum1.should eq(lum2)
     end
   end
@@ -35,7 +35,7 @@ describe PrismatIQ::AccessibilityCalculator do
       black = PrismatIQ::RGB.new(0, 0, 0)
       white = PrismatIQ::RGB.new(255, 255, 255)
       ratio = calc.contrast_ratio(black, white)
-      
+
       ratio.should be_close(21.0, 1.0)
     end
 
@@ -43,7 +43,7 @@ describe PrismatIQ::AccessibilityCalculator do
       calc = PrismatIQ::AccessibilityCalculator.new
       color = PrismatIQ::RGB.new(100, 100, 100)
       ratio = calc.contrast_ratio(color, color)
-      
+
       ratio.should be_close(1.0, 0.01)
     end
   end
@@ -54,7 +54,7 @@ describe PrismatIQ::AccessibilityCalculator do
       black = PrismatIQ::RGB.new(0, 0, 0)
       white = PrismatIQ::RGB.new(255, 255, 255)
       level = calc.wcag_level(black, white)
-      
+
       level.should eq(PrismatIQ::WCAGLevel::AAA)
     end
 
@@ -63,7 +63,7 @@ describe PrismatIQ::AccessibilityCalculator do
       gray1 = PrismatIQ::RGB.new(100, 100, 100)
       gray2 = PrismatIQ::RGB.new(110, 110, 110)
       level = calc.wcag_level(gray1, gray2)
-      
+
       level.should eq(PrismatIQ::WCAGLevel::Fail)
     end
   end
@@ -72,10 +72,10 @@ describe PrismatIQ::AccessibilityCalculator do
     it "clears all cached values" do
       calc = PrismatIQ::AccessibilityCalculator.new
       color = PrismatIQ::RGB.new(128, 128, 128)
-      
+
       calc.relative_luminance(color)
       calc.clear_cache
-      
+
       # After clearing, cache should be empty
       # This is verified by the implementation working correctly
     end
@@ -85,7 +85,7 @@ describe PrismatIQ::AccessibilityCalculator do
     it "handles concurrent access safely" do
       calc = PrismatIQ::AccessibilityCalculator.new
       channel = Channel(Float64).new(100)
-      
+
       100.times do |i|
         spawn do
           color = PrismatIQ::RGB.new(i % 256, (i * 2) % 256, (i * 3) % 256)
@@ -93,9 +93,9 @@ describe PrismatIQ::AccessibilityCalculator do
           channel.send(lum)
         end
       end
-      
-      results = 100.times.map { channel.receive }.to_a
-      results.all? { |l| l >= 0.0 && l <= 1.0 }.should be_true
+
+      results = Array.new(100) { channel.receive }
+      results.all? { |luminance| luminance >= 0.0 && luminance <= 1.0 }.should be_true
     end
   end
 end

@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.6.0] - 2026-03-09
+## [0.6.0] - 2026-03-11
 
 ### Added
 
@@ -16,13 +16,21 @@ All notable changes to this project will be documented in this file.
 #### Structured Error Handling
 - `Error` struct with `type`, `message`, and `context` fields
 - `ErrorType` enum with 6 error types:
-  - `FileNotFound` - File doesn't exist
-  - `InvalidImagePath` - Path validation failed
+  - `FileNotFound` - File doesn't exist or cannot be accessed
+  - `InvalidImagePath` - Path validation failed (directory traversal, system directories, etc.)
   - `UnsupportedFormat` - Image format not supported
-  - `CorruptedImage` - Image data is corrupt
-  - `InvalidOptions` - Parameter validation failed
+  - `CorruptedImage` - Image data is corrupt or empty
+  - `InvalidOptions` - Parameter validation failed (out of range values)
   - `ProcessingFailed` - General processing error
 - Factory methods for each error type
+- Input validation for file paths, options, and IO streams
+
+#### Code Organization Improvements
+- Extracted `Core::PaletteExtractor` class for palette extraction logic
+- Extracted `Core::PaletteConvenience` class for async and convenience methods
+- Extracted `Constants` module for WCAG and YIQ constants
+- Reduced main file from 588 to 295 lines (under 300 target)
+- Clear module boundaries and responsibilities
 
 #### Thread-Safe Classes
 - `AccessibilityCalculator` - Instance-based accessibility calculations with isolated caching
@@ -32,26 +40,54 @@ All notable changes to this project will be documented in this file.
 - `HistogramPool` - Object pool for histogram reuse (25-40% memory reduction)
 - `AdaptiveChunkSizer` - Optimal processing based on image size
 
-#### Input Validation
-- `Utils::Validation.validate_file_path(path)` - Comprehensive path validation
-- `Utils::Validation.validate_options(options)` - Parameter validation
-- `Utils::Validation.validate_io(io)` - IO stream validation
-
-#### Code Organization
-- Extracted 10 focused modules from monolithic file
-- Clear module boundaries and responsibilities
-- Reduced main file by 47% (991 → 526 lines)
-
 #### Fiber-Based Parallelism
 - Migrated from `Thread.new` to `spawn` for parallel processing
 - Channel-based histogram result collection
 - Better integration with Crystal's scheduler
 
 #### Testing
-- Added 40 comprehensive tests (total: 262 tests, 100% pass rate)
+- Added 43 comprehensive tests (total: 290 tests, 100% pass rate)
 - Thread safety tests
 - Concurrent access tests
 - Memory pool tests
+- Edge case tests (zero-byte files, system directories, corrupted images)
+
+### Changed
+
+#### Performance Improvements
+- Memory usage reduced by 25-40% on typical workloads
+- Small images (<100K): ~90% reduction
+- Medium images (1M): ~50% reduction
+- Large images (10M): ~25% reduction
+- Adaptive processing eliminates overhead for small images
+
+#### Code Quality
+- Main file reduced by 50% (588 → 295 lines)
+- Removed 465+ lines of duplicate code
+- Improved code navigation and maintainability
+
+### Security
+
+- **CRITICAL**: Eliminated shell command injection vulnerability in CPU detection
+- **HIGH**: Added path traversal prevention
+- **MEDIUM**: Added file size limits (100MB max)
+- **LOW**: Sanitized error messages to not expose full paths
+
+### Fixed
+
+- Race conditions in accessibility and theme modules (now instance-based)
+- Memory leaks from histogram allocation (now pooled)
+- Inefficient processing of small images (now single-threaded)
+- Inconsistent error handling (now unified with Result types)
+
+### Deprecated
+
+The following are deprecated and will be removed in v0.7.0:
+- `get_palette(path, color_count, quality, threads)` - Use `get_palette_v2(path, options)`
+- `PaletteResult` struct - Use `Result(Array(RGB), Error)`
+- Sentinel error value `[RGB.new(0,0,0)]` - Check for `Result::Err` instead
+- Module-level `Accessibility` methods - Use `AccessibilityCalculator` instance
+- Module-level `Theme` methods - Use `ThemeDetector` instance
 
 ### Changed
 

@@ -1,5 +1,5 @@
-require "tempdir"
-HAVE_TEMPDIR = true
+require "crtemp"
+HAVE_CRTEMP = true
 
 module PrismatIQ
   module TempfileHelper
@@ -11,11 +11,11 @@ module PrismatIQ
 
     # Create a secure temp file and write the provided slice bytes.
     # On Windows use a randomized-filename fallback; on Unix use mkstemp.
-    # Prefer using the installed tempdir shard when available. Dir.mktmpdir
+    # Prefer using the installed crtemp shard when available. Dir.mktmpdir
     # provides an atomic directory creation helper; we'll use it to create a
     # secure directory and then create a file inside it atomically.
     def self.create_and_write(prefix : String, data : Slice(UInt8)) : String?
-      result = try_tempdir_approach(prefix, data)
+      result = try_crtemp_approach(prefix, data)
       return result if result
 
       {% if flag?(:windows) %}
@@ -25,15 +25,15 @@ module PrismatIQ
       {% end %}
     end
 
-    private def self.try_tempdir_approach(prefix : String, data : Slice(UInt8)) : String?
-      return unless HAVE_TEMPDIR
+    private def self.try_crtemp_approach(prefix : String, data : Slice(UInt8)) : String?
+      return unless HAVE_CRTEMP
 
       begin
         Dir.mktmpdir do |dir|
-          base = dir.is_a?(Tempdir) ? dir.path : dir.to_s
+          base = dir.is_a?(Crtemp) ? dir.path : dir.to_s
           safe_prefix = prefix.size > 100 ? prefix[0, 100] : prefix
 
-          if dir.is_a?(Tempdir)
+          if dir.is_a?(Crtemp)
             created = dir.create_tempfile(safe_prefix, data)
             next created if created
           end
@@ -43,7 +43,7 @@ module PrismatIQ
           path
         end
       rescue ex : Exception
-        STDERR.puts "PrismatIQ: tempfile via tempdir failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+        STDERR.puts "PrismatIQ: tempfile via crtemp failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
       end
       nil
     end

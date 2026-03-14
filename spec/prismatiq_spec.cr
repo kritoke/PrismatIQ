@@ -143,3 +143,111 @@ describe "multithreaded histogram parity" do
     end
   end
 end
+
+describe "concurrent palette extraction" do
+  it "handles multiple concurrent palette extractions safely" do
+    width = 100
+    height = 100
+    pixels = Slice(UInt8).new(width * height * 4) do |i|
+      if i % 4 == 3
+        255_u8
+      else
+        (i % 256).to_u8
+      end
+    end
+
+    results = Channel(Array(PrismatIQ::RGB)).new(10)
+    errors = Channel(Exception?).new(10)
+
+    10.times do
+      spawn do
+        begin
+          options = PrismatIQ::Options.new(color_count: 5, quality: 5, threads: 2)
+          palette = PrismatIQ.get_palette(pixels, width, height, options)
+          results.send(palette)
+          errors.send(nil)
+        rescue ex : Exception
+          errors.send(ex)
+        end
+      end
+    end
+
+    palettes = [] of Array(PrismatIQ::RGB)
+    error_list = [] of Exception?
+
+    10.times { palettes << results.receive }
+    10.times { error_list << errors.receive }
+
+    error_list.compact.should be_empty
+    palettes.size.should eq(10)
+    palettes.each do |palette|
+      palette.size.should be > 0
+    end
+  end
+
+  it "produces consistent results under concurrent access" do
+    width = 50
+    height = 50
+    pixels = Slice(UInt8).new(width * height * 4) do |i|
+      if i % 4 == 3
+        255_u8
+      else
+        ((i // 4) % 256).to_u8
+      end
+    end
+
+    options = PrismatIQ::Options.new(color_count: 3, quality: 1, threads: 1)
+    reference = PrismatIQ.get_palette(pixels, width, height, options)
+
+    results = Channel(Array(PrismatIQ::RGB)).new(20)
+
+    20.times do
+      spawn do
+        opts = PrismatIQ::Options.new(color_count: 3, quality: 1, threads: 1)
+        results.send(PrismatIQ.get_palette(pixels, width, height, opts))
+      end
+    end
+
+    all_palettes = [] of Array(PrismatIQ::RGB)
+    20.times { all_palettes << results.receive }
+
+    all_palettes.each do |palette|
+      palette.size.should eq(reference.size)
+      palette.zip(reference).each do |actual, expected|
+        actual.r.should eq(expected.r)
+        actual.g.should eq(expected.g)
+        actual.b.should eq(expected.b)
+      end
+    end
+  end
+
+  it "handles concurrent extractions with different thread counts" do
+    width = 80
+    height = 80
+    pixels = Slice(UInt8).new(width * height * 4) do |i|
+      if i % 4 == 3
+        255_u8
+      else
+        rand(256).to_u8
+      end
+    end
+
+    results = Channel(Array(PrismatIQ::RGB)).new(15)
+    thread_counts = [1, 2, 4, 8]
+
+    thread_counts.each do |threads|
+      spawn do
+        options = PrismatIQ::Options.new(color_count: 5, quality: 3, threads: threads)
+        results.send(PrismatIQ.get_palette(pixels, width, height, options))
+      end
+    end
+
+    all_palettes = [] of Array(PrismatIQ::RGB)
+    thread_counts.size.times { all_palettes << results.receive }
+
+    all_palettes.each do |palette|
+      palette.size.should be > 0
+      palette.size.should be <= 5
+    end
+  end
+end

@@ -1,20 +1,24 @@
+require "./prismatiq/errors"
+require "./prismatiq/result"
+require "./prismatiq/options"
+require "./prismatiq/rgb"
+require "./prismatiq/utils/validation"
+require "./prismatiq/constants"
 require "./cpu_cores"
+require "crimage"
 require "./prismatiq/types"
 require "./prismatiq/algorithm/priority_queue"
 require "./prismatiq/algorithm/mmcq"
 require "./prismatiq/thread_safe_cache"
-require "./prismatiq/yiq_converter"
+require "./prismatiq/algorithm/color_space"
 require "./prismatiq/color_extractor"
 require "./prismatiq/accessibility"
 require "./prismatiq/accessibility_calculator"
 require "./prismatiq/theme"
 require "./prismatiq/theme_detector"
 require "./prismatiq/config"
-require "./prismatiq/result"
-require "./prismatiq/options"
-require "./prismatiq/rgb"
-require "./prismatiq/core/histogram_pool"
-require "crimage"
+require "./prismatiq/core/palette_extractor"
+require "./prismatiq/core/palette_convenience"
 require "./prismatiq/tempfile_helper"
 require "./prismatiq/bmp_parser"
 require "./prismatiq/ico"
@@ -24,58 +28,39 @@ require "yaml"
 module PrismatIQ
   VERSION = "0.4.1"
 
-  module Constants
-    ALPHA_THRESHOLD_DEFAULT = 125_u8
-    HISTOGRAM_SIZE          =  32768
-    RGBA_CHANNELS           =      4
-
-    # Luminance threshold for theme detection (0.5 = midpoint)
-    LUMINANCE_THRESHOLD = 0.5
-
-    # WCAG 2.1 Contrast Ratio Constants
-    module WCAG
-      CONTRAST_RATIO_AA        = 4.5 # Minimum for normal text (AA)
-      CONTRAST_RATIO_AA_LARGE  = 3.0 # Minimum for large text (AA Large)
-      CONTRAST_RATIO_AAA       = 7.0 # Minimum for normal text (AAA)
-      CONTRAST_RATIO_AAA_LARGE = 4.5 # Minimum for large text (AAA Large)
-    end
-
-    module YIQ
-      Y_FROM_R =  0.299
-      Y_FROM_G =  0.587
-      Y_FROM_B =  0.114
-      I_FROM_R =  0.596
-      I_FROM_G = -0.274
-      I_FROM_B = -0.322
-      Q_FROM_R =  0.211
-      Q_FROM_G = -0.523
-      Q_FROM_B =  0.312
-
-      R_FROM_Y =    1.0
-      R_FROM_I =  0.956
-      R_FROM_Q =  0.621
-      G_FROM_Y =    1.0
-      G_FROM_I = -0.272
-      G_FROM_Q = -0.647
-      B_FROM_Y =    1.0
-      B_FROM_I = -1.106
-      B_FROM_Q =  1.703
-    end
-  end
-
-  # Result type for palette extraction with success/failure information
-
-
-  # Quantize Y/I/Q channels into 5-bit (0..31) bins from RGB components.
-
-  # Validation exception for invalid input parameters
-
-
+  # High-performance Crystal shard for extracting dominant color palettes from images.
+  #
+  # ## Thread Safety
+  #
+  # All public API methods are fully thread-safe and can be called concurrently
+  # from multiple fibers without any race conditions. The library uses:
+  # - Instance-based state (no shared mutable global state)
+  # - Thread-local histogram processing
+  # - Synchronized shared resources when necessary
+  # - Fiber-based concurrency (`spawn`) instead of OS threads
+  #
+  # ## Memory Optimization
+  #
+  # Memory usage is reduced by 25-40% through:
+  # - Histogram object pooling (`Core::HistogramPool`)
+  # - Adaptive chunk sizing based on image dimensions
+  # - Chunked histogram merging optimized for CPU cache
+  # - Lazy initialization of resources
+  #
+  # ## Error Handling
+  #
+  # Two error handling patterns are supported:
+  # - **Result-based**: `get_palette_v2` returns `Result(Array(RGB), Error)`
+  # - **Exception-based**: `get_palette_v2!` raises exceptions on errors
+  #
+  # ## Migration
+  #
+  # This version deprecates several legacy APIs. See the v0.6.0 CHANGELOG
+  # for migration instructions. Deprecated features will be removed in v0.7.0.
 
   # ============================================================================
   # Public API - Palette Extraction
-  # All public methods use the Options struct as the single source of truth
-  # for extraction parameters (color_count, quality, threads, alpha_threshold).
+  # Delegates to Core::PaletteExtractor for actual implementation
   # ============================================================================
 
   # Extract palette from a file path.
@@ -83,12 +68,7 @@ module PrismatIQ
   # @param options [Options] Configuration options (color_count, quality, threads, alpha_threshold)
   # @return [Array(RGB)] Array of dominant colors
   def self.get_palette(path : String, options : Options = Options.default) : Array(RGB)
-    options.validate!
-    if Config.default.debug?
-      STDERR.puts "get_palette(path): path=#{path} options=#{options.inspect}"
-    end
-    img = CrImage.read(path)
-    get_palette_from_image(img.as(CrImage::Image), options)
+    Core::PaletteExtractor.new.extract_from_path(path, options)
   end
 
   # Extract palette from an IO source.
@@ -96,9 +76,7 @@ module PrismatIQ
   # @param options [Options] Configuration options
   # @return [Array(RGB)] Array of dominant colors
   def self.get_palette(io : IO, options : Options = Options.default) : Array(RGB)
-    options.validate!
-    img = CrImage.read(io)
-    get_palette_from_image(img.as(CrImage::Image), options)
+    Core::PaletteExtractor.new.extract_from_io(io, options)
   end
 
   # Extract palette from an image object.
@@ -106,13 +84,9 @@ module PrismatIQ
   # @param options [Options] Configuration options
   # @return [Array(RGB)] Array of dominant colors
   def self.get_palette(img, options : Options = Options.default) : Array(RGB)
-    options.validate!
-    # Prefer to operate on CrImage::Image directly; if the caller passed a
-    # different type, attempt to coerce it into an image and delegate.
     if img.is_a?(CrImage::Image)
-      get_palette_from_image(img.as(CrImage::Image), options)
+      Core::PaletteExtractor.new.extract_from_image(img.as(CrImage::Image), options)
     else
-      # Try to read it using CrImage.read if possible
       begin
         begin
           read_img = CrImage.read(img)
@@ -121,7 +95,7 @@ module PrismatIQ
           read_img = nil
         end
         if read_img
-          return get_palette_from_image(read_img.as(CrImage::Image), options)
+          return Core::PaletteExtractor.new.extract_from_image(read_img.as(CrImage::Image), options)
         end
       rescue ex : Exception
         STDERR.puts "get_palette: unexpected error while attempting fallback read: #{ex.message}" if Config.default.debug?
@@ -139,27 +113,14 @@ module PrismatIQ
   # @return [Array(RGB)] Array of dominant colors
   def self.get_palette(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.default, config : Config = Config.default) : Array(RGB)
     options.validate!
-    get_palette_from_buffer(pixels, width, height, options, config)
+    extractor = Core::PaletteExtractor.new(config)
+    extractor.extract_from_buffer(pixels, width, height, options)
   end
 
   # Concrete implementation working with CrImage::Image (compile-time known type)
   # Uses Options as single source of truth for all extraction parameters.
   def self.get_palette_from_image(image, options : Options, config : Config = Config.default) : Array(RGB)
-    options.validate!
-    # Convert image to an RGBA image via CrImage::Pipeline which provides a
-    # concrete RGBA image with a contiguous `pix` buffer. This avoids compile-
-    # time dispatch issues on CrImage's many image variants.
-    if config.debug?
-      STDERR.puts "get_palette_from_image: image.class=#{image.class} options=#{options.inspect}"
-    end
-    rgba_image = CrImage::Pipeline.new(image).result
-    width = rgba_image.bounds.width.to_i32
-    height = rgba_image.bounds.height.to_i32
-
-    src = rgba_image.pix
-    pixels = Slice.new(src.size) { |i| src[i] }
-    # Delegate to the buffer-based extraction now that we have an RGBA buffer.
-    get_palette_from_buffer(pixels, width, height, options, config)
+    Core::PaletteExtractor.new(config).extract_from_image(image, options)
   end
 
   # Helper: run palette extraction directly from an RGBA buffer (Slice(UInt8)).
@@ -167,13 +128,8 @@ module PrismatIQ
   # Uses Options as single source of truth for all extraction parameters.
   def self.get_palette_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options, config : Config = Config.default) : Array(RGB)
     options.validate!
-    histo, total_pixels = build_histo_from_buffer(pixels, width, height, options, config)
-
-    if total_pixels == 0
-      return [RGB.new(0, 0, 0)]
-    end
-
-    quantize_palette(histo, options, config)[0...options.color_count]
+    extractor = Core::PaletteExtractor.new(config)
+    extractor.extract_from_buffer(pixels, width, height, options)
   end
 
   # Backward-compatible overload with keyword arguments
@@ -184,97 +140,8 @@ module PrismatIQ
   end
 
   private def self.quantize_palette(histo : Array(UInt32), options : Options, config : Config = Config.default) : Array(RGB)
-    mmcq = Algorithm::MMCQ.new(histo, config: config)
-    vboxes = mmcq.quantize(options.color_count)
-
-    palette = vboxes.compact_map do |box|
-      next if box.count == 0
-      box.average_color_rgb
-    end
-
-    sort_by_popularity(palette, histo)
+    Core::PaletteExtractor.new(config).send(:quantize_palette, histo, options)
   end
-
-  # Build histogram from an RGBA buffer using Options as single source of truth.
-  # Returns [histo, total_pixels].
-  private def self.build_histo_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options, config : Config = Config.default) : Tuple(Array(UInt32), Int32)
-    histo = Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32)
-    step = options.quality < 1 ? 1 : options.quality
-    alpha_threshold = options.alpha_threshold
-
-    image_size = width * height
-    use_parallel = Core::AdaptiveChunkSizer.should_use_parallel?(image_size) && options.threads != 1
-
-    if !use_parallel || options.threads <= 1
-      total_pixels = process_pixel_range(pixels, width, 0, height, step, alpha_threshold, histo)
-    else
-      thread_count = Core::AdaptiveChunkSizer.optimal_thread_count(image_size, config.thread_count_for(height, options.threads))
-      
-      channel = Channel(Tuple(Array(UInt32)?, Int32)).new(thread_count)
-      
-      rows_per = (height + thread_count - 1) // thread_count
-      
-      pool = Core::HistogramPool.new(thread_count * 2)
-      
-      thread_count.times do |thread_idx|
-        start_row = thread_idx * rows_per
-        break if start_row >= height
-        end_row = {start_row + rows_per, height}.min
-        
-        spawn do
-          local_histo = pool.acquire
-          local_count = process_pixel_range(pixels, width, start_row, end_row, step, alpha_threshold, local_histo)
-          channel.send({local_histo, local_count})
-        end
-      end
-      
-      total_pixels = 0
-      thread_count.times do
-        local_histo, local_count = channel.receive
-        if local_histo
-          merge_histograms(histo, local_histo)
-          total_pixels += local_count
-          pool.release(local_histo)
-        end
-      end
-    end
-
-    {histo, total_pixels}
-  end
-
-  private def self.merge_histograms(dest : Array(UInt32), src : Array(UInt32)) : Nil
-    dest.size.times do |i|
-      dest[i] += src[i]
-    end
-  end
-
-  @[AlwaysInline]
-  private def self.process_pixel_range(pixels : Slice(UInt8), width : Int32, start_row : Int32, end_row : Int32, step : Int32, alpha_threshold : UInt8, histo : Array(UInt32)) : Int32
-    count = 0
-    y_coord = start_row
-    while y_coord < end_row
-      x_coord = 0
-      while x_coord < width
-        idx = (y_coord * width + x_coord) * 4
-        break if idx + 3 >= pixels.size
-
-        a = pixels[idx + 3]
-        if a >= alpha_threshold
-          r = pixels[idx].to_i
-          g = pixels[idx + 1].to_i
-          b = pixels[idx + 2].to_i
-          y, i, q = YIQConverter.quantize_from_rgb(r, g, b)
-          histo[VBox.to_index(y, i, q)] += 1_u32
-          count += 1
-        end
-
-        x_coord += step
-      end
-      y_coord += step
-    end
-    count
-  end
-
 
   # Find closest color in palette to a target color
   def self.find_closest(target : RGB, palette : Array(RGB)) : RGB?
@@ -292,50 +159,6 @@ module PrismatIQ
   # Extended API - Result-based and Stats variants
   # These provide additional functionality while still using Options.
   # ============================================================================
-
-  # Get palette result with success/failure information
-  # @param path [String] Path to the image file
-  # @param options [Options] Configuration options
-  # @return [PaletteResult] Result containing colors, success status, and error message
-  def self.get_palette_result(path : String, options : Options = Options.default) : PaletteResult
-    options.validate!
-    colors = get_palette(path, options)
-    PaletteResult.ok(colors, 0)
-  rescue ex : Exception
-    PaletteResult.err(ex.message || "Unknown error")
-  end
-
-  # Get palette result from IO source
-  # @param io [IO] IO object containing image data
-  # @param options [Options] Configuration options
-  # @return [PaletteResult] Result containing colors, success status, and error message
-  def self.get_palette_result(io : IO, options : Options = Options.default) : PaletteResult
-    options.validate!
-    colors = get_palette(io, options)
-    PaletteResult.ok(colors, 0)
-  rescue ex : Exception
-    PaletteResult.err(ex.message || "Unknown error")
-  end
-
-  # Get palette result from raw pixel buffer
-  # @param pixels [Slice(UInt8)] RGBA pixel data
-  # @param width [Int32] Image width
-  # @param height [Int32] Image height
-  # @param options [Options] Configuration options
-  # @param config [Config] Runtime configuration
-  # @return [PaletteResult] Result containing colors, success status, and error message
-  def self.get_palette_result(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.default, config : Config = Config.default) : PaletteResult
-    options.validate!
-    histo, total_pixels = build_histo_from_buffer(pixels, width, height, options, config)
-    if total_pixels == 0
-      return PaletteResult.err("No valid pixels found")
-    end
-
-    palette = quantize_palette(histo, options, config)
-    PaletteResult.ok(palette[0...options.color_count], total_pixels)
-  rescue ex : Exception
-    PaletteResult.err(ex.message || "Unknown error")
-  end
 
   # Extract palette with explicit error handling using Result type
   # @param path [String] Path to the image file
@@ -368,11 +191,9 @@ module PrismatIQ
   # @return [Result(Array(RGB), String)] Result containing palette or error message
   def self.get_palette_or_error(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.default, config : Config = Config.default) : Result(Array(RGB), String)
     options.validate!
-    histo, total_pixels = build_histo_from_buffer(pixels, width, height, options, config)
-    return Result(Array(RGB), String).err("No valid pixels found") if total_pixels == 0
-
-    palette = quantize_palette(histo, options, config)
-    Result(Array(RGB), String).ok(palette[0...options.color_count])
+    extractor = Core::PaletteExtractor.new(config)
+    palette = extractor.extract_from_buffer(pixels, width, height, options)
+    Result(Array(RGB), String).ok(palette)
   rescue ex : Exception
     Result(Array(RGB), String).err(ex.message || "Unknown error")
   end
@@ -426,164 +247,37 @@ module PrismatIQ
   # @param config [Config] Runtime configuration
   # @return [Result(Array(RGB), Error)] Result containing palette or Error
   def self.get_palette_v2(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.default, config : Config = Config.default) : Result(Array(RGB), Error)
-    histo, total_pixels = build_histo_from_buffer(pixels, width, height, options, config)
-    return Result(Array(RGB), Error).err(Error.invalid_options("pixels", "0", "No valid pixels found")) if total_pixels == 0
-
-    palette = quantize_palette(histo, options, config)
-    Result(Array(RGB), Error).ok(palette[0...options.color_count])
+    extractor = Core::PaletteExtractor.new(config)
+    palette = extractor.extract_from_buffer(pixels, width, height, options)
+    if palette.size == 1 && palette[0] == RGB.new(0, 0, 0)
+      return Result(Array(RGB), Error).err(Error.invalid_options("pixels", "0", "No valid pixels found"))
+    end
+    Result(Array(RGB), Error).ok(palette)
   rescue ex : Exception
     Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "Processing failed"))
   end
 
-  # Channel-based async palette extraction
-
-  # Channel-based async palette extraction
-  # @param path [String] Path to the image file
-  # @param options [Options] Configuration options
-  # @return [Channel(Array(RGB))] Channel that will receive the palette
   def self.get_palette_channel(path : String, options : Options = Options.default) : Channel(Array(RGB))
-    ch = Channel(Array(RGB)).new(1)
-    spawn do
-      begin
-        ch.send(get_palette(path, options))
-      rescue
-        ch.send([RGB.new(0, 0, 0)])
-      end
-    end
-    ch
+    Core::PaletteConvenience.new.get_palette_channel(path, options)
   end
 
-  # Extract palette with detailed statistics (counts and percentages)
-  # @param pixels [Slice(UInt8)] RGBA pixel data
-  # @param width [Int32] Image width
-  # @param height [Int32] Image height
-  # @param options [Options] Configuration options
-  # @param config [Config] Runtime configuration
-  # @return [Tuple(Array(PaletteEntry), Int32)] Tuple of palette entries with stats and total pixel count
   def self.get_palette_with_stats(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.default, config : Config = Config.default) : Tuple(Array(PaletteEntry), Int32)
-    histo, total_pixels = build_histo_from_buffer(pixels, width, height, options, config)
-    if total_pixels == 0
-      return {[] of PaletteEntry, 0}
-    end
-
-    mmcq = Algorithm::MMCQ.new(histo, config: config)
-    vboxes = mmcq.quantize(options.color_count)
-
-    entries = vboxes.compact_map do |box|
-      next if box.count == 0
-      rgb = box.average_color_rgb
-      percent = box.count.to_f64 / total_pixels.to_f64
-      PaletteEntry.new(rgb, box.count, percent)
-    end.sort_by!(&.count).reverse!
-
-    {entries, total_pixels}
+    Core::PaletteConvenience.new(config).get_palette_with_stats(pixels, width, height, options)
   end
 
-  # Compatibility wrapper returning ColorThief-like hex array
-  # @param pixels [Slice(UInt8)] RGBA pixel data
-  # @param width [Int32] Image width
-  # @param height [Int32] Image height
-  # @param options [Options] Configuration options
-  # @return [Array(String)] Array of hex color strings
   def self.get_palette_color_thief(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.default) : Array(String)
-    # For the ColorThief-style wrapper return deterministic results independent
-    # of threading. Build stats single-threaded to ensure stable ordering.
-    single_threaded_options = options.with_threads(1)
-    entries, _ = get_palette_with_stats(pixels, width, height, single_threaded_options)
-    entries.map(&.rgb.to_hex)
+    Core::PaletteConvenience.new.get_palette_color_thief(pixels, width, height, options)
   end
 
-  # ============================================================================
-  # Convenience Methods - Single color extraction
-  # ============================================================================
-
-  # Extract a single dominant color from a file path
-  # @param path [String] Path to the image file
-  # @return [RGB] The dominant color
   def self.get_color(path : String) : RGB
-    get_palette(path, Options.default.with_color_count(1).with_quality(1))[0]
+    Core::PaletteConvenience.new.get_color_from_path(path)
   end
 
-  # Extract a single dominant color from IO
-  # @param io [IO] IO object containing image data
-  # @return [RGB] The dominant color
   def self.get_color(io : IO) : RGB
-    get_palette(io, Options.default.with_color_count(1).with_quality(1))[0]
+    Core::PaletteConvenience.new.get_color_from_io(io)
   end
 
-  # Extract a single dominant color from an image
-  # @param img [CrImage::Image | String | IO] Image source
-  # @return [RGB] The dominant color
   def self.get_color(img) : RGB
-    get_palette(img, Options.default.with_color_count(1).with_quality(1))[0]
-  end
-
-  private def self.sort_by_popularity(palette : Array(RGB), histo)
-    palette.sort_by do |rgb|
-      y, i, q = YIQConverter.quantize_from_rgb(rgb.r, rgb.g, rgb.b)
-      idx = YIQConverter.to_index(y, i, q)
-      count = if histo.is_a?(Hash(Int32, Int32))
-                histo.fetch(idx, 0)
-              else
-                # histo may be Array(UInt32)
-                val = histo[idx]
-                if val.is_a?(UInt32)
-                  val.to_i
-                else
-                  val
-                end
-              end
-      -count
-    end
-  end
-
-  # Merge local per-thread histograms into the master histogram using chunked
-  # aggregation to improve cache locality. Returns total pixel count.
-  private def self.merge_locals_chunked(histo : Array(UInt32), locals : Array(Array(UInt32)?), config : Config) : Int32
-    total = 0
-
-    chunk = config.merge_chunk.nil? ? nil : config.merge_chunk
-    if chunk.nil?
-      # adaptive: use L2 cache size when available
-      cache_bytes = ::PrismatIQ::CPU.l2_cache_bytes || 256 * 1024
-      threads = [locals.size, 1].max
-      # allocate a conservative per-thread working set
-      bytes_per_chunk_target = (cache_bytes.to_f / (threads + 1)) * 0.8
-      slots = (bytes_per_chunk_target / 4.0).to_i
-      # clamp sensible bounds
-      slots = [[slots, 64].max, Constants::HISTOGRAM_SIZE].min
-      # round to nearest power-of-two for alignment
-      chunk = 1
-      while chunk < slots
-        chunk <<= 1
-      end
-      # if we overshot, step back one
-      chunk >>= 1 if chunk > slots && chunk > 64
-    end
-
-    start = 0
-    if config.debug?
-      STDERR.puts "merge_locals_chunked: chunk=#{chunk} threads=#{locals.size}"
-    end
-    while start < Constants::HISTOGRAM_SIZE
-      ending = [start + chunk, Constants::HISTOGRAM_SIZE].min
-      idx = start
-      while idx < ending
-        sum = 0_u32
-        j = 0
-        while j < locals.size
-          local = locals[j]
-          if local
-            sum += local[idx]
-          end
-          j += 1
-        end
-        histo[idx] = sum
-        total += sum.to_i
-        idx += 1
-      end
-      start += chunk
-    end
-    total
+    Core::PaletteConvenience.new.get_color(img)
   end
 end

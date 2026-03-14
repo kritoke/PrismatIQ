@@ -241,7 +241,6 @@ describe PrismatIQ::ThreadSafeCache do
             key = "key_#{i % key_count}"
             cache.get_or_compute(key) do
               mutex.synchronize { compute_count += 1 }
-              # Simulate some computation
               value = compute_count
               value
             end
@@ -251,11 +250,63 @@ describe PrismatIQ::ThreadSafeCache do
 
       ::sleep(1.second)
 
-      # Each unique key should only be computed once
       compute_count.should eq(key_count)
-
-      # Cache should have exactly key_count entries
       cache.size.should eq(key_count)
+    end
+
+    it "handles 100 fibers accessing same cache concurrently" do
+      cache = PrismatIQ::ThreadSafeCache(String, Int32).new
+      compute_count = 0
+      mutex = Mutex.new
+      results = Channel(Int32).new(100)
+
+      100.times do |_|
+        spawn do
+          key = "shared_key"
+          value = cache.get_or_compute(key) do
+            mutex.synchronize { compute_count += 1 }
+            ::sleep(5.milliseconds)
+            42
+          end
+          results.send(value)
+        end
+      end
+
+      received = [] of Int32
+      100.times { received << results.receive }
+
+      compute_count.should eq(1)
+      received.all? { |v| v == 42 }.should be_true
+      cache.size.should eq(1)
+    end
+
+    it "handles 100 fibers with mixed read/write operations" do
+      cache = PrismatIQ::ThreadSafeCache(Int32, Int32).new
+      errors = Channel(String?).new(100)
+
+      100.times do |fiber_idx|
+        spawn do
+          begin
+            10.times do |op|
+              key = fiber_idx * 10 + op
+              if op % 2 == 0
+                cache.get_or_compute(key) { key * 2 }
+              else
+                cache[key] = key * 3
+              end
+            end
+            errors.send(nil)
+          rescue ex : Exception
+            errors.send(ex.message)
+          end
+        end
+      end
+
+      error_messages = [] of String?
+      100.times { error_messages << errors.receive }
+
+      error_messages.compact.size.should eq(0)
+      cache.size.should be > 0
     end
 
     it "works with complex value types under concurrent access" do

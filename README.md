@@ -63,13 +63,15 @@ A high-performance Crystal shard for extracting dominant color palettes from ima
   options = options.with_threads(4)
   ```
 
-  APIs of interest (with Options)
-  - `PrismatIQ.get_palette(path, options)` - Returns `Array(PrismatIQ::RGB)` 
-  - `PrismatIQ.get_palette(pixels, width, height, options)` - Buffer-based extraction
-  - `PrismatIQ.get_palette_with_stats(pixels, width, height, options)` - Returns `[Array(PrismatIQ::PaletteEntry), Int32]` where `PaletteEntry` has `rgb`, `count`, and `percent`.
-  - `PrismatIQ.get_palette_color_thief(pixels, width, height, options)` - Returns `Array(String)` of hex colors (dominant first)
-  - `PrismatIQ.get_palette_from_ico(path, options)` - Extract palette from ICO files, returns `[RGB.new(0,0,0)]` on error
-  - `PrismatIQ.get_palette_from_ico_or_error(path, options)` - Robust ICO extraction returning `Result(Array(RGB), String)`
+APIs of interest (with Options)
+- `PrismatIQ.get_palette(path, options)` - Returns `Array(PrismatIQ::RGB)` 
+- `PrismatIQ.get_palette_v2(path, options)` - Returns `Result(Array(RGB), Error)` with structured error handling
+- `PrismatIQ.get_palette_v2!(path, options)` - Returns `Array(RGB)` or raises exception on error
+- `PrismatIQ.get_palette(pixels, width, height, options)` - Buffer-based extraction
+- `PrismatIQ.get_palette_with_stats(pixels, width, height, options)` - Returns `[Array(PrismatIQ::PaletteEntry), Int32]` where `PaletteEntry` has `rgb`, `count`, and `percent`.
+- `PrismatIQ.get_palette_color_thief(pixels, width, height, options)` - Returns `Array(String)` of hex colors (dominant first)
+- `PrismatIQ.get_palette_from_ico(path, options)` - Extract palette from ICO files, returns `[RGB.new(0,0,0)]` on error
+- `PrismatIQ.get_palette_from_ico_or_error(path, options)` - Robust ICO extraction returning `Result(Array(RGB), String)`
 
   ### Async and Callback APIs
 
@@ -121,42 +123,91 @@ A high-performance Crystal shard for extracting dominant color palettes from ima
   puts dominant.to_hex  # => "#e74c3c"
   ```
 
-  ### Error Handling with Result Type (Recommended)
+### Error Handling with Result Type (Recommended)
 
-  For explicit error handling, use the Result-based APIs:
+For explicit error handling, use the Result-based APIs:
 
-  ```crystal
-  require "prismatiq"
+```crystal
+require "prismatiq"
 
-  # Create options
-  options = PrismatIQ::Options.new(color_count: 5)
+# Create options
+options = PrismatIQ::Options.new(color_count: 5)
 
-  # Use Result-returning methods for explicit error handling
-  result = PrismatIQ.get_palette_or_error("image.png", options)
+# Use Result-returning methods for explicit error handling
+result = PrismatIQ.get_palette_or_error("image.png", options)
 
-  if result.ok?
-    colors = result.value
-    colors.each { |color| puts color.to_hex }
-  else
-    puts "Error: #{result.error}"
+if result.ok?
+  colors = result.value
+  colors.each { |color| puts color.to_hex }
+else
+  puts "Error: #{result.error}"
+end
+
+# You can also chain operations
+result = PrismatIQ.get_palette_or_error("image.png", options)
+           .map { |colors| colors.map(&.to_hex) }
+```
+
+### New v2 API with Error Struct (Recommended)
+
+The latest version introduces `get_palette_v2` which returns a `Result(Array(RGB), Error)` with structured error information:
+
+```crystal
+require "prismatiq"
+
+options = PrismatIQ::Options.new(color_count: 5)
+
+# Get palette with structured error handling
+result = PrismatIQ.get_palette_v2("image.png", options)
+
+case result
+when .ok?
+  colors = result.value
+  colors.each { |color| puts color.to_hex }
+when .err?
+  error = result.error
+  puts "Error type: #{error.type}"
+  puts "Message: #{error.message}"
+  if error.context
+    puts "Context: #{error.context}"
   end
+end
 
-  # You can also chain operations
-  result = PrismatIQ.get_palette_or_error("image.png", options)
-             .map { |colors| colors.map(&.to_hex) }
-  ```
+# Or use the raising variant (throws exceptions on error)
+begin
+  colors = PrismatIQ.get_palette_v2!("image.png", options)
+  colors.each { |color| puts color.to_hex }
+rescue ex : Exception
+  puts "Failed to extract palette: #{ex.message}"
+end
+```
 
-  The `Result(T, E)` type provides:
-  - `ok?` / `err?` - Check success/failure
-  - `value` - Get the successful value (raises if error)
-  - `error` - Get the error message (raises if success)
-  - `value_or(default)` - Get value or default
-  - `map { |v| ... }` - Transform the successful value
-  - `flat_map { |v| ... }` - Chain Result-returning operations
-  - `map_error { |e| ... }` - Transform the error
+The `Error` struct provides:
+- `type` - One of: `FileNotFound`, `InvalidImagePath`, `UnsupportedFormat`, `CorruptedImage`, `InvalidOptions`, `ProcessingFailed`
+- `message` - Human-readable error message
+- `context` - Hash with additional context (file path, parameter values, etc.)
+- `to_s` - String representation including all details
 
-  Alternative: PaletteResult (legacy)
-  - `PrismatIQ.get_palette_result(path, options)` returns `PaletteResult` with `colors`, `success`, `error`, and `total_pixels` fields.
+**Error Types and When They Occur:**
+- `FileNotFound` - File doesn't exist or cannot be accessed
+- `InvalidImagePath` - Path contains directory traversal (`..`), home directory (`~`), or system directories (`/etc`, `/proc`, `/sys`)
+- `UnsupportedFormat` - File extension not in supported formats (`.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.ico`, `.webp`, `.tiff`, `.tif`)
+- `CorruptedImage` - File is empty, truncated, or contains invalid image data
+- `InvalidOptions` - Options parameters are out of valid ranges (e.g., `color_count < 1` or `> 256`, `quality < 1` or `> 100`, negative `threads`)
+- `ProcessingFailed` - Unexpected error during processing (out of memory, internal errors, etc.)
+
+The `Result(T, E)` type provides:
+- `ok?` / `err?` - Check success/failure
+- `value` - Get the successful value (raises if error)
+- `error` - Get the error message (raises if success)
+- `value_or(default)` - Get value or default
+- `map { |v| ... }` - Transform the successful value
+- `flat_map { |v| ... }` - Chain Result-returning operations
+- `map_error { |e| ... }` - Transform the error
+
+Alternative: PaletteResult (legacy)
+- `PrismatIQ.get_palette_result(path, options)` returns `PaletteResult` with `colors`, `success`, `error`, and `total_pixels` fields.
+- **Note**: `PaletteResult` is deprecated. Use `Result(Array(RGB), Error)` instead.
 
   ### Configuration Options
 
@@ -460,29 +511,39 @@ A high-performance Crystal shard for extracting dominant color palettes from ima
   colors = PrismatIQ.get_palette_from_ico("favicon.ico", options)
   ```
 
-  ### Error Handling Migration
-  ```crystal
-  # Old: Checking for sentinel value
-  palette = PrismatIQ.get_palette_from_ico("icon.ico", 5, 10, 0)
-  if palette.size == 1 && palette[0].r == 0
-    puts "Error occurred"
-  end
+### Error Handling Migration
 
-  # New: Using Result type (recommended)
-  options = PrismatIQ::Options.new(color_count: 5)
-  result = PrismatIQ.get_palette_from_ico_or_error("icon.ico", options)
-  if result.ok?
-    puts "Success: #{result.value}"
-  else
-    puts "Error: #{result.error}"
-  end
+```crystal
+# Old: Checking for sentinel value
+palette = PrismatIQ.get_palette_from_ico("icon.ico", 5, 10, 0)
+if palette.size == 1 && palette[0].r == 0
+  puts "Error occurred"
+end
 
-  # Or use PaletteResult for legacy compatibility
-  result = PrismatIQ.get_palette_result("image.png", options)
-  if result.success
-    colors = result.colors
-  end
-  ```
+# New: Using Result type (recommended)
+options = PrismatIQ::Options.new(color_count: 5)
+result = PrismatIQ.get_palette_from_ico_or_error("icon.ico", options)
+if result.ok?
+  puts "Success: #{result.value}"
+else
+  puts "Error: #{result.error}"
+end
+
+# Latest: Using v2 API with Error struct (recommended)
+result = PrismatIQ.get_palette_v2("icon.ico", options)
+case result
+when .ok?
+  puts "Success: #{result.value}"
+when .err?
+  puts "Error: #{result.error.message} (#{result.error.type})"
+end
+
+# Or use PaletteResult for legacy compatibility
+result = PrismatIQ.get_palette_result("image.png", options)
+if result.success
+  colors = result.colors
+end
+```
 
   ### Async API Migration
   ```crystal
@@ -499,18 +560,21 @@ A high-performance Crystal shard for extracting dominant color palettes from ima
   palette = ch.receive
   ```
 
-  ### Why Migrate?
-  - **Single source of truth**: All parameters are in one place (`Options` struct)
-  - **Better extensibility**: Adding new parameters doesn't break existing code
-  - **Type safety**: Named parameters provide better compile-time checking
-  - **Explicit error handling**: Result type makes error cases explicit
-  - **Builder methods**: Easy to create modified options without verbose instantiation
-  - **Async support**: Native fiber-based async APIs for non-blocking operations
-  - **Performance**: Multi-threaded histogram building with adaptive cache-aware merging
+### Why Migrate?
+- **Single source of truth**: All parameters are in one place (`Options` struct)
+- **Better extensibility**: Adding new parameters doesn't break existing code
+- **Type safety**: Named parameters provide better compile-time checking
+- **Explicit error handling**: Result type makes error cases explicit
+- **Builder methods**: Easy to create modified options without verbose instantiation
+- **Async support**: Native fiber-based async APIs for non-blocking operations
+- **Performance**: Multi-threaded histogram building with adaptive cache-aware merging
+- **Thread Safety**: Instance-based components with comprehensive thread safety guarantees
 
  Notes
  - Tests exercise determinism across thread counts and compatibility with ColorThief-like output.
  - The library quantizes into 5 bits per Y/I/Q axis (32³ = 32768 histogram slots).
+ - **Comprehensive Documentation**: Use `crystal docs` to generate complete API documentation with thread safety and memory optimization details.
+ - See the CHANGELOG.md for detailed migration instructions and deprecation timeline.
 
 Example output
  - The adapter emits a small JSON payload. Example (pretty-printed) output:
@@ -530,11 +594,16 @@ Example output
 This format makes it easy to consume the dominant palette (the `colors` array) while
 also exposing counts and percentages for richer UI or analytics use-cases.
 
- Version
- - Current library version: `0.4.1` (see `src/prismatiq.cr`)
+  Version
+  - Current library version: `0.4.1` (see `src/prismatiq.cr`)
 
-Changelog
- - See `CHANGELOG.md` for a concise list of unreleased and past changes.
+ Documentation
+  - Run `crystal docs` to generate comprehensive API documentation
+  - All public methods include detailed thread safety and usage information
+  - Use `crystal docs --project-name PrismatIQ --api-path api` for hosted documentation
+
+ Changelog
+  - See `CHANGELOG.md` for a concise list of unreleased and past changes.
 
 Release notes / maintaining the changelog
  - When preparing a release: bump the `VERSION` constant in `src/prismatiq.cr` and

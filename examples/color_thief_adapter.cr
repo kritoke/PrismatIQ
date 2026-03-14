@@ -45,12 +45,17 @@ rescue ex : Exception
   exit 2
 end
 
-# Use the buffer-based API which returns counts and percentages.
-# This example emits a small JSON object intended to match ColorThief-like
-# consumers: a `colors` array (hex strings, dominant first) plus richer
-# `entries` with counts and percentages for integration or debugging.
-# Using the new Options-based API (get_palette_with_stats)
-entries, total = PrismatIQ.get_palette_with_stats(img.pix, img.width, img.height, options)
+  # Use the buffer-based API which returns counts and percentages.
+  # This example emits a small JSON object intended to match ColorThief-like
+  # consumers: a `colors` array (hex strings, dominant first) plus richer
+  # `entries` with counts and percentages for integration or debugging.
+  # Using the new Options-based API (get_palette_with_stats)
+  rgba_image = CrImage::Pipeline.new(img).result
+  width = rgba_image.bounds.width.to_i32
+  height = rgba_image.bounds.height.to_i32
+  src = rgba_image.pix
+  pixels = Slice(UInt8).new(src.size) { |i| src[i] }
+  entries, total = PrismatIQ.get_palette_with_stats(pixels, width, height, options)
 
 entries_payload = entries.map do |e|
   {
