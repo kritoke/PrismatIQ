@@ -16,7 +16,7 @@ module PrismatIQ
             extractor = PaletteExtractor.new(@config)
             palette = extractor.extract_from_path(path, options)
             ch.send(palette)
-          rescue ex : Exception
+          rescue
             ch.send([RGB.new(0, 0, 0)])
           ensure
             ch.close
@@ -75,7 +75,7 @@ module PrismatIQ
             extractor = PaletteExtractor.new(@config)
             palette = extractor.extract_from_image(read_img.as(CrImage::Image), options)
             palette.first? || RGB.new(0, 0, 0)
-          rescue ex : Exception
+          rescue
             RGB.new(0, 0, 0)
           end
         end
