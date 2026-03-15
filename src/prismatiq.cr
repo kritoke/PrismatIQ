@@ -22,6 +22,8 @@ require "./prismatiq/core/palette_convenience"
 require "./prismatiq/tempfile_helper"
 require "./prismatiq/bmp_parser"
 require "./prismatiq/ico"
+require "./prismatiq/theme_result"
+require "./prismatiq/theme_extractor"
 require "json"
 require "yaml"
 
@@ -270,5 +272,23 @@ module PrismatIQ
 
   private def self.is_error_sentinel?(palette : Array(RGB)) : Bool
     palette.size == 1 && palette[0] == RGB.new(0, 0, 0)
+  end
+
+  @@theme_extractor : ThemeExtractor?
+
+  private def self.theme_extractor : ThemeExtractor
+    @@theme_extractor ||= ThemeExtractor.new
+  end
+
+  def self.extract_theme(source : String, options : ThemeOptions = ThemeOptions.new) : ThemeResult?
+    theme_extractor.extract(source, options)
+  end
+
+  def self.fix_theme(theme_json : String, legacy_bg : String? = nil, legacy_text : String? = nil) : String?
+    theme_extractor.fix_theme(theme_json, legacy_bg, legacy_text)
+  end
+
+  def self.clear_theme_cache
+    theme_extractor.clear_cache
   end
 end
