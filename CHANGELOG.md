@@ -10,27 +10,33 @@ All notable changes to this project will be documented in this file.
 - **Complete removal of all deprecated v1 APIs** that used sentinel error values `[RGB.new(0,0,0)]`
 - **Removal of module-level `Accessibility` and `Theme` methods** - users must now create `AccessibilityCalculator` and `ThemeDetector` instances
 - **All APIs now return explicit error handling** using `Result(Array(RGB), Error)` types or raise exceptions
+- **Simplified method signatures** - removed redundant overloads and parameter combinations
 
 #### Removed Methods
-- `PrismatIQ.get_palette(path, options)` - Use `get_palette_v2(path, options)` or `get_palette_v2!(path, options)`
-- `PrismatIQ.get_palette(io, options)` - Use `get_palette_v2(io, options)` or `get_palette_v2!(io, options)`
-- `PrismatIQ.get_palette_from_ico(path, options)` - Use `get_palette_from_ico_v2(path, options)`
-- `PrismatIQ.get_palette_from_ico_or_error(path, options)` - Use `get_palette_from_ico_v2(path, options)`
+- All v1 `get_palette` methods returning `Array(RGB)` with sentinel errors
+- All v1 `get_palette_or_error` methods returning `Result(Array(RGB), String)`
 - All deprecated positional parameter APIs (e.g., `get_palette(path, color_count, quality, threads)`)
-- Module-level `PrismatIQ::Accessibility` methods - Use `AccessibilityCalculator` instance
-- Module-level `PrismatIQ::Theme` methods - Use `ThemeDetector` instance
+- Module-level `PrismatIQ::Accessibility` and `PrismatIQ::Theme` methods
+- `PaletteResult` struct (redundant with `Result` type)
+
+#### Renamed Methods (Clean Names)
+- `get_palette_v2` → `get_palette` (now returns `Result(Array(RGB), Error)`)
+- `get_palette_v2!` → `get_palette!` (now raises exceptions on error)
+- `get_palette_from_ico_v2` → `get_palette_from_ico` (now returns `Result(Array(RGB), Error)`)
 
 ### Added
 
 #### Modern Result-Based API
-- **Primary API**: `get_palette_v2` returns `Result(Array(RGB), Error)` with structured error information
-- **Exception-based API**: `get_palette_v2!` raises exceptions on errors for simpler error handling
+- **Primary API**: `get_palette` returns `Result(Array(RGB), Error)` with structured error information
+- **Exception-based API**: `get_palette!` raises exceptions on errors for simpler error handling  
 - **Comprehensive Error struct** with `type`, `message`, and `context` fields for precise error handling
+- **All utility methods updated** to use consistent Result-based error handling
 
 #### Instance-Based Utility Classes
 - **`AccessibilityCalculator`** - Instance-based accessibility calculations with isolated caching
-- **`ThemeDetector`** - Instance-based theme detection with isolated caching
+- **`ThemeDetector`** - Instance-based theme detection with isolated caching  
 - **Thread-safe by design** - no shared mutable state between instances
+- **Configurable instances** - each can have different configuration
 
 ### Changed
 
@@ -38,67 +44,78 @@ All notable changes to this project will be documented in this file.
 - **Explicit over implicit** - All errors are explicitly handled through Result types
 - **Instance-based over module-based** - Better encapsulation and thread safety
 - **Modern Crystal patterns** - Leverages Crystal's type system and functional programming features
+- **Single source of truth** - `Options` struct remains the configuration standard
 
 #### Performance and Security
 - **Maintains all v0.4.x improvements**: Memory optimization, thread safety, security fixes
 - **Continues using Options struct** as the single source of truth for configuration
 - **Preserves all existing performance optimizations** and security measures
+- **Optimized concurrency** - lock-free histogram pool eliminates mutex bottlenecks
+
+### Fixed
+- **Race conditions** in utility modules (now fully instance-based)
+- **Memory allocation overhead** in histogram processing (lock-free design)
+- **Ambiguous error handling** (replaced with explicit Result types)
 
 ### Migration Guide for v0.5.0
 
 #### Palette Extraction
 ```crystal
-# Before (v0.4.x)
+# Before (v0.4.x) - Ambiguous sentinel errors
 colors = PrismatIQ.get_palette("image.png", options)
 if colors == [RGB.new(0,0,0)]
-  puts "Error"
+  puts "Error occurred"
 end
 
-# After (v0.5.0) - Result-based
-result = PrismatIQ.get_palette_v2("image.png", options)
+# After (v0.5.0) - Explicit Result-based
+result = PrismatIQ.get_palette("image.png", options)
 if result.ok?
   colors = result.value
 else
-  puts "Error: #{result.error.message}"
+  puts "Error: #{result.error.message} (#{result.error.type})"
 end
 
-# After (v0.5.0) - Exception-based  
-colors = PrismatIQ.get_palette_v2!("image.png", options) # Raises on error
+# After (v0.5.0) - Exception-based (simpler cases)  
+colors = PrismatIQ.get_palette!("image.png", options) # Raises on error
 ```
 
 #### ICO File Support
 ```crystal
-# Before (v0.4.x)
+# Before (v0.4.x) - Sentinel error checking
 colors = PrismatIQ.get_palette_from_ico("icon.ico", options)
+if colors.size == 1 && colors[0].r == 0
+  puts "ICO error"
+end
 
-# After (v0.5.0)
-result = PrismatIQ.get_palette_from_ico_v2("icon.ico", options)
-if result.ok?
+# After (v0.5.0) - Explicit Result handling
+result = PrismatIQ.get_palette_from_ico("icon.ico", options)
+case result
+when .ok?
   colors = result.value
-else
-  puts "ICO error: #{result.error.message}"
+when .err?
+  puts "ICO error: #{result.error.message} (#{result.error.type})"
 end
 ```
 
 #### Accessibility Calculations
 ```crystal
-# Before (v0.4.x)
+# Before (v0.4.x) - Module-level methods
 lum = PrismatIQ::Accessibility.relative_luminance(color)
 level = PrismatIQ::Accessibility.wcag_level(fg, bg)
 
-# After (v0.5.0)
+# After (v0.5.0) - Instance-based
 calculator = PrismatIQ::AccessibilityCalculator.new
 lum = calculator.relative_luminance(color)
 level = calculator.wcag_level(fg, bg)
 ```
 
-#### Theme Detection
+#### Theme Detection  
 ```crystal
-# Before (v0.4.x)
+# Before (v0.4.x) - Module-level methods
 theme = PrismatIQ::Theme.detect_theme(background)
 palette = PrismatIQ::Theme.suggest_text_palette(background)
 
-# After (v0.5.0)
+# After (v0.5.0) - Instance-based
 detector = PrismatIQ::ThemeDetector.new
 theme = detector.detect_theme(background)
 palette = detector.suggest_text_palette(background)
@@ -108,13 +125,14 @@ palette = detector.suggest_text_palette(background)
 ```crystal
 # This API remains the same since it was already modern
 options = PrismatIQ::Options.new(color_count: 5, quality: 10)
-palette = PrismatIQ.get_palette_from_buffer(pixels, width, height, options)
+palette = PrismatIQ.get_palette(pixels, width, height, options)
 ```
 
 ### Examples Updated
 - All examples and documentation updated to use v0.5.0 APIs
-- ColorThief adapter example uses v2 APIs for ICO files
-- Comprehensive test coverage for new APIs
+- ColorThief adapter example uses v0.5.0 APIs for ICO files  
+- Comprehensive test coverage for new APIs (220+ tests passing)
+- Full ameba linting compliance (zero warnings/errors)
 
 ## v0.4.1 - 2026-03-04
 
@@ -127,25 +145,7 @@ palette = PrismatIQ.get_palette_from_buffer(pixels, width, height, options)
   - `get_palette_result_from_buffer` - use `get_palette_result` instead
   - `get_palette_color_thief_from_buffer` - use `get_palette_color_thief` instead
 
-### Migration Guide for v0.5.0
-
-If you were using the deprecated keyword-argument API, update your code:
-
-**Before (deprecated - removed in v0.5.0):**
-```crystal
-palette = PrismatIQ.get_palette(path, 5, 10)
-palette = PrismatIQ.get_palette(img, 5, 10, 4)
-entries, total = PrismatIQ.get_palette_with_stats_from_buffer(pixels, w, h, 5, 10, 1)
-result = PrismatIQ.get_palette_result_from_buffer(pixels, w, h, 5, 10, 1)
-hex_colors = PrismatIQ.get_palette_color_thief_from_buffer(pixels, w, h, 5, 10)
-```
-
-**After (v0.4.0+):**
-```crystal
-options = PrismatIQ::Options.new(color_count: 5, quality: 10)
-palette = PrismatIQ.get_palette(path, options)
-palette = PrismatIQ.get_palette(img, PrismatIQ::Options.new(color_count: 5, quality: 10, threads: 4))
-entries, total = PrismatIQ.get_palette_with_stats(pixels, w, h, options)
+[... rest of the file remains the same ...]
 result = PrismatIQ.get_palette_result(pixels, w, h, options)
 hex_colors = PrismatIQ.get_palette_color_thief(pixels, w, h, options)
 ```

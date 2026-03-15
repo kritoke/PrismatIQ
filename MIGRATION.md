@@ -9,9 +9,9 @@ PrismatIQ v0.5.0 represents a clean break from previous versions with significan
 All v0.4.x deprecated APIs have been **completely removed**:
 
 - **Old palette extraction methods**:
-  - `PrismatIQ.get_palette(path, options)` → Use `get_palette_v2` or `get_palette_v2!`
-  - `PrismatIQ.get_palette(io, options)` → Use `get_palette_v2` or `get_palette_v2!`
-  - `PrismatIQ.get_palette_from_ico(path, options)` → Use `get_palette_from_ico_v2`
+  - `PrismatIQ.get_palette(path, options)` → Use `get_palette` or `get_palette!`
+  - `PrismatIQ.get_palette(io, options)` → Use `get_palette` or `get_palette!`
+  - `PrismatIQ.get_palette_from_ico(path, options)` → Use `get_palette_from_ico`
 
 - **Positional parameter APIs** (removed in v0.4.1):
   - `get_palette(path, color_count, quality, threads)` 

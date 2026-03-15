@@ -40,12 +40,26 @@ options = PrismatIQ::Options.new(
 )
 
 # Extract palette with explicit error handling (recommended)
-result = PrismatIQ.get_palette_v2("image.png", options)
+result = PrismatIQ.get_palette("image.png", options)
 case result
 when .ok?
-  result.value.each { |color| puts color.to_hex }
+  colors = result.value
+  colors.each { |color| puts color.to_hex }
 when .err?
-  puts "Error: #{result.error.message}"
+  error = result.error
+  puts "Error type: #{error.type}"
+  puts "Message: #{error.message}"
+  if error.context
+    puts "Context: #{error.context}"
+  end
+end
+
+# Or use the raising variant (throws exceptions on error)
+begin
+  colors = PrismatIQ.get_palette!("image.png", options)
+  colors.each { |color| puts color.to_hex }
+rescue ex : Exception
+  puts "Failed to extract palette: #{ex.message}"
 end
 
 # Or use exception-based API for simpler cases
@@ -60,7 +74,7 @@ end
 ### ICO File Support
 
 ```crystal
-result = PrismatIQ.get_palette_from_ico_v2("icon.ico", options)
+result = PrismatIQ.get_palette_from_ico("icon.ico", options)
 if result.ok?
   # Process extracted palette
 end
