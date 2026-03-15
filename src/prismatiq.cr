@@ -28,7 +28,7 @@ require "json"
 require "yaml"
 
 module PrismatIQ
-  VERSION = "0.5.0"
+  VERSION = "0.5.1"
 
   # High-performance Crystal shard for extracting dominant color palettes from images.
   #
@@ -74,7 +74,7 @@ module PrismatIQ
       extractor = Core::PaletteExtractor.new
       result = extractor.extract_from_path(path, options)
       
-      if is_error_sentinel?(result)
+      if result.empty?
         return Result(Array(RGB), Error).err(Error.file_not_found(path, "Failed to extract palette"))
       end
       
@@ -97,7 +97,7 @@ module PrismatIQ
     extractor = Core::PaletteExtractor.new
     result = extractor.extract_from_path(path, options)
     
-    if is_error_sentinel?(result)
+    if result.empty?
       raise Exception.new("Failed to extract palette from #{path}")
     end
     
@@ -114,7 +114,7 @@ module PrismatIQ
       extractor = Core::PaletteExtractor.new
       result = extractor.extract_from_io(io, options)
       
-      if is_error_sentinel?(result)
+      if result.empty?
         return Result(Array(RGB), Error).err(Error.corrupted_image("Failed to extract palette from IO"))
       end
       
@@ -137,7 +137,7 @@ module PrismatIQ
     extractor = Core::PaletteExtractor.new
     result = extractor.extract_from_io(io, options)
     
-    if is_error_sentinel?(result)
+    if result.empty?
       raise Exception.new("Failed to extract palette from IO")
     end
     
@@ -157,7 +157,7 @@ module PrismatIQ
       extractor = Core::PaletteExtractor.new(config)
       result = extractor.extract_from_buffer(pixels, width, height, options)
       
-      if is_error_sentinel?(result)
+      if result.empty?
         return Result(Array(RGB), Error).err(Error.invalid_options("pixels", "0", "No valid pixels found"))
       end
       
@@ -183,7 +183,7 @@ module PrismatIQ
     extractor = Core::PaletteExtractor.new(config)
     result = extractor.extract_from_buffer(pixels, width, height, options)
     
-    if is_error_sentinel?(result)
+    if result.empty?
       raise Exception.new("Failed to extract palette from buffer")
     end
     
@@ -200,7 +200,7 @@ module PrismatIQ
       extractor = Core::PaletteExtractor.new
       result = extractor.extract_from_image(image, options)
       
-      if is_error_sentinel?(result)
+      if result.empty?
         return Result(Array(RGB), Error).err(Error.corrupted_image("Failed to extract palette from image"))
       end
       
@@ -268,10 +268,6 @@ module PrismatIQ
 
   def self.get_color(img) : RGB
     Core::PaletteConvenience.new.get_color(img)
-  end
-
-  private def self.is_error_sentinel?(palette : Array(RGB)) : Bool
-    palette.size == 1 && palette[0] == RGB.new(0, 0, 0)
   end
 
   @@theme_extractor : ThemeExtractor?

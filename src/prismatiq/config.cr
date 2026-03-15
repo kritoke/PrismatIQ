@@ -21,5 +21,9 @@ module PrismatIQ
       t = requested <= 0 ? (threads || CPU.cores) : requested
       {t, height}.min
     end
+
+    def debug_log(message : String) : Nil
+      STDERR.puts message if @debug
+    end
   end
 end

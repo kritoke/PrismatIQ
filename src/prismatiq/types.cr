@@ -86,24 +86,9 @@ module PrismatIQ
         return Color.new(0, 0, 0)
       end
 
-      y_sum = 0.0
-      i_sum = 0.0
-      q_sum = 0.0
-      found = 0
-
-      @histo.each_with_index do |freq, index|
-        next if freq == 0
-        y, i, q = VBox.from_index(index)
-        if y >= @y1 && y <= @y2 && i >= @i1 && i <= @i2 && q >= @q1 && q <= @q2
-          y_sum += y * freq.to_f64
-          i_sum += i * freq.to_f64
-          q_sum += q * freq.to_f64
-          found += freq.to_i
-        end
-      end
-
-      if found > 0
-        Color.new(y_sum / found, i_sum / found, q_sum / found)
+      sums = compute_weighted_sums
+      if sums[:found] > 0
+        Color.new(sums[:y_sum] / sums[:found], sums[:i_sum] / sums[:found], sums[:q_sum] / sums[:found])
       else
         Color.new(0, 0, 0)
       end
@@ -114,6 +99,17 @@ module PrismatIQ
         return RGB.new(0, 0, 0)
       end
 
+      sums = compute_weighted_sums
+      if sums[:found] > 0
+        color = Color.new(sums[:y_sum] / sums[:found], sums[:i_sum] / sums[:found], sums[:q_sum] / sums[:found])
+        r, g, b = color.to_rgb_from_quantized
+        RGB.new(r, g, b)
+      else
+        RGB.new(0, 0, 0)
+      end
+    end
+
+    private def compute_weighted_sums : NamedTuple(y_sum: Float64, i_sum: Float64, q_sum: Float64, found: Int32)
       y_sum = 0.0
       i_sum = 0.0
       q_sum = 0.0
@@ -130,13 +126,7 @@ module PrismatIQ
         end
       end
 
-      if found > 0
-        color = Color.new(y_sum / found, i_sum / found, q_sum / found)
-        r, g, b = color.to_rgb_from_quantized
-        RGB.new(r, g, b)
-      else
-        RGB.new(0, 0, 0)
-      end
+      {y_sum: y_sum, i_sum: i_sum, q_sum: q_sum, found: found}
     end
 
     def split : Tuple(VBox, VBox)

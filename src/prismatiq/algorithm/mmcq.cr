@@ -1,5 +1,6 @@
 require "./priority_queue"
 require "../types"
+require "../config"
 
 module PrismatIQ
   module Algorithm
@@ -65,27 +66,20 @@ module PrismatIQ
       end
 
       private def log_debug_initial(initial_box : VBox)
-        if @config.debug?
-          puts "MMCQ: total=#{@total} initial_box.count=#{initial_box.count}"
-        end
+        @config.debug_log "MMCQ: total=#{@total} initial_box.count=#{initial_box.count}"
       end
 
       private def log_debug_iteration(iteration : Int32, pq_size : Int32)
-        if @config.debug?
-          puts "MMCQ iter=#{iteration} pq_size=#{pq_size}"
-        end
+        @config.debug_log "MMCQ iter=#{iteration} pq_size=#{pq_size}"
       end
 
       private def log_debug_popped_box(box : VBox?)
-        if @config.debug?
-          puts box ? "MMCQ popped box count=#{box.count}" : "MMCQ popped nil box"
-        end
+        msg = box ? "MMCQ popped box count=#{box.count}" : "MMCQ popped nil box"
+        @config.debug_log msg
       end
 
       private def log_debug_split_result(vbox1 : VBox, vbox2 : VBox)
-        if @config.debug?
-          puts "MMCQ split -> vbox1.count=#{vbox1.count} vbox2.count=#{vbox2.count}"
-        end
+        @config.debug_log "MMCQ split -> vbox1.count=#{vbox1.count} vbox2.count=#{vbox2.count}"
       end
 
       private def collect_final_boxes(pq : Algorithm::PriorityQueue(VBox)) : Array(VBox)

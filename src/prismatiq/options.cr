@@ -1,3 +1,5 @@
+require "./utils/validation"
+
 module PrismatIQ
   struct Options
     property color_count : Int32 = 5
@@ -15,8 +17,11 @@ module PrismatIQ
 
     def validate!
       raise ValidationError.new("color_count must be >= 1, got #{@color_count}") if @color_count < 1
-      raise ValidationError.new("quality must be >= 1 and <= 100, got #{@quality}") if @quality < 1 || @quality > 100
+      raise ValidationError.new("color_count must be <= 256, got #{@color_count}") if @color_count > 256
+      raise ValidationError.new("quality must be >= 1, got #{@quality}") if @quality < 1
+      raise ValidationError.new("quality must be <= 100, got #{@quality}") if @quality > 100
       raise ValidationError.new("threads must be >= 0, got #{@threads}") if @threads < 0
+      raise ValidationError.new("alpha_threshold must be 0-255, got #{@alpha_threshold}") if @alpha_threshold > 255_u8
     end
 
     def with_color_count(color_count : Int32) : Options

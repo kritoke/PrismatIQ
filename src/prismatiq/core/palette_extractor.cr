@@ -39,9 +39,7 @@ module PrismatIQ
 
       def extract_from_path(path : String, options : Options) : Array(RGB)
         options.validate!
-        if @config.debug?
-          STDERR.puts "get_palette(path): path=#{path} options=#{options.inspect}"
-        end
+        @config.debug_log "get_palette(path): path=#{path} options=#{options.inspect}"
         img = CrImage.read(path)
         extract_from_image(img.as(CrImage::Image), options)
       end
@@ -54,9 +52,7 @@ module PrismatIQ
 
       def extract_from_image(image, options : Options) : Array(RGB)
         options.validate!
-        if @config.debug?
-          STDERR.puts "get_palette_from_image: image.class=#{image.class} options=#{options.inspect}"
-        end
+        @config.debug_log "get_palette_from_image: image.class=#{image.class} options=#{options.inspect}"
         rgba_image = CrImage::Pipeline.new(image).result
         width = rgba_image.bounds.width.to_i32
         height = rgba_image.bounds.height.to_i32
@@ -71,7 +67,7 @@ module PrismatIQ
         histo, total_pixels = build_histo_from_buffer(pixels, width, height, options)
 
         if total_pixels == 0
-          return [RGB.new(0, 0, 0)]
+          return [] of RGB
         end
 
         quantize_palette(histo, options)[0...options.color_count]

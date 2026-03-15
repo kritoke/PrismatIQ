@@ -45,15 +45,21 @@ module PrismatIQ
           return Result(String, Error).err(Error.invalid_image_path(path, "Directory traversal not allowed"))
         end
 
-        # Check if path is absolute and trying to access system directories
-        expanded = File.expand_path(path)
-        if expanded.starts_with?("/etc/") || expanded.starts_with?("/sys/") || expanded.starts_with?("/proc/")
-          return Result(String, Error).err(Error.invalid_image_path(path, "Access to system directories not allowed"))
-        end
-
-        # Check file exists
+        # Check file exists first
         unless File.exists?(path)
           return Result(String, Error).err(Error.file_not_found(path))
+        end
+
+        # Resolve real path to handle symlinks (prevents TOCTOU)
+        begin
+          real_path = File.realpath(path)
+        rescue ex : Exception
+          return Result(String, Error).err(Error.invalid_image_path(path, "Cannot resolve path: #{ex.message}"))
+        end
+
+        # Check if resolved path points to system directories
+        if real_path.starts_with?("/etc/") || real_path.starts_with?("/sys/") || real_path.starts_with?("/proc/")
+          return Result(String, Error).err(Error.invalid_image_path(path, "Access to system directories not allowed"))
         end
 
         # Check file extension
@@ -83,40 +89,40 @@ module PrismatIQ
         # Validate color_count
         if options.color_count < 1
           return Result(Options, Error).err(
-            Error.invalid_options("color_count", options.color_count.to_s, "must be >= 1")
+            Error.invalid_options("color_count", options.color_count.to_s, "must be >= 1, got #{options.color_count}")
           )
         end
 
         if options.color_count > 256
           return Result(Options, Error).err(
-            Error.invalid_options("color_count", options.color_count.to_s, "must be <= 256")
+            Error.invalid_options("color_count", options.color_count.to_s, "must be <= 256, got #{options.color_count}")
           )
         end
 
         # Validate quality
         if options.quality < 1
           return Result(Options, Error).err(
-            Error.invalid_options("quality", options.quality.to_s, "must be >= 1")
+            Error.invalid_options("quality", options.quality.to_s, "must be >= 1, got #{options.quality}")
           )
         end
 
         if options.quality > 100
           return Result(Options, Error).err(
-            Error.invalid_options("quality", options.quality.to_s, "must be <= 100")
+            Error.invalid_options("quality", options.quality.to_s, "must be <= 100, got #{options.quality}")
           )
         end
 
         # Validate threads
         if options.threads < 0
           return Result(Options, Error).err(
-            Error.invalid_options("threads", options.threads.to_s, "must be >= 0")
+            Error.invalid_options("threads", options.threads.to_s, "must be >= 0, got #{options.threads}")
           )
         end
 
         # Validate alpha_threshold (should be 0-255)
         if options.alpha_threshold > 255_u8
           return Result(Options, Error).err(
-            Error.invalid_options("alpha_threshold", options.alpha_threshold.to_s, "must be 0-255")
+            Error.invalid_options("alpha_threshold", options.alpha_threshold.to_s, "must be 0-255, got #{options.alpha_threshold}")
           )
         end
 

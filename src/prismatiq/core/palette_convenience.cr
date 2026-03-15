@@ -32,7 +32,7 @@ module PrismatIQ
         extractor = PaletteExtractor.new(@config)
         palette = extractor.extract_from_buffer(pixels, width, height, options)
 
-        if palette.empty? || (palette.size == 1 && palette[0] == RGB.new(0, 0, 0))
+        if palette.empty?
           return {[] of PaletteEntry, 0}
         end
 
