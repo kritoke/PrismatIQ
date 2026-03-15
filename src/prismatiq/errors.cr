@@ -9,6 +9,21 @@ module PrismatIQ
     CorruptedImage
     InvalidOptions
     ProcessingFailed
+    SSRFBlocked
+  end
+
+  class SSRFError < Exception
+    getter url : String
+    getter ip : String
+    getter reason : String
+
+    def initialize(@url : String, @ip : String, @reason : String)
+      super("SSRF blocked: #{@reason} (#{@ip}) for URL: #{@url}")
+    end
+
+    def message : String
+      "SSRF blocked: #{@reason} (#{@ip}) for URL: #{@url}"
+    end
   end
 
   struct Error
@@ -63,6 +78,14 @@ module PrismatIQ
 
     def self.processing_failed(details : String) : Error
       new(ErrorType::ProcessingFailed, "Processing failed: #{details}")
+    end
+
+    def self.ssrf_blocked(url : String, ip : String, reason : String) : Error
+      new(
+        ErrorType::SSRFBlocked,
+        "SSRF blocked: #{reason} (#{ip})",
+        {"url" => url, "ip" => ip, "reason" => reason}
+      )
     end
 
     def to_s(io : IO)

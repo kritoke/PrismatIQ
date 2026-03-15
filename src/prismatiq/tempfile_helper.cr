@@ -14,8 +14,8 @@ module PrismatIQ
     # Prefer using the installed crtemp shard when available. Dir.mktmpdir
     # provides an atomic directory creation helper; we'll use it to create a
     # secure directory and then create a file inside it atomically.
-    # Returns nil if data exceeds 50MB limit.
-    MAX_DATA_SIZE = 50_000_000_i64
+    # Returns nil if data exceeds 100MB limit (aligned with Validation::MAX_FILE_SIZE).
+    MAX_DATA_SIZE = 100 * 1024 * 1024_i64
 
     def self.create_and_write(prefix : String, data : Slice(UInt8)) : String?
       return if data.size > MAX_DATA_SIZE
@@ -48,7 +48,7 @@ module PrismatIQ
           path
         end
       rescue ex : Exception
-        STDERR.puts "PrismatIQ: tempfile via crtemp failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+        STDERR.puts "PrismatIQ: try_crtemp_approach failed (#{ex.class.name}): #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
       end
       nil
     end
@@ -73,7 +73,7 @@ module PrismatIQ
             write_buffer_to_file(path, data)
             return path
           rescue ex : Exception
-            STDERR.puts "PrismatIQ: windows tempfile fallback failed: #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+            STDERR.puts "PrismatIQ: try_windows_fallback failed (#{ex.class.name}): #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
           end
         end
         tries += 1
@@ -128,8 +128,8 @@ module PrismatIQ
       ensure
         begin
           File.delete(path) if path && File.exists?(path)
-        rescue
-          # best-effort cleanup; do not raise
+        rescue ex : Exception
+          STDERR.puts "PrismatIQ: with_tempfile cleanup failed (#{ex.class.name}): #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
         end
       end
     end

@@ -37,38 +37,37 @@ module PrismatIQ
       SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tiff", ".tif"]
 
       def self.validate_file_path(path : String) : Result(String, Error)
-        # Check for nil or empty
         return Result(String, Error).err(Error.invalid_image_path(path, "Path is empty")) if path.empty?
 
-        # Check for directory traversal attempts
-        if path.includes?("..") || path.includes?("~")
+        if path.includes?('\0')
+          return Result(String, Error).err(Error.new(ErrorType::InvalidImagePath, "Null byte in path not allowed"))
+        end
+
+        decoded_path = url_decode_path(path)
+
+        if contains_traversal?(path) || contains_traversal?(decoded_path)
           return Result(String, Error).err(Error.invalid_image_path(path, "Directory traversal not allowed"))
         end
 
-        # Check file exists first
         unless File.exists?(path)
           return Result(String, Error).err(Error.file_not_found(path))
         end
 
-        # Resolve real path to handle symlinks (prevents TOCTOU)
         begin
           real_path = File.realpath(path)
         rescue ex : Exception
           return Result(String, Error).err(Error.invalid_image_path(path, "Cannot resolve path: #{ex.message}"))
         end
 
-        # Check if resolved path points to system directories
         if real_path.starts_with?("/etc/") || real_path.starts_with?("/sys/") || real_path.starts_with?("/proc/")
           return Result(String, Error).err(Error.invalid_image_path(path, "Access to system directories not allowed"))
         end
 
-        # Check file extension
         ext = File.extname(path).downcase
         unless SUPPORTED_EXTENSIONS.includes?(ext)
           return Result(String, Error).err(Error.unsupported_format(ext))
         end
 
-        # Check file size
         begin
           size = File.size(path)
           if size > MAX_FILE_SIZE
@@ -85,48 +84,34 @@ module PrismatIQ
         Result(String, Error).ok(path)
       end
 
+      private def self.url_decode_path(path : String) : String
+        decoded = path
+        3.times do
+          new_decoded = URI.decode(decoded)
+          break if new_decoded == decoded
+          decoded = new_decoded
+        end
+        decoded
+      end
+
+      private def self.contains_traversal?(path : String) : Bool
+        return true if path.includes?("..")
+        return true if path.includes?("~")
+        return true if path.includes?("%2e") || path.includes?("%2E")
+        return true if path.includes?("%252e") || path.includes?("%252E")
+        return true if path.includes?("%2f") || path.includes?("%2F")
+        return true if path.includes?("%5c") || path.includes?("%5C")
+        return true if path.includes?("%7e") || path.includes?("%7E")
+        false
+      end
+
       def self.validate_options(options : Options) : Result(Options, Error)
-        # Validate color_count
-        if options.color_count < 1
-          return Result(Options, Error).err(
-            Error.invalid_options("color_count", options.color_count.to_s, "must be >= 1, got #{options.color_count}")
-          )
+        begin
+          options.validate!
+          Result(Options, Error).ok(options)
+        rescue ex : ValidationError
+          Result(Options, Error).err(Error.invalid_options("options", "invalid", ex.message || "Validation failed"))
         end
-
-        if options.color_count > 256
-          return Result(Options, Error).err(
-            Error.invalid_options("color_count", options.color_count.to_s, "must be <= 256, got #{options.color_count}")
-          )
-        end
-
-        # Validate quality
-        if options.quality < 1
-          return Result(Options, Error).err(
-            Error.invalid_options("quality", options.quality.to_s, "must be >= 1, got #{options.quality}")
-          )
-        end
-
-        if options.quality > 100
-          return Result(Options, Error).err(
-            Error.invalid_options("quality", options.quality.to_s, "must be <= 100, got #{options.quality}")
-          )
-        end
-
-        # Validate threads
-        if options.threads < 0
-          return Result(Options, Error).err(
-            Error.invalid_options("threads", options.threads.to_s, "must be >= 0, got #{options.threads}")
-          )
-        end
-
-        # Validate alpha_threshold (should be 0-255)
-        if options.alpha_threshold > 255_u8
-          return Result(Options, Error).err(
-            Error.invalid_options("alpha_threshold", options.alpha_threshold.to_s, "must be 0-255, got #{options.alpha_threshold}")
-          )
-        end
-
-        Result(Options, Error).ok(options)
       end
 
       def self.validate_io(io : IO) : Result(IO, Error)

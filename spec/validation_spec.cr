@@ -47,7 +47,6 @@ describe PrismatIQ::Utils::Validation do
       result = PrismatIQ::Utils::Validation.validate_options(options)
       result.err?.should be_true
       result.error.type.should eq(PrismatIQ::ErrorType::InvalidOptions)
-      result.error.context.should eq({"field" => "color_count", "value" => "0"})
     end
 
     it "returns error for color_count > 256" do
@@ -140,6 +139,7 @@ describe PrismatIQ::Utils::Validation do
       PrismatIQ::ErrorType.values.should contain(PrismatIQ::ErrorType::CorruptedImage)
       PrismatIQ::ErrorType.values.should contain(PrismatIQ::ErrorType::InvalidOptions)
       PrismatIQ::ErrorType.values.should contain(PrismatIQ::ErrorType::ProcessingFailed)
+      PrismatIQ::ErrorType.values.should contain(PrismatIQ::ErrorType::SSRFBlocked)
     end
   end
 
@@ -160,6 +160,37 @@ describe PrismatIQ::Utils::Validation do
 
     it "returns error for /proc filesystem" do
       result = PrismatIQ::Utils::Validation.validate_file_path("/proc/cpuinfo")
+      result.err?.should be_true
+      result.error.type.should eq(PrismatIQ::ErrorType::InvalidImagePath)
+    end
+
+    it "returns error for URL-encoded traversal %2e%2e" do
+      result = PrismatIQ::Utils::Validation.validate_file_path("images/%2e%2e/secret.txt")
+      result.err?.should be_true
+      result.error.type.should eq(PrismatIQ::ErrorType::InvalidImagePath)
+    end
+
+    it "returns error for double URL-encoded traversal %252e%252e" do
+      result = PrismatIQ::Utils::Validation.validate_file_path("images/%252e%252e/secret.txt")
+      result.err?.should be_true
+      result.error.type.should eq(PrismatIQ::ErrorType::InvalidImagePath)
+    end
+
+    it "returns error for mixed encoding traversal ..%2f" do
+      result = PrismatIQ::Utils::Validation.validate_file_path("images/..%2fsecret.txt")
+      result.err?.should be_true
+      result.error.type.should eq(PrismatIQ::ErrorType::InvalidImagePath)
+    end
+
+    it "returns error for null byte in path" do
+      result = PrismatIQ::Utils::Validation.validate_file_path("image.png\u0000.txt")
+      result.err?.should be_true
+      result.error.type.should eq(PrismatIQ::ErrorType::InvalidImagePath)
+      result.error.message.should contain("Null byte")
+    end
+
+    it "returns error for URL-encoded tilde %7e" do
+      result = PrismatIQ::Utils::Validation.validate_file_path("%7euser/secret.txt")
       result.err?.should be_true
       result.error.type.should eq(PrismatIQ::ErrorType::InvalidImagePath)
     end

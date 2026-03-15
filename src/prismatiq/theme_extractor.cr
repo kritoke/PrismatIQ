@@ -3,6 +3,8 @@ require "uri"
 require "./thread_safe_cache"
 require "./theme_result"
 require "./rgb"
+require "./utils/ip_validator"
+require "./errors"
 
 module PrismatIQ
   class ThemeExtractionError < Exception
@@ -25,11 +27,21 @@ module PrismatIQ
   end
 
   class ThemeExtractor
+    @@mutex = Mutex.new
+    @@instance : ThemeExtractor?
+
+    def self.instance : ThemeExtractor
+      @@mutex.synchronize do
+        @@instance ||= new
+      end
+    end
+
     @cache : ThreadSafeCache(String, ThemeResult)
     @theme_detector : ThemeDetector
     @accessibility : AccessibilityCalculator
+    @config : Config
 
-    def initialize
+    def initialize(@config : Config = Config.default)
       @cache = ThreadSafeCache(String, ThemeResult).new
       @theme_detector = ThemeDetector.new
       @accessibility = AccessibilityCalculator.new
@@ -104,7 +116,8 @@ module PrismatIQ
             end
           end
         end
-      rescue
+      rescue ex : Exception
+        @config.debug_log "fix_theme: JSON.parse error (#{ex.class.name}): #{ex.message}"
       end
 
       bg_rgb ||= parse_color_to_rgb(legacy_bg) if legacy_bg
@@ -185,6 +198,29 @@ module PrismatIQ
 
     private def fetch_url(url : String, options : ThemeOptions) : Slice(UInt8)?
       uri = URI.parse(url)
+
+      unless {"http", "https"}.includes?(uri.scheme)
+        @config.debug_log "fetch_url: rejected non-http(s) scheme: #{uri.scheme}"
+        return nil
+      end
+
+      host = uri.host
+      return nil unless host
+
+      if @config.ssrf_protection?
+        if allowlist_allows?(host)
+          @config.debug_log "fetch_url: host '#{host}' allowed via allowlist"
+        else
+          ips = Utils::IPValidator.resolve_host(host)
+          ips.each do |ip|
+            if Utils::IPValidator.private_address?(ip)
+              @config.debug_log "fetch_url: SSRF blocked - host=#{host} ip=#{ip.address} reason=private_address"
+              return nil
+            end
+          end
+        end
+      end
+
       client = HTTP::Client.new(uri)
       client.read_timeout = options.http_timeout.seconds
       client.connect_timeout = options.http_timeout.seconds
@@ -200,8 +236,18 @@ module PrismatIQ
       return if response.body.size > options.max_file_size
 
       response.body.to_slice
-    rescue
+    rescue ex : Exception
+      @config.debug_log "fetch_url: exception #{ex.class.name}: #{ex.message}"
       nil
+    end
+
+    private def allowlist_allows?(host : String) : Bool
+      allowlist = @config.ssrf_allowlist
+      return false unless allowlist
+
+      allowlist.any? do |allowed|
+        host == allowed || host.ends_with?(".#{allowed}")
+      end
     end
 
     private def build_theme_result(bg_rgb : Array(Int32)) : ThemeResult

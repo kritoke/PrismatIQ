@@ -270,10 +270,8 @@ module PrismatIQ
     Core::PaletteConvenience.new.get_color(img)
   end
 
-  @@theme_extractor : ThemeExtractor?
-
   private def self.theme_extractor : ThemeExtractor
-    @@theme_extractor ||= ThemeExtractor.new
+    ThemeExtractor.instance
   end
 
   def self.extract_theme(source : String, options : ThemeOptions = ThemeOptions.new) : ThemeResult?

@@ -126,4 +126,21 @@ describe "Thread Safety" do
       final2[0].b.should be > 200
     end
   end
+
+  describe "ThemeExtractor singleton" do
+    it "returns same instance from concurrent access" do
+      instances = Channel(PrismatIQ::ThemeExtractor).new(10)
+
+      10.times do
+        spawn do
+          instances.send(PrismatIQ::ThemeExtractor.instance)
+        end
+      end
+
+      first_instance = instances.receive
+      9.times do
+        instances.receive.should be(first_instance)
+      end
+    end
+  end
 end
