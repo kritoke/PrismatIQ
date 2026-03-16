@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.3.1] - 2026-03-16
+
+### Fixed
+
+- **Crystal 1.18.2 Compatibility**: Changed from `Time.instant` to `Time.monotonic` for rate limiting
+  - Fixes compatibility with Crystal 1.18.2 which is specified in shard.yml
+  - Uses `Time::Span` instead of `Time::Instant` for timestamp tracking
+
 ## [0.5.3] - 2026-03-16
 
 ### Added
