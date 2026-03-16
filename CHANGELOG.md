@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.4.0] - 2026-03-16
+
+### Fixed
+
+- **Critical deadlock in palette extraction**: Fixed indefinite blocking when processing small images with high thread counts
+  - Track actual spawned fiber count instead of assuming thread_count
+  - Add proper exception handling in worker fibers to prevent crashes
+  - Ensure all spawned fibers send messages to prevent deadlock
+
+- **SVG theme extraction**: Added SVG support to theme extraction
+  - Handle SVG files in extract_from_image and extract_from_image_buffer
+  - Use SVGColorExtractor for SVG files instead of CrImage (which doesn't support SVG)
+
+### Changed
+
+- **ThreadSafeCache documentation**: Added performance note about mutex blocking during computation
+
 ## [0.5.3.1] - 2026-03-16
 
 ### Fixed
