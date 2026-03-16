@@ -183,6 +183,17 @@ module PrismatIQ
     end
 
     private def extract_bg_from_image(path : String, options : ThemeOptions) : Array(Int32)?
+      # Handle SVG files separately since CrImage doesn't support them
+      if path.downcase.ends_with?(".svg")
+        svg_colors = SVGColorExtractor.extract_from_file(path)
+        return unless svg_colors.ok?
+        
+        # Use the first extracted color as background candidate
+        return unless svg_colors.value.size > 0
+        first_color = svg_colors.value[0]
+        return [first_color.r, first_color.g, first_color.b]
+      end
+      
       img = CrImage.read(path)
       return unless img
 
@@ -199,6 +210,17 @@ module PrismatIQ
     end
 
     private def extract_bg_from_image_buffer(data : Slice(UInt8), options : ThemeOptions) : Array(Int32)?
+      # Check if data appears to be SVG (starts with <svg or <?xml)
+      if data.size > 0 && data[0] == '<'.ord
+        svg_content = String.new(data)
+        if svg_content.downcase.includes?("<svg")
+          svg_colors = SVGColorExtractor.extract_colors(svg_content)
+          return unless svg_colors.size > 0
+          first_color = svg_colors[0]
+          return [first_color.r, first_color.g, first_color.b]
+        end
+      end
+      
       TempfileHelper.with_tempfile("prismatiq_theme_", data) do |tmp_path|
         extract_bg_from_image(tmp_path, options)
       end

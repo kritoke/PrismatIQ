@@ -102,21 +102,31 @@ module PrismatIQ
           rows_per = (height + thread_count - 1) // thread_count
 
           pool = HistogramPool.new(thread_count)
+          
+          # Track actual number of spawned fibers to avoid deadlock
+          spawned_count = 0
 
           thread_count.times do |thread_idx|
             start_row = thread_idx * rows_per
             break if start_row >= height
             end_row = {start_row + rows_per, height}.min
+            
+            spawned_count += 1
 
             spawn do
-              local_histo = pool.acquire(thread_idx)
-              local_count = process_pixel_range(pixels, width, start_row, end_row, step, alpha_threshold, local_histo)
-              channel.send({local_histo, local_count})
+              begin
+                local_histo = pool.acquire(thread_idx)
+                local_count = process_pixel_range(pixels, width, start_row, end_row, step, alpha_threshold, local_histo)
+                channel.send({local_histo, local_count})
+              rescue ex : Exception
+                @config.debug_log "Worker fiber failed: #{ex.class.name}: #{ex.message}"
+                channel.send({nil, 0})
+              end
             end
           end
 
           total_pixels = 0
-          thread_count.times do
+          spawned_count.times do
             local_histo, local_count = channel.receive
             if local_histo
               merge_histograms(histo, local_histo)

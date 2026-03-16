@@ -9,6 +9,12 @@ module PrismatIQ
   # - Thread-safe access using Mutex synchronization
   # - Only one thread executes computation for a given key even with concurrent access
   #
+  # ### Performance Note
+  # Computation happens while holding the global mutex, which means other cache operations
+  # will be blocked during slow computations. For most use cases in this library
+  # (color extraction, theme detection), computations are fast enough that this is not
+  # a significant issue.
+  #
   # ### Example
   # ```
   # cache = ThreadSafeCache(String, Int32).new
