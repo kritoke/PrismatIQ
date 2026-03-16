@@ -5,6 +5,7 @@ A high-performance Crystal shard for extracting dominant color palettes from ima
 ## Features
 
 - **Color Palette Extraction**: Extract dominant colors from any image format
+- **SVG Support**: Extract colors directly from SVG vector graphics (no rasterization needed)
 - **WCAG Accessibility**: Built-in WCAG contrast checking and color adjustment  
 - **Theme Detection**: Automatic dark/light theme detection and color pairing
 - **ICO Support**: Extract palettes from Windows icon files (PNG and BMP encoded)
@@ -110,6 +111,26 @@ dominant = PrismatIQ.get_color("image.png")
 puts dominant.to_hex  # => "#e74c3c"
 ```
 
+### SVG Color Extraction
+
+```crystal
+# Extract colors from SVG string
+svg_content = %(<svg><rect fill="#FF0000"/><circle fill="rgb(0,255,0)"/></svg>)
+colors = PrismatIQ::SVGColorExtractor.extract_colors(svg_content)
+colors.each { |color| puts color.to_hex }
+
+# Extract colors from SVG file
+result = PrismatIQ::SVGColorExtractor.extract_from_file("icon.svg")
+case result
+when .ok?
+  colors = result.value
+  colors.each { |color| puts color.to_hex }
+when .err?
+  error = result.error
+  puts "Error: #{error.message}"
+end
+```
+
 ### Buffer-based Extraction
 
 ```crystal
@@ -136,7 +157,7 @@ For detailed documentation on specific features, see the guides:
 
 ## Version
 
-Current library version: `0.5.1`
+Current library version: `0.5.2`
 
 ## Security Considerations
 

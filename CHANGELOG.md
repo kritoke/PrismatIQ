@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [0.5.2] - 2026-03-15
 
+### Added
+
+- **SVG Color Extraction**: Pure Crystal SVG color extractor that parses SVG XML and extracts colors directly without rasterization
+  - Supports hex, RGB, RGBA, HSL, HSLA, and 140+ named CSS colors
+  - Extracts from all color attributes (`fill`, `stroke`, `stop-color`, `flood-color`, `lighting-color`, `color`)
+  - No external dependencies required - pure Crystal implementation
+  - Returns `Result(Array(RGB), Error)` with explicit error handling
+  - Comprehensive test coverage (29 test cases)
+
 ### Security
 
 - **SSRF Protection**: Added comprehensive Server-Side Request Forgery protection for ThemeExtractor HTTP client

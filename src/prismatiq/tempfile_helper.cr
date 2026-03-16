@@ -68,13 +68,19 @@ module PrismatIQ
       while tries < 16
         rnd = Random.new.rand(0_u32..0xFFFF_FFFF_u32)
         path = "#{tmp_dir}/#{prefix}#{Process.pid}_#{Time.local.to_unix}_#{rnd}.tmp"
-        unless File.exists?(path)
-          begin
-            write_buffer_to_file(path, data)
-            return path
-          rescue ex : Exception
-            STDERR.puts "PrismatIQ: try_windows_fallback failed (#{ex.class.name}): #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+        begin
+          File.open(path, "w", exclusive: true) do |file|
+            buffer = Bytes.new(data.size)
+            data.copy_to(buffer)
+            file.write(buffer)
+            file.flush
           end
+          return path
+        rescue File::AlreadyExistsError
+          tries += 1
+          next
+        rescue ex : Exception
+          STDERR.puts "PrismatIQ: try_windows_fallback failed (#{ex.class.name}): #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
         end
         tries += 1
       end

@@ -90,19 +90,30 @@ This document provides a complete reference of all public APIs available in Pris
 ## Utility Methods
 
 ### `PrismatIQ.find_closest(target, palette)`
-- **Parameters**:
-  - `target : RGB` - Target color to match
-  - `palette : Array(RGB)` - Array of candidate colors
-- **Returns**: `RGB?`
-- **Description**: Find the closest matching color from a palette using Euclidean distance in RGB space.
 
-### `PrismatIQ.find_closest_in_palette(target, path, options)`
+## SVG Color Extraction
+
+PrismatIQ includes a pure Crystal SVG color extractor that parses SVG XML and extracts colors directly without rasterization.
+
+### `PrismatIQ::SVGColorExtractor.extract_colors(source)`
 - **Parameters**:
-  - `target : RGB` - Target color to match  
-  - `path : String` - Path to image file
-  - `options : Options = Options.default` - Extraction configuration
-- **Returns**: `RGB?`
-- **Description**: Extract palette from image and find closest matching color to target.
+  - `source : String | IO` - SVG content as string or IO
+- **Returns**: `Array(RGB)`
+- **Description**: Extract colors from SVG content. Parses all color attributes (`fill`, `stroke`, `stop-color`, etc.) and supports hex, RGB, RGBA, HSL, HSLA, and 140+ named CSS colors.
+
+### `PrismatIQ::SVGColorExtractor.extract_from_file(path)`
+- **Parameters**:
+  - `path : String` - Path to SVG file
+- **Returns**: `Result(Array(RGB), Error)`
+- **Description**: Extract colors from SVG file with explicit error handling. Returns `Error.file_not_found` if file doesn't exist, or `Error.corrupted_image` if SVG parsing fails.
+
+### Supported SVG Color Formats
+- Hex: `#RGB`, `#RRGGBB`, `#RRGGBBAA` (3, 6, or 8 hex digits)
+- RGB: `rgb(r, g, b)` with optional percentage values
+- RGBA: `rgba(r, g, b, a)` with alpha as 0-1 or percentage
+- HSL: `hsl(h, s%, l%)` with hue in degrees
+- HSLA: `hsla(h, s%, l%, a)`
+- Named colors: All 140+ CSS named colors (e.g., `red`, `lime`, `cornflowerblue`)
 
 ## Async APIs
 

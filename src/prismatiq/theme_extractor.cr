@@ -197,6 +197,11 @@ module PrismatIQ
     end
 
     private def fetch_url(url : String, options : ThemeOptions) : Slice(UInt8)?
+      unless @config.rate_limit_allow?
+        @config.debug_log "fetch_url: rate limited, please retry later"
+        return nil
+      end
+
       uri = URI.parse(url)
 
       unless {"http", "https"}.includes?(uri.scheme)
@@ -245,8 +250,9 @@ module PrismatIQ
       allowlist = @config.ssrf_allowlist
       return false unless allowlist
 
+      host_lower = host.downcase
       allowlist.any? do |allowed|
-        host == allowed || host.ends_with?(".#{allowed}")
+        host_lower == allowed.downcase
       end
     end
 

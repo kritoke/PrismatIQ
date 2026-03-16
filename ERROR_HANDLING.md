@@ -175,7 +175,7 @@ end
 - **Solution**: Use sanitized, application-controlled paths
 
 ### Unsupported Format
-- **Cause**: File extension not in supported formats (`.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.ico`, `.webp`, `.tiff`, `.tif`)
+- **Cause**: File extension not in supported formats (`.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.ico`, `.webp`, `.tiff`, `.tif`, `.svg`)
 - **Solution**: Validate file extensions or convert to supported format first
 
 ### Corrupted Image

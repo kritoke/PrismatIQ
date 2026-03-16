@@ -58,8 +58,7 @@ module PrismatIQ
         height = rgba_image.bounds.height.to_i32
 
         src = rgba_image.pix
-        pixels = Slice.new(src.size) { |i| src[i] }
-        extract_from_buffer(pixels, width, height, options)
+        extract_from_buffer(src, width, height, options)
       end
 
       def extract_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options) : Array(RGB)

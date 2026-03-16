@@ -1,3 +1,5 @@
+require "./utils/binary_reader"
+
 module PrismatIQ
   # PNGExtractor: Helper for extracting PNG-encoded image data from ICO entries
   #
@@ -30,6 +32,7 @@ module PrismatIQ
   # modern PNG-compressed images. Both return a consistent `ParsedImage`
   # structure with width, height, and RGBA pixels.
   class PNGExtractor
+    include BinaryReader
     # Result of PNG extraction containing RGBA pixel data and dimensions
     struct ParsedImage
       getter width : Int32
@@ -470,6 +473,7 @@ module PrismatIQ
   # end
   # ```
   class ICOFile
+    include BinaryReader
     # Result of ICOFile parsing containing RGBA pixel data and dimensions
     struct ParsedImage
       getter width : Int32
@@ -799,52 +803,6 @@ module PrismatIQ
       end
 
       @valid = @entries.size > 0
-    end
-
-    private def read_u16_le(slice : Slice(UInt8), idx : Int) : Int32
-      if idx + 1 >= slice.size
-        raise IndexError.new("read_u16_le: index out of bounds")
-      end
-      (slice[idx].to_u32 | (slice[idx + 1].to_u32 << 8)).to_i32
-    end
-
-    private def read_u32_le(slice : Slice(UInt8), idx : Int) : UInt64
-      if idx + 3 >= slice.size
-        raise IndexError.new("read_u32_le: index out of bounds")
-      end
-      (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) |
-        slice[idx + 2].to_u64 << 16 | (slice[idx + 3].to_u64 << 24)).to_u64
-    end
-
-    private def read_i32_le(slice : Slice(UInt8), idx : Int) : Int64
-      if idx + 3 >= slice.size
-        raise IndexError.new("read_i32_le: index out of bounds")
-      end
-      (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) |
-        slice[idx + 2].to_u64 << 16 | (slice[idx + 3].to_u64 << 24)).to_i64
-    end
-
-    private def self.read_u16_le(slice : Slice(UInt8), idx : Int) : Int32
-      if idx + 1 >= slice.size
-        raise IndexError.new("read_u16_le: index out of bounds")
-      end
-      (slice[idx].to_u32 | (slice[idx + 1].to_u32 << 8)).to_i32
-    end
-
-    private def self.read_u32_le(slice : Slice(UInt8), idx : Int) : UInt64
-      if idx + 3 >= slice.size
-        raise IndexError.new("read_u32_le: index out of bounds")
-      end
-      (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) |
-        slice[idx + 2].to_u64 << 16 | (slice[idx + 3].to_u64 << 24)).to_u64
-    end
-
-    private def self.read_i32_le(slice : Slice(UInt8), idx : Int) : Int64
-      if idx + 3 >= slice.size
-        raise IndexError.new("read_i32_le: index out of bounds")
-      end
-      (slice[idx].to_u64 | (slice[idx + 1].to_u64 << 8) |
-        slice[idx + 2].to_u64 << 16 | (slice[idx + 3].to_u64 << 24)).to_i64
     end
 
     private def self.debug_log(*parts)

@@ -34,7 +34,7 @@ module PrismatIQ
   module Utils
     module Validation
       MAX_FILE_SIZE        = 100 * 1024 * 1024 # 100MB
-      SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tiff", ".tif"]
+      SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tiff", ".tif", ".svg"]
 
       def self.validate_file_path(path : String) : Result(String, Error)
         return Result(String, Error).err(Error.invalid_image_path(path, "Path is empty")) if path.empty?
@@ -153,6 +153,9 @@ module PrismatIQ
 
         # WebP: 52 49 46 46 ... 57 45 42 50
         return true if header[0..3] == Bytes[0x52, 0x49, 0x46, 0x46]
+
+        # SVG: starts with <?xml or <svg (text-based, check for '<')
+        return true if header[0] == 0x3C # '<' character
 
         false
       end
