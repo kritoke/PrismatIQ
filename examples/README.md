@@ -1,14 +1,14 @@
 Color Thief‑style adapter example
 --------------------------------
 
-This folder contains a small CLI adapter that demonstrates how to call
-PrismatIQ and emit a ColorThief-compatible JSON payload from a local image.
+This folder contains examples demonstrating how to use PrismatIQ.
 
-Script
+Scripts
 - `examples/color_thief_adapter.cr` — reads an image file and prints JSON with:
   - `colors`: array of hex strings (dominant first)
   - `entries`: array of objects { hex, count, percent }
   - `total_pixels`: integer
+- `examples/theme_extraction.cr` — demonstrates the new theme extraction API with files, URLs, and accessibility compliance
 
 Quick usage
 - Run the adapter with Crystal:
@@ -19,6 +19,10 @@ Quick usage
   - `count` (default `5`): how many colors to return
   - `quality` (default `10`): sampling step (lower = higher fidelity)
   - `threads` (default `0`): number of worker threads (0 = auto)
+
+- Run the theme extraction example:
+
+  crystal run examples/theme_extraction.cr
 
 Capture example output
 - Example command and saving output to `out.json`:

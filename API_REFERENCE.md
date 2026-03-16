@@ -127,12 +127,20 @@ Runtime configuration for debugging and performance:
 - `debug : Bool` - Enable debug output (default: false)
 - `threads : Int32?` - Override detected thread count
 - `merge_chunk : Int32?` - Override histogram merge chunk size
+- `ssrf_protection : Bool` - Enable SSRF protection for HTTP requests (default: true)
+- `ssrf_allowlist : Array(String)?` - List of hosts allowed to bypass SSRF protection
 
 ### `PrismatIQ::Error`
 Structured error type with:
-- `type : ErrorType` - Error category enum
+- `type : ErrorType` - Error category enum (includes `SSRFBlocked`)
 - `message : String` - Human-readable message  
 - `context : Hash(String, String)?` - Additional context information
+
+### `PrismatIQ::SSRFError`
+Exception raised when SSRF protection blocks a request:
+- `url : String` - The blocked URL
+- `ip : String` - The resolved IP address
+- `reason : String` - The reason for blocking (e.g., "loopback", "private_address")
 
 ### `PrismatIQ::Result(T, E)`
 Result type inspired by Rust's Result:

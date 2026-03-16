@@ -2,6 +2,61 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] - 2026-03-15
+
+### Security
+
+- **SSRF Protection**: Added comprehensive Server-Side Request Forgery protection for ThemeExtractor HTTP client
+  - Blocks requests to private/reserved IP ranges (10.x, 172.16-31.x, 192.168.x, 127.x, 169.254.x, 0.x, ::1, fc00::/7, fe80::/10)
+  - URL scheme validation - only `http://` and `https://` allowed
+  - DNS resolution and IP validation before connection
+  - Configurable allowlist for trusted internal hosts
+  - Controlled via `Config.ssrf_protection` and `Config.ssrf_allowlist`
+
+- **Path Validation**: Enhanced path validation security
+  - Blocks URL-encoded path traversal (`%2e%2e`, `%252e%252e`, `..%2f`)
+  - Blocks null byte injection (`\0`)
+  - Blocks encoded tilde (`%7e`)
+
+### Fixed
+
+- **Silent Exception Handling**: Eliminated empty rescue blocks that silently swallowed exceptions
+  - All rescued exceptions now logged when `PRISMATIQ_DEBUG=true`
+  - Log messages include method context and exception type
+  - Improved debugging visibility for production issues
+
+- **Global State**: Replaced mutable class variable with thread-safe singleton pattern
+  - `ThemeExtractor` now uses mutex-protected lazy initialization
+  - Eliminates potential race conditions in concurrent access
+
+- **Validation Consolidation**: Removed duplicate validation logic
+  - `Validation.validate_options` now delegates to `Options.validate!`
+  - Single source of truth for option validation
+
+- **File Size Limits**: Unified file size limits across components
+  - `TempfileHelper::MAX_DATA_SIZE` aligned with `Validation::MAX_FILE_SIZE` (100MB)
+
+### Added
+
+- New `IPValidator` utility module for IP address validation
+- New `SSRFError` exception class with URL, IP, and reason context
+- New `Error.ssrf_blocked` factory method
+- New `ErrorType::SSRFBlocked` enum value
+- Comprehensive test coverage for security features (13 new test cases)
+
+## [0.5.1] - Unreleased
+
+### Added
+
+#### Theme Extraction API
+- **Unified theme extraction**: `extract_theme(source, options)` supports files, URLs, and buffers
+- **Theme-aware results**: Returns background color with compliant light/dark text colors
+- **Accessibility auto-correction**: `fix_theme(theme_json, legacy_bg, legacy_text)` ensures WCAG 4.5 compliance
+- **Built-in HTTP support**: Fetches images from URLs using Crystal's built-in HTTP client
+- **Thread-safe caching**: 7-day TTL caching with proper expiration
+- **Concise API surface**: Clean, generic method names suitable for any project
+- **Drop-in compatibility**: JSON format matches quickheadlines expectations
+
 ## [0.5.0] - 2026-03-14
 
 ### Breaking Changes

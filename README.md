@@ -64,11 +64,34 @@ end
 
 # Or use exception-based API for simpler cases
 begin
-  colors = PrismatIQ.get_palette_v2!("image.png", options)
+  colors = PrismatIQ.get_palette!("image.png", options)
   colors.each { |color| puts color.to_hex }
 rescue ex : Exception
   puts "Failed: #{ex.message}"
 end
+```
+
+### Theme Extraction API
+
+```crystal
+# Extract theme from local file
+theme = PrismatIQ.extract_theme("favicon.ico")
+if theme
+  puts "Background: #{theme.bg}"
+  puts "Light text: #{theme.text["light"]}"
+  puts "Dark text: #{theme.text["dark"]}"
+  puts "JSON: #{theme.to_json}"
+end
+
+# Extract theme from URL
+theme = PrismatIQ.extract_theme("https://example.com/favicon.ico")
+
+# Auto-correct theme for accessibility compliance
+original_theme = "{\"bg\":\"#808080\",\"text\":{\"light\":\"#aaaaaa\",\"dark\":\"#555555\"}}"
+fixed_theme = PrismatIQ.fix_theme(original_theme)
+
+# Clear the cache
+PrismatIQ.clear_theme_cache
 ```
 
 ### ICO File Support
@@ -105,7 +128,6 @@ For detailed documentation on specific features, see the guides:
 - [WCAG Accessibility](./ACCESSIBILITY_GUIDE.md) - Accessibility calculations and compliance
 - [Theme Detection](./THEME_DETECTION.md) - Theme analysis and color pairing
 - [Configuration](./CONFIGURATION.md) - Options and runtime configuration
-- [Migration Guide](./MIGRATION.md) - Upgrading from v0.4.x to v0.5.0
 
 ## Examples
 
@@ -114,4 +136,49 @@ For detailed documentation on specific features, see the guides:
 
 ## Version
 
-Current library version: `0.5.0`
+Current library version: `0.5.1`
+
+## Security Considerations
+
+### SSRF Protection
+
+When using the `ThemeExtractor` to fetch images from URLs, PrismatIQ includes built-in **Server-Side Request Forgery (SSRF) protection**:
+
+- **Private IP Blocking**: Requests to private/reserved IP ranges are blocked by default:
+  - IPv4: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `169.254.0.0/16`, `0.0.0.0/8`
+  - IPv6: `::1/128`, `fc00::/7`, `fe80::/10`
+- **URL Scheme Validation**: Only `http://` and `https://` URLs are allowed
+- **DNS Rebinding Protection**: IP addresses are resolved and validated before connection
+
+### Configuration
+
+SSRF protection is **enabled by default**. To customize:
+
+```crystal
+# Disable SSRF protection (not recommended)
+config = PrismatIQ::Config.new(ssrf_protection: false)
+
+# Allow specific internal hosts via allowlist
+config = PrismatIQ::Config.new(
+  ssrf_protection: true,
+  ssrf_allowlist: ["internal.company.com", "localhost"]
+)
+```
+
+Or via environment variables:
+```bash
+export PRISMATIQ_SSRF_PROTECTION=false  # Disable (not recommended)
+export PRISMATIQ_SSRF_ALLOWLIST=internal.company.com,localhost
+```
+
+### Path Validation
+
+When extracting from local files, PrismatIQ validates:
+- **Path Traversal**: Blocks `..` and URL-encoded variants (`%2e%2e`, `%252e%252e`)
+- **Null Byte Injection**: Rejects paths containing `\0`
+- **System Directories**: Prevents access to `/etc/`, `/sys/`, `/proc/`
+- **File Size Limits**: Enforces 100MB maximum file size
+
+### Debug Mode
+
+When `PRISMATIQ_DEBUG=true` is set, all caught exceptions are logged to STDERR. This may include sensitive information (URLs, file paths) - use only during development.
