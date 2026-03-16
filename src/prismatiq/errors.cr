@@ -37,12 +37,16 @@ module PrismatIQ
     def initialize(@type : ErrorType, @message : String, @context : Hash(String, String)? = nil)
     end
 
+    private def self.sanitize_path(path : String) : String
+      File.basename(path)
+    end
+
     def self.file_not_found(path : String, message : String? = nil) : Error
       msg = message || "File not found"
       new(
         ErrorType::FileNotFound,
-        "#{msg}: #{File.basename(path)}",
-        {"path" => File.basename(path)}
+        "#{msg}: #{sanitize_path(path)}",
+        {"path" => sanitize_path(path)}
       )
     end
 
@@ -51,7 +55,7 @@ module PrismatIQ
       new(
         ErrorType::InvalidImagePath,
         msg,
-        {"path" => File.basename(path)}
+        {"path" => sanitize_path(path)}
       )
     end
 

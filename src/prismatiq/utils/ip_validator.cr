@@ -93,7 +93,7 @@ module PrismatIQ
 
           ipv4_parts = ipv4_part.split(".")
           if ipv4_parts.size == 4
-            hex = ipv4_parts.map { |p| p.to_u8?.try(&.to_s(16).rjust(2, '0')) || "00" }.join
+            hex = ipv4_parts.map { |_p| _p.to_u8?.try(&.to_s(16).rjust(2, '0')) || "00" }.join
             return ipv6_prefix + hex
           end
         end

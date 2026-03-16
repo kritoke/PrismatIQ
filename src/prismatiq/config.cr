@@ -1,6 +1,7 @@
 require "../cpu_cores"
 
 module PrismatIQ
+  # Token bucket rate limiter for HTTP request throttling.
   class RateLimiter
     @tokens : Float64
     @last_refill : Time::Instant
@@ -44,9 +45,12 @@ module PrismatIQ
 
     def wait_for_token(timeout_seconds : Float64 = 5.0) : Bool
       deadline = Time.instant + Time::Span.new(seconds: timeout_seconds)
+      sleep_time = 0.001
+      max_sleep = 0.1
       while Time.instant < deadline
         return true if acquire
-        sleep 0.05.seconds
+        sleep(sleep_time.seconds)
+        sleep_time = {sleep_time * 1.5, max_sleep}.min
       end
       false
     end
@@ -61,13 +65,21 @@ module PrismatIQ
     end
   end
 
+  # Configuration for PrismatIQ runtime behavior.
   struct Config
+    # Enable debug logging
     property? debug : Bool
+    # Number of threads for parallel processing (nil = auto)
     property threads : Int32?
+    # Chunk size for histogram merging
     property merge_chunk : Int32?
+    # Enable SSRF protection for URL fetching
     property? ssrf_protection : Bool
+    # Allowed hosts for URL fetching (bypasses SSRF check)
     property ssrf_allowlist : Array(String)?
+    # Rate limit for HTTP requests per second
     property rate_limit : Int32
+    # Internal rate limiter instance
     property rate_limiter : RateLimiter?
 
     def initialize(

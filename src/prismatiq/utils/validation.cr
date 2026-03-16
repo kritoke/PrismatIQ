@@ -39,49 +39,45 @@ module PrismatIQ
       def self.validate_file_path(path : String) : Result(String, Error)
         return Result(String, Error).err(Error.invalid_image_path(path, "Path is empty")) if path.empty?
 
-        if path.includes?('\0')
-          return Result(String, Error).err(Error.new(ErrorType::InvalidImagePath, "Null byte in path not allowed"))
-        end
+        return Result(String, Error).err(Error.new(ErrorType::InvalidImagePath, "Null byte in path not allowed")) if path.includes?('\0')
 
         decoded_path = url_decode_path(path)
+        return Result(String, Error).err(Error.invalid_image_path(path, "Directory traversal not allowed")) if contains_traversal?(path) || contains_traversal?(decoded_path)
 
-        if contains_traversal?(path) || contains_traversal?(decoded_path)
-          return Result(String, Error).err(Error.invalid_image_path(path, "Directory traversal not allowed"))
-        end
+        return Result(String, Error).err(Error.file_not_found(path)) unless File.exists?(path)
 
-        unless File.exists?(path)
-          return Result(String, Error).err(Error.file_not_found(path))
-        end
+        real_path_res = validate_realpath(path)
+        return real_path_res if real_path_res.is_a?(Result(String, Error)) && !real_path_res.ok?
 
-        begin
-          real_path = File.realpath(path)
-        rescue ex : Exception
-          return Result(String, Error).err(Error.invalid_image_path(path, "Cannot resolve path: #{ex.message}"))
-        end
-
-        if real_path.starts_with?("/etc/") || real_path.starts_with?("/sys/") || real_path.starts_with?("/proc/")
-          return Result(String, Error).err(Error.invalid_image_path(path, "Access to system directories not allowed"))
-        end
+        real_path = real_path_res.as(String)
+        return Result(String, Error).err(Error.invalid_image_path(path, "Access to system directories not allowed")) if system_directory?(real_path)
 
         ext = File.extname(path).downcase
-        unless SUPPORTED_EXTENSIONS.includes?(ext)
-          return Result(String, Error).err(Error.unsupported_format(ext))
-        end
+        return Result(String, Error).err(Error.unsupported_format(ext)) unless SUPPORTED_EXTENSIONS.includes?(ext)
 
-        begin
-          size = File.size(path)
-          if size > MAX_FILE_SIZE
-            return Result(String, Error).err(Error.invalid_image_path(path, "File size exceeds 100MB limit"))
-          end
-
-          if size == 0
-            return Result(String, Error).err(Error.corrupted_image("File is empty"))
-          end
-        rescue ex : Exception
-          return Result(String, Error).err(Error.invalid_image_path(path, "Cannot read file: #{ex.message}"))
-        end
+        size_result = validate_file_size(path)
+        return size_result unless size_result.as(Bool)
 
         Result(String, Error).ok(path)
+      end
+
+      private def self.validate_realpath(path : String) : Result(String, Error) | String
+        File.realpath(path)
+      rescue ex : Exception
+        Result(String, Error).err(Error.invalid_image_path(path, "Cannot resolve path: #{ex.message}"))
+      end
+
+      private def self.system_directory?(path : String) : Bool
+        path.starts_with?("/etc/") || path.starts_with?("/sys/") || path.starts_with?("/proc/")
+      end
+
+      private def self.validate_file_size(path : String) : Result(String, Error) | Bool
+        size = File.size(path)
+        return Result(String, Error).err(Error.invalid_image_path(path, "File size exceeds 100MB limit")) if size > MAX_FILE_SIZE
+        return Result(String, Error).err(Error.corrupted_image("File is empty")) if size == 0
+        true
+      rescue ex : Exception
+        Result(String, Error).err(Error.invalid_image_path(path, "Cannot read file: #{ex.message}"))
       end
 
       private def self.url_decode_path(path : String) : String
@@ -95,14 +91,11 @@ module PrismatIQ
       end
 
       private def self.contains_traversal?(path : String) : Bool
-        return true if path.includes?("..")
-        return true if path.includes?("~")
-        return true if path.includes?("%2e") || path.includes?("%2E")
-        return true if path.includes?("%252e") || path.includes?("%252E")
-        return true if path.includes?("%2f") || path.includes?("%2F")
-        return true if path.includes?("%5c") || path.includes?("%5C")
-        return true if path.includes?("%7e") || path.includes?("%7E")
-        false
+        lower = path.downcase
+        lower.includes?("..") || lower.includes?("~") ||
+          lower.includes?("%2e") || lower.includes?("%252e") ||
+          lower.includes?("%2f") || lower.includes?("%5c") ||
+          lower.includes?("%7e")
       end
 
       def self.validate_options(options : Options) : Result(Options, Error)

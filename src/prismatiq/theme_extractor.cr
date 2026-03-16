@@ -11,6 +11,11 @@ module PrismatIQ
   end
 
   struct ThemeOptions
+    DEFAULT_CACHE_TTL     = 7 * 24 * 60 * 60
+    DEFAULT_QUALITY       = 1000
+    DEFAULT_HTTP_TIMEOUT  =   10
+    DEFAULT_MAX_FILE_SIZE = 10_i64 * 1024 * 1024
+
     property skip_if_configured : String?
     property cache_ttl : Int32
     property quality : Int32
@@ -19,10 +24,10 @@ module PrismatIQ
 
     def initialize
       @skip_if_configured = nil
-      @cache_ttl = 7 * 24 * 60 * 60
-      @quality = 1000
-      @http_timeout = 10
-      @max_file_size = 10_i64 * 1024 * 1024
+      @cache_ttl = DEFAULT_CACHE_TTL
+      @quality = DEFAULT_QUALITY
+      @http_timeout = DEFAULT_HTTP_TIMEOUT
+      @max_file_size = DEFAULT_MAX_FILE_SIZE
     end
   end
 
@@ -47,6 +52,10 @@ module PrismatIQ
       @accessibility = AccessibilityCalculator.new
     end
 
+    # Extract a theme (background + text colors) from an image or URL.
+    # @param source [String] File path or URL to the image
+    # @param options [ThemeOptions] Configuration options (cache_ttl, quality, http_timeout, etc.)
+    # @return [ThemeResult?] The extracted theme result, or nil if extraction fails
     def extract(source : String, options : ThemeOptions = ThemeOptions.new) : ThemeResult?
       skip_val = options.skip_if_configured
       return if skip_val && !skip_val.empty?
@@ -100,25 +109,13 @@ module PrismatIQ
       build_theme_result(bg_rgb)
     end
 
+    # Validate and fix a theme JSON string, ensuring text colors meet contrast requirements.
+    # @param theme_json [String] JSON string with "bg" and optional "text" keys
+    # @param legacy_bg [String?] Fallback background color if not in JSON
+    # @param legacy_text [String?] Fallback text color if not in JSON
+    # @return [String?] Fixed theme JSON string, or nil if invalid
     def fix_theme(theme_json : String, legacy_bg : String? = nil, legacy_text : String? = nil) : String?
-      bg_rgb = nil
-      text_hash = {} of String => String
-
-      begin
-        parsed = JSON.parse(theme_json)
-        bg_val = parsed["bg"]?.try(&.as_s) || parsed["background"]?.try(&.as_s)
-        bg_rgb = parse_color_to_rgb(bg_val) if bg_val
-
-        if txt = parsed["text"]?
-          if txt.is_a?(Hash)
-            txt.as_h.each do |k, v|
-              text_hash[k.to_s] = v.as_s
-            end
-          end
-        end
-      rescue ex : Exception
-        @config.debug_log "fix_theme: JSON.parse error (#{ex.class.name}): #{ex.message}"
-      end
+      bg_rgb, text_hash = parse_theme_json(theme_json)
 
       bg_rgb ||= parse_color_to_rgb(legacy_bg) if legacy_bg
 
@@ -142,6 +139,29 @@ module PrismatIQ
       ThemeResult.new(bg_rgb, text_colors[:light], text_colors[:dark]).to_json
     end
 
+    private def parse_theme_json(theme_json : String) : Tuple(Array(Int32)?, Hash(String, String))
+      bg_rgb = nil
+      text_hash = {} of String => String
+
+      begin
+        parsed = JSON.parse(theme_json)
+        bg_val = parsed["bg"]?.try(&.as_s) || parsed["background"]?.try(&.as_s)
+        bg_rgb = parse_color_to_rgb(bg_val) if bg_val
+
+        if txt = parsed["text"]?
+          if txt.is_a?(Hash)
+            txt.as_h.each do |k, v|
+              text_hash[k.to_s] = v.as_s
+            end
+          end
+        end
+      rescue ex : Exception
+        @config.debug_log "fix_theme: JSON.parse error (#{ex.class.name}): #{ex.message}"
+      end
+
+      {bg_rgb, text_hash}
+    end
+
     def clear_cache
       @cache.clear
     end
@@ -149,14 +169,7 @@ module PrismatIQ
     private def extract_bg_from_ico(path : String, options : ThemeOptions) : Array(Int32)?
       ico = ICOFile.from_path(path)
       return unless ico && ico.valid?
-
-      pixels = ico.to_rgba
-      w = ico.width
-      h = ico.height
-
-      extractor_opts = ColorExtractor::Options.new
-      extractor_opts.sample_size = options.quality
-      ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
+      extract_colors_from_pixels(ico.to_rgba, ico.width, ico.height, options)
     rescue Exception
       return
     end
@@ -164,14 +177,7 @@ module PrismatIQ
     private def extract_bg_from_ico_buffer(data : Slice(UInt8), options : ThemeOptions) : Array(Int32)?
       ico = ICOFile.from_slice(data)
       return unless ico && ico.valid?
-
-      pixels = ico.to_rgba
-      w = ico.width
-      h = ico.height
-
-      extractor_opts = ColorExtractor::Options.new
-      extractor_opts.sample_size = options.quality
-      ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
+      extract_colors_from_pixels(ico.to_rgba, ico.width, ico.height, options)
     rescue Exception
       return
     end
@@ -187,11 +193,7 @@ module PrismatIQ
       rgba = CrImage::Pipeline.new(img).result
       return unless rgba
 
-      pixels = rgba.pix
-
-      extractor_opts = ColorExtractor::Options.new
-      extractor_opts.sample_size = options.quality
-      ColorExtractor.extract_from_buffer(pixels, w.to_i32, h.to_i32, extractor_opts)
+      extract_colors_from_pixels(rgba.pix, w.to_i32, h.to_i32, options)
     rescue Exception
       return
     end
@@ -202,6 +204,12 @@ module PrismatIQ
       end
     rescue Exception
       return
+    end
+
+    private def extract_colors_from_pixels(pixels, w, h, options : ThemeOptions) : Array(Int32)?
+      extractor_opts = ColorExtractor::Options.new
+      extractor_opts.sample_size = options.quality
+      ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
     end
 
     private def fetch_url(url : String, options : ThemeOptions) : Slice(UInt8)?
