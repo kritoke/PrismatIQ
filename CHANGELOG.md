@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.5.2] - 2026-03-15
+## [0.5.3] - 2026-03-16
 
 ### Added
 
@@ -12,6 +12,22 @@ All notable changes to this project will be documented in this file.
   - No external dependencies required - pure Crystal implementation
   - Returns `Result(Array(RGB), Error)` with explicit error handling
   - Comprehensive test coverage (29 test cases)
+
+### Security
+
+- **Error Context Sanitization**: Prevent path information leakage in error messages
+  - Sanitized error contexts to avoid leaking file paths or sensitive information
+
+### Fixed
+
+- **Favicon handling**: Fixed various issues with bad/invalid favicon processing
+- **Code quality**: Reduced cyclomatic complexity in ThemeExtractor and Validation modules
+- **Maintainability**: Extracted common ICO/image extraction logic into shared methods
+- **Lint compliance**: Fixed all ameba linting issues across the codebase
+- **Rate limiting**: Implemented exponential backoff for better resource management
+- **Documentation**: Added comprehensive docs to public APIs (ThemeExtractor, Config, RateLimiter)
+
+## [0.5.2] - 2026-03-15
 
 ### Security
 

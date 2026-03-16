@@ -56,7 +56,7 @@ module PrismatIQ
         return Result(String, Error).err(Error.unsupported_format(ext)) unless SUPPORTED_EXTENSIONS.includes?(ext)
 
         size_result = validate_file_size(path)
-        return size_result unless size_result.as(Bool)
+        return size_result if size_result.is_a?(Result(String, Error))
 
         Result(String, Error).ok(path)
       end

@@ -157,7 +157,7 @@ For detailed documentation on specific features, see the guides:
 
 ## Version
 
-Current library version: `0.5.2`
+Current library version: `0.5.3`
 
 ## Security Considerations
 

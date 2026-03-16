@@ -30,7 +30,7 @@ require "json"
 require "yaml"
 
 module PrismatIQ
-  VERSION = "0.5.2"
+  VERSION = "0.5.3"
 
   # High-performance Crystal shard for extracting dominant color palettes from images.
   #
