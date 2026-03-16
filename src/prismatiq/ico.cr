@@ -33,6 +33,7 @@ module PrismatIQ
   # structure with width, height, and RGBA pixels.
   class PNGExtractor
     include BinaryReader
+
     # Result of PNG extraction containing RGBA pixel data and dimensions
     struct ParsedImage
       getter width : Int32
@@ -474,6 +475,7 @@ module PrismatIQ
   # ```
   class ICOFile
     include BinaryReader
+
     # Result of ICOFile parsing containing RGBA pixel data and dimensions
     struct ParsedImage
       getter width : Int32
@@ -530,6 +532,9 @@ module PrismatIQ
     def self.from_slice(data : Slice(UInt8)) : ICOFile?
       return if data.nil?
       new(data)
+    rescue ex : Exception
+      debug_log("ICOFile.from_slice: failed to parse: #{ex.message}")
+      nil
     end
 
     # Creates a new ICOFile from a byte slice

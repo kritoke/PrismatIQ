@@ -106,12 +106,10 @@ module PrismatIQ
       end
 
       def self.validate_options(options : Options) : Result(Options, Error)
-        begin
-          options.validate!
-          Result(Options, Error).ok(options)
-        rescue ex : ValidationError
-          Result(Options, Error).err(Error.invalid_options("options", "invalid", ex.message || "Validation failed"))
-        end
+        options.validate!
+        Result(Options, Error).ok(options)
+      rescue ex : ValidationError
+        Result(Options, Error).err(Error.invalid_options("options", "invalid", ex.message || "Validation failed"))
       end
 
       def self.validate_io(io : IO) : Result(IO, Error)

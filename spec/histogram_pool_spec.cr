@@ -101,7 +101,7 @@ describe PrismatIQ::Core::HistogramPool do
       100.times do |i|
         spawn do
           idx = i % 20
-          histo = pool.acquire(idx)
+          pool.acquire(idx)
           sleep 0.001.milliseconds
           pool.release(idx)
           channel.send(true)

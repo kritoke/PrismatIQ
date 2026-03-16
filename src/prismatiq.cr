@@ -71,21 +71,19 @@ module PrismatIQ
   # @param options [Options] Configuration options (color_count, quality, threads, alpha_threshold)
   # @return [Result(Array(RGB), Error)] Result containing palette or structured error
   def self.get_palette_v2(path : String, options : Options = Options.default) : Result(Array(RGB), Error)
-    begin
-      options.validate!
-      extractor = Core::PaletteExtractor.new
-      result = extractor.extract_from_path(path, options)
-      
-      if result.empty?
-        return Result(Array(RGB), Error).err(Error.file_not_found(path, "Failed to extract palette"))
-      end
-      
-      Result(Array(RGB), Error).ok(result)
-    rescue ex : ValidationError
-      Result(Array(RGB), Error).err(Error.invalid_options("path", path, ex.message))
-    rescue ex : Exception
-      Result(Array(RGB), Error).err(Error.file_not_found(path, ex.message || "File not found"))
+    options.validate!
+    extractor = Core::PaletteExtractor.new
+    result = extractor.extract_from_path(path, options)
+
+    if result.empty?
+      return Result(Array(RGB), Error).err(Error.file_not_found(path, "Failed to extract palette"))
     end
+
+    Result(Array(RGB), Error).ok(result)
+  rescue ex : ValidationError
+    Result(Array(RGB), Error).err(Error.invalid_options("path", path, ex.message))
+  rescue ex : Exception
+    Result(Array(RGB), Error).err(Error.file_not_found(path, ex.message || "File not found"))
   end
 
   # Extract palette from a file path, raising exceptions on errors.
@@ -98,11 +96,11 @@ module PrismatIQ
     options.validate!
     extractor = Core::PaletteExtractor.new
     result = extractor.extract_from_path(path, options)
-    
+
     if result.empty?
       raise Exception.new("Failed to extract palette from #{path}")
     end
-    
+
     result
   end
 
@@ -111,21 +109,19 @@ module PrismatIQ
   # @param options [Options] Configuration options
   # @return [Result(Array(RGB), Error)] Result containing palette or structured error
   def self.get_palette_v2(io : IO, options : Options = Options.default) : Result(Array(RGB), Error)
-    begin
-      options.validate!
-      extractor = Core::PaletteExtractor.new
-      result = extractor.extract_from_io(io, options)
-      
-      if result.empty?
-        return Result(Array(RGB), Error).err(Error.corrupted_image("Failed to extract palette from IO"))
-      end
-      
-      Result(Array(RGB), Error).ok(result)
-    rescue ex : ValidationError
-      Result(Array(RGB), Error).err(Error.invalid_options("io", "IO object", ex.message))
-    rescue ex : Exception
-      Result(Array(RGB), Error).err(Error.corrupted_image(ex.message || "Corrupted image"))
+    options.validate!
+    extractor = Core::PaletteExtractor.new
+    result = extractor.extract_from_io(io, options)
+
+    if result.empty?
+      return Result(Array(RGB), Error).err(Error.corrupted_image("Failed to extract palette from IO"))
     end
+
+    Result(Array(RGB), Error).ok(result)
+  rescue ex : ValidationError
+    Result(Array(RGB), Error).err(Error.invalid_options("io", "IO object", ex.message))
+  rescue ex : Exception
+    Result(Array(RGB), Error).err(Error.corrupted_image(ex.message || "Corrupted image"))
   end
 
   # Extract palette from an IO source, raising exceptions on errors.
@@ -138,11 +134,11 @@ module PrismatIQ
     options.validate!
     extractor = Core::PaletteExtractor.new
     result = extractor.extract_from_io(io, options)
-    
+
     if result.empty?
       raise Exception.new("Failed to extract palette from IO")
     end
-    
+
     result
   end
 
@@ -154,21 +150,19 @@ module PrismatIQ
   # @param config [Config] Runtime configuration (debugging, threading)
   # @return [Result(Array(RGB), Error)] Result containing palette or structured error
   def self.get_palette_v2(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.default, config : Config = Config.default) : Result(Array(RGB), Error)
-    begin
-      options.validate!
-      extractor = Core::PaletteExtractor.new(config)
-      result = extractor.extract_from_buffer(pixels, width, height, options)
-      
-      if result.empty?
-        return Result(Array(RGB), Error).err(Error.invalid_options("pixels", "0", "No valid pixels found"))
-      end
-      
-      Result(Array(RGB), Error).ok(result)
-    rescue ex : ValidationError
-      Result(Array(RGB), Error).err(Error.invalid_options("buffer", "buffer", ex.message || "Validation failed"))
-    rescue ex : Exception
-      Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "Processing failed"))
+    options.validate!
+    extractor = Core::PaletteExtractor.new(config)
+    result = extractor.extract_from_buffer(pixels, width, height, options)
+
+    if result.empty?
+      return Result(Array(RGB), Error).err(Error.invalid_options("pixels", "0", "No valid pixels found"))
     end
+
+    Result(Array(RGB), Error).ok(result)
+  rescue ex : ValidationError
+    Result(Array(RGB), Error).err(Error.invalid_options("buffer", "buffer", ex.message || "Validation failed"))
+  rescue ex : Exception
+    Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "Processing failed"))
   end
 
   # Extract palette from raw RGBA pixel buffer, raising exceptions on errors.
@@ -184,11 +178,11 @@ module PrismatIQ
     options.validate!
     extractor = Core::PaletteExtractor.new(config)
     result = extractor.extract_from_buffer(pixels, width, height, options)
-    
+
     if result.empty?
       raise Exception.new("Failed to extract palette from buffer")
     end
-    
+
     result
   end
 
@@ -197,21 +191,19 @@ module PrismatIQ
   # @param options [Options] Configuration options
   # @return [Result(Array(RGB), Error)] Result containing palette or structured error
   def self.get_palette_v2(image : CrImage::Image, options : Options = Options.default) : Result(Array(RGB), Error)
-    begin
-      options.validate!
-      extractor = Core::PaletteExtractor.new
-      result = extractor.extract_from_image(image, options)
-      
-      if result.empty?
-        return Result(Array(RGB), Error).err(Error.corrupted_image("Failed to extract palette from image"))
-      end
-      
-      Result(Array(RGB), Error).ok(result)
-    rescue ex : ValidationError
-      Result(Array(RGB), Error).err(Error.invalid_options("image", "image", ex.message))
-    rescue ex : Exception
-      Result(Array(RGB), Error).err(Error.corrupted_image(ex.message || "Corrupted image"))
+    options.validate!
+    extractor = Core::PaletteExtractor.new
+    result = extractor.extract_from_image(image, options)
+
+    if result.empty?
+      return Result(Array(RGB), Error).err(Error.corrupted_image("Failed to extract palette from image"))
     end
+
+    Result(Array(RGB), Error).ok(result)
+  rescue ex : ValidationError
+    Result(Array(RGB), Error).err(Error.invalid_options("image", "image", ex.message))
+  rescue ex : Exception
+    Result(Array(RGB), Error).err(Error.corrupted_image(ex.message || "Corrupted image"))
   end
 
   # ============================================================================
@@ -240,7 +232,7 @@ module PrismatIQ
   # Find closest color in image palette to a target color
   def self.find_closest_in_palette(target : RGB, path : String, options : Options = Options.default) : RGB?
     result = get_palette_v2(path, options)
-    return nil unless result.ok?
+    return unless result.ok?
     find_closest(target, result.value)
   end
 

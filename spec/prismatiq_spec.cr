@@ -130,7 +130,7 @@ describe "multithreaded histogram parity" do
     # Use Result-based API for explicit error handling
     # Test with single thread for deterministic results
     options = PrismatIQ::Options.new(color_count: 3, threads: 1)
-      result = PrismatIQ.get_palette_v2(slice, width, height, options)
+    result = PrismatIQ.get_palette_v2(slice, width, height, options)
 
     # Verify result is successful
     result.ok?.should be_true

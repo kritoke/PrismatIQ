@@ -241,13 +241,13 @@ module PrismatIQ
       inner = value.gsub(/^(rgba?|hsla?)\(/, "").gsub(/\)$/, "")
 
       parts = inner.split(',').map(&.strip)
-      return nil unless parts.size >= 3
+      return unless parts.size >= 3
 
       r = parse_rgb_component(parts[0])
       g = parse_rgb_component(parts[1])
       b = parse_rgb_component(parts[2])
 
-      return nil unless r && g && b
+      return unless r && g && b
 
       RGB.new(r, g, b)
     rescue
@@ -269,13 +269,13 @@ module PrismatIQ
       inner = value.gsub(/^(rgba?|hsla?)\(/, "").gsub(/\)$/, "")
 
       parts = inner.split(',').map(&.strip)
-      return nil unless parts.size >= 3
+      return unless parts.size >= 3
 
       hue_val = parse_hue(parts[0])
       sat_val = parse_percentage(parts[1])
       light_val = parse_percentage(parts[2])
 
-      return nil unless hue_val && sat_val && light_val
+      return unless hue_val && sat_val && light_val
 
       hsl_to_rgb(hue_val, sat_val, light_val)
     rescue
@@ -291,7 +291,7 @@ module PrismatIQ
 
     private def self.parse_percentage(value : String) : Float64?
       value = value.strip
-      return nil unless value.ends_with?("%")
+      return unless value.ends_with?("%")
       value.rchop('%').to_f?
     end
 

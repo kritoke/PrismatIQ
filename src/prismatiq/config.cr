@@ -76,7 +76,7 @@ module PrismatIQ
       @merge_chunk : Int32? = nil,
       @ssrf_protection : Bool = true,
       @ssrf_allowlist : Array(String)? = nil,
-      @rate_limit : Int32 = 10
+      @rate_limit : Int32 = 10,
     )
       if @rate_limit > 0
         @rate_limiter = RateLimiter.new(@rate_limit)

@@ -4,12 +4,12 @@ module PrismatIQ
   module Utils
     module IPValidator
       IPV4_PRIVATE_RANGES = [
-        {0x0A000000_u32, 0xFF000000_u32},  # 10.0.0.0/8
-        {0xAC100000_u32, 0xFFF00000_u32},  # 172.16.0.0/12
-        {0xC0A80000_u32, 0xFFFF0000_u32},  # 192.168.0.0/16
-        {0x7F000000_u32, 0xFF000000_u32},  # 127.0.0.0/8
-        {0xA9FE0000_u32, 0xFFFF0000_u32},  # 169.254.0.0/16
-        {0x00000000_u32, 0xFF000000_u32},  # 0.0.0.0/8
+        {0x0A000000_u32, 0xFF000000_u32}, # 10.0.0.0/8
+        {0xAC100000_u32, 0xFFF00000_u32}, # 172.16.0.0/12
+        {0xC0A80000_u32, 0xFFFF0000_u32}, # 192.168.0.0/16
+        {0x7F000000_u32, 0xFF000000_u32}, # 127.0.0.0/8
+        {0xA9FE0000_u32, 0xFFFF0000_u32}, # 169.254.0.0/16
+        {0x00000000_u32, 0xFF000000_u32}, # 0.0.0.0/8
       ]
 
       def self.private_address?(ip : Socket::IPAddress) : Bool
@@ -28,8 +28,8 @@ module PrismatIQ
         return true unless parts.size == 4
 
         num = 0_u32
-        parts.each do |p|
-          n = p.to_u32?
+        parts.each do |part|
+          n = part.to_u32?
           return true unless n && n <= 255
           num = (num << 8) | n
         end
@@ -76,9 +76,9 @@ module PrismatIQ
           right = right_str.empty? ? [] of String : right_str.split(":")
           missing = 8 - left.size - right.size
           expanded = left + (["0000"] * missing) + right
-          addr = expanded.map { |p| p.rjust(4, '0') }.join
+          addr = expanded.map(&.rjust(4, '0')).join
         else
-          addr = addr.split(":").map { |p| p.rjust(4, '0') }.join
+          addr = addr.split(":").map(&.rjust(4, '0')).join
         end
 
         addr.ljust(32, '0')
@@ -87,13 +87,13 @@ module PrismatIQ
       private def self.translate_ipv4_mapped(address : String) : String
         colon_count = address.count(':')
         if colon_count >= 6
-          ipv4_start = address.rindex(':').not_nil! + 1
+          ipv4_start = address.rindex!(':') + 1
           ipv4_part = address[ipv4_start..]
           ipv6_prefix = address[0...ipv4_start - 1].gsub(":", "")
 
           ipv4_parts = ipv4_part.split(".")
           if ipv4_parts.size == 4
-            hex = ipv4_parts.map { |p| p.to_u8?.try { |n| n.to_s(16).rjust(2, '0') } || "00" }.join
+            hex = ipv4_parts.map { |p| p.to_u8?.try(&.to_s(16).rjust(2, '0')) || "00" }.join
             return ipv6_prefix + hex
           end
         end

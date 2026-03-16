@@ -95,53 +95,53 @@ describe PrismatIQ::RGB do
   end
 end
 
-  describe "AccessibilityCalculator" do
-    describe "#relative_luminance" do
-      it "returns 1.0 for white" do
-        calculator = PrismatIQ::AccessibilityCalculator.new
-        white = PrismatIQ::RGB.new(255, 255, 255)
-        calculator.relative_luminance(white).should be_close(1.0, 0.001)
-      end
-
-      it "returns 0.0 for black" do
-        calculator = PrismatIQ::AccessibilityCalculator.new
-        black = PrismatIQ::RGB.new(0, 0, 0)
-        calculator.relative_luminance(black).should be_close(0.0, 0.001)
-      end
+describe "AccessibilityCalculator" do
+  describe "#relative_luminance" do
+    it "returns 1.0 for white" do
+      calculator = PrismatIQ::AccessibilityCalculator.new
+      white = PrismatIQ::RGB.new(255, 255, 255)
+      calculator.relative_luminance(white).should be_close(1.0, 0.001)
     end
 
-    describe "#contrast_ratio" do
-      it "returns 21:1 for black on white" do
-        calculator = PrismatIQ::AccessibilityCalculator.new
-        black = PrismatIQ::RGB.new(0, 0, 0)
-        white = PrismatIQ::RGB.new(255, 255, 255)
-        ratio = calculator.contrast_ratio(black, white)
-        ratio.should be_close(21.0, 0.1)
-      end
-
-      it "returns 1:1 for same color" do
-        calculator = PrismatIQ::AccessibilityCalculator.new
-        gray = PrismatIQ::RGB.new(128, 128, 128)
-        calculator.contrast_ratio(gray, gray).should be_close(1.0, 0.01)
-      end
-    end
-
-    describe "#wcag_aa_compliant?" do
-      it "passes for high contrast" do
-        calculator = PrismatIQ::AccessibilityCalculator.new
-        black = PrismatIQ::RGB.new(0, 0, 0)
-        white = PrismatIQ::RGB.new(255, 255, 255)
-        calculator.wcag_aa_compliant?(black, white).should be_true
-      end
-
-      it "fails for low contrast" do
-        calculator = PrismatIQ::AccessibilityCalculator.new
-        gray1 = PrismatIQ::RGB.new(100, 100, 100)
-        gray2 = PrismatIQ::RGB.new(120, 120, 120)
-        calculator.wcag_aa_compliant?(gray1, gray2).should be_false
-      end
+    it "returns 0.0 for black" do
+      calculator = PrismatIQ::AccessibilityCalculator.new
+      black = PrismatIQ::RGB.new(0, 0, 0)
+      calculator.relative_luminance(black).should be_close(0.0, 0.001)
     end
   end
+
+  describe "#contrast_ratio" do
+    it "returns 21:1 for black on white" do
+      calculator = PrismatIQ::AccessibilityCalculator.new
+      black = PrismatIQ::RGB.new(0, 0, 0)
+      white = PrismatIQ::RGB.new(255, 255, 255)
+      ratio = calculator.contrast_ratio(black, white)
+      ratio.should be_close(21.0, 0.1)
+    end
+
+    it "returns 1:1 for same color" do
+      calculator = PrismatIQ::AccessibilityCalculator.new
+      gray = PrismatIQ::RGB.new(128, 128, 128)
+      calculator.contrast_ratio(gray, gray).should be_close(1.0, 0.01)
+    end
+  end
+
+  describe "#wcag_aa_compliant?" do
+    it "passes for high contrast" do
+      calculator = PrismatIQ::AccessibilityCalculator.new
+      black = PrismatIQ::RGB.new(0, 0, 0)
+      white = PrismatIQ::RGB.new(255, 255, 255)
+      calculator.wcag_aa_compliant?(black, white).should be_true
+    end
+
+    it "fails for low contrast" do
+      calculator = PrismatIQ::AccessibilityCalculator.new
+      gray1 = PrismatIQ::RGB.new(100, 100, 100)
+      gray2 = PrismatIQ::RGB.new(120, 120, 120)
+      calculator.wcag_aa_compliant?(gray1, gray2).should be_false
+    end
+  end
+end
 
 describe "color matching" do
   describe ".find_closest" do
@@ -205,7 +205,7 @@ describe "color matching" do
     it "uses map_error to transform error result" do
       original_error = PrismatIQ::Error.invalid_options("test", "test", "Original error")
       invalid_result = PrismatIQ::Result(Array(PrismatIQ::RGB), PrismatIQ::Error).err(original_error)
-      mapped = invalid_result.map_error { |e| PrismatIQ::Error.processing_failed("Custom transformed error") }
+      mapped = invalid_result.map_error { |_e| PrismatIQ::Error.processing_failed("Custom transformed error") }
       mapped.error.message.should contain("Custom transformed error")
     end
 

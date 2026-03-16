@@ -51,16 +51,24 @@ module PrismatIQ
 
       def get_color_from_path(path : String) : RGB
         options = Options.new(color_count: 1)
-        extractor = PaletteExtractor.new(@config)
-        palette = extractor.extract_from_path(path, options)
-        palette.first? || RGB.new(0, 0, 0)
+        begin
+          extractor = PaletteExtractor.new(@config)
+          palette = extractor.extract_from_path(path, options)
+          palette.first? || RGB.new(0, 0, 0)
+        rescue
+          RGB.new(0, 0, 0)
+        end
       end
 
       def get_color_from_io(io : IO) : RGB
         options = Options.new(color_count: 1)
-        extractor = PaletteExtractor.new(@config)
-        palette = extractor.extract_from_io(io, options)
-        palette.first? || RGB.new(0, 0, 0)
+        begin
+          extractor = PaletteExtractor.new(@config)
+          palette = extractor.extract_from_io(io, options)
+          palette.first? || RGB.new(0, 0, 0)
+        rescue
+          RGB.new(0, 0, 0)
+        end
       end
 
       def get_color(img) : RGB

@@ -77,7 +77,6 @@ module PrismatIQ
           end
           return path
         rescue File::AlreadyExistsError
-          tries += 1
           next
         rescue ex : Exception
           STDERR.puts "PrismatIQ: try_windows_fallback failed (#{ex.class.name}): #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?

@@ -18,17 +18,15 @@ module PrismatIQ
     end
 
     def self.from_json(json_str : String) : ThemeResult?
-      begin
-        parsed = JSON.parse(json_str)
-        bg = parsed["bg"].as_s
-        text_hash = {} of String => String
-        parsed["text"].as_h.each do |k, v|
-          text_hash[k] = v.as_s
-        end
-        new(bg, text_hash)
-      rescue
-        nil
+      parsed = JSON.parse(json_str)
+      bg = parsed["bg"].as_s
+      text_hash = {} of String => String
+      parsed["text"].as_h.each do |k, v|
+        text_hash[k] = v.as_s
       end
+      new(bg, text_hash)
+    rescue
+      nil
     end
   end
 end

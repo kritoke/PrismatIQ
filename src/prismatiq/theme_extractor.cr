@@ -56,10 +56,10 @@ module PrismatIQ
       return cached if cached
 
       result = if source.starts_with?("http://") || source.starts_with?("https://")
-        extract_from_url(source, options)
-      else
-        extract_from_file(source, options)
-      end
+                 extract_from_url(source, options)
+               else
+                 extract_from_file(source, options)
+               end
 
       if result
         @cache[cache_key] = result
@@ -72,10 +72,10 @@ module PrismatIQ
       return unless File.exists?(path)
 
       bg_rgb = if path.downcase.ends_with?(".ico")
-        extract_bg_from_ico(path, options)
-      else
-        extract_bg_from_image(path, options)
-      end
+                 extract_bg_from_ico(path, options)
+               else
+                 extract_bg_from_image(path, options)
+               end
 
       return unless bg_rgb
 
@@ -90,10 +90,10 @@ module PrismatIQ
       return unless data
 
       bg_rgb = if url.downcase.ends_with?(".ico")
-        extract_bg_from_ico_buffer(data, options)
-      else
-        extract_bg_from_image_buffer(data, options)
-      end
+                 extract_bg_from_ico_buffer(data, options)
+               else
+                 extract_bg_from_image_buffer(data, options)
+               end
 
       return unless bg_rgb
 
@@ -130,8 +130,8 @@ module PrismatIQ
       return unless bg_rgb
 
       if text_hash.has_key?("light") && text_hash.has_key?("dark")
-        light_ok = text_hash["light"]?.try { |l| meets_contrast?(l, bg_rgb) } || false
-        dark_ok = text_hash["dark"]?.try { |d| meets_contrast?(d, bg_rgb) } || false
+        light_ok = text_hash["light"]?.try { |_l| meets_contrast?(_l, bg_rgb) } || false
+        dark_ok = text_hash["dark"]?.try { |_d| meets_contrast?(_d, bg_rgb) } || false
 
         if light_ok && dark_ok
           return ThemeResult.new(bg_rgb, text_hash["light"], text_hash["dark"]).to_json
@@ -157,6 +157,8 @@ module PrismatIQ
       extractor_opts = ColorExtractor::Options.new
       extractor_opts.sample_size = options.quality
       ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
+    rescue Exception
+      return
     end
 
     private def extract_bg_from_ico_buffer(data : Slice(UInt8), options : ThemeOptions) : Array(Int32)?
@@ -170,6 +172,8 @@ module PrismatIQ
       extractor_opts = ColorExtractor::Options.new
       extractor_opts.sample_size = options.quality
       ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
+    rescue Exception
+      return
     end
 
     private def extract_bg_from_image(path : String, options : ThemeOptions) : Array(Int32)?
@@ -188,29 +192,33 @@ module PrismatIQ
       extractor_opts = ColorExtractor::Options.new
       extractor_opts.sample_size = options.quality
       ColorExtractor.extract_from_buffer(pixels, w.to_i32, h.to_i32, extractor_opts)
+    rescue Exception
+      return
     end
 
     private def extract_bg_from_image_buffer(data : Slice(UInt8), options : ThemeOptions) : Array(Int32)?
       TempfileHelper.with_tempfile("prismatiq_theme_", data) do |tmp_path|
         extract_bg_from_image(tmp_path, options)
       end
+    rescue Exception
+      return
     end
 
     private def fetch_url(url : String, options : ThemeOptions) : Slice(UInt8)?
       unless @config.rate_limit_allow?
         @config.debug_log "fetch_url: rate limited, please retry later"
-        return nil
+        return
       end
 
       uri = URI.parse(url)
 
       unless {"http", "https"}.includes?(uri.scheme)
         @config.debug_log "fetch_url: rejected non-http(s) scheme: #{uri.scheme}"
-        return nil
+        return
       end
 
       host = uri.host
-      return nil unless host
+      return unless host
 
       if @config.ssrf_protection?
         if allowlist_allows?(host)
@@ -220,7 +228,7 @@ module PrismatIQ
           ips.each do |ip|
             if Utils::IPValidator.private_address?(ip)
               @config.debug_log "fetch_url: SSRF blocked - host=#{host} ip=#{ip.address} reason=private_address"
-              return nil
+              return
             end
           end
         end
@@ -232,7 +240,7 @@ module PrismatIQ
 
       headers = HTTP::Headers{
         "User-Agent" => "PrismatIQ/#{VERSION}",
-        "Accept" => "image/*,*/*;q=0.8"
+        "Accept"     => "image/*,*/*;q=0.8",
       }
 
       response = client.get(uri.request_target, headers: headers)
@@ -269,7 +277,7 @@ module PrismatIQ
 
       {
         light: RGB.new(dark_text[0], dark_text[1], dark_text[2]).to_hex,
-        dark: RGB.new(light_text[0], light_text[1], light_text[2]).to_hex
+        dark:  RGB.new(light_text[0], light_text[1], light_text[2]).to_hex,
       }
     end
 
@@ -320,7 +328,7 @@ module PrismatIQ
           b = s[4..5].to_i(16)
           return [r, g, b]
         rescue
-          return nil
+          return
         end
       end
 
