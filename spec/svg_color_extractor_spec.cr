@@ -3,111 +3,141 @@ require "./spec_helper"
 describe PrismatIQ::SVGColorExtractor do
   describe ".parse_color" do
     it "parses 6-digit hex colors" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("#FF0000")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(255)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("#FF0000")
+        rgb.r.should eq(255)
+        rgb.g.should eq(0)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for #FF0000"
+      end
 
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("#00ff00")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(0)
-      rgb.not_nil!.g.should eq(255)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("#00ff00")
+        rgb.r.should eq(0)
+        rgb.g.should eq(255)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for #00ff00"
+      end
     end
 
     it "parses 3-digit hex colors" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("#F00")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(255)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("#F00")
+        rgb.r.should eq(255)
+        rgb.g.should eq(0)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for #F00"
+      end
 
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("#0F0")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(0)
-      rgb.not_nil!.g.should eq(255)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("#0F0")
+        rgb.r.should eq(0)
+        rgb.g.should eq(255)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for #0F0"
+      end
     end
 
     it "parses rgb() colors" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("rgb(255, 0, 0)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(255)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("rgb(255, 0, 0)")
+        rgb.r.should eq(255)
+        rgb.g.should eq(0)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for rgb(255, 0, 0)"
+      end
 
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("rgb(0, 128, 255)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(0)
-      rgb.not_nil!.g.should eq(128)
-      rgb.not_nil!.b.should eq(255)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("rgb(0, 128, 255)")
+        rgb.r.should eq(0)
+        rgb.g.should eq(128)
+        rgb.b.should eq(255)
+      else
+        fail "Expected valid RGB color for rgb(0, 128, 255)"
+      end
     end
 
     it "parses rgb() with percentages" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("rgb(100%, 0%, 0%)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(255)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("rgb(100%, 0%, 0%)")
+        rgb.r.should eq(255)
+        rgb.g.should eq(0)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for rgb(100%, 0%, 0%)"
+      end
     end
 
     it "parses rgba() colors" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("rgba(255, 0, 0, 0.5)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(255)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("rgba(255, 0, 0, 0.5)")
+        rgb.r.should eq(255)
+        rgb.g.should eq(0)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for rgba(255, 0, 0, 0.5)"
+      end
     end
 
     it "parses hsl() colors" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(0, 100%, 50%)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(255)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(0, 100%, 50%)")
+        rgb.r.should eq(255)
+        rgb.g.should eq(0)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for hsl(0, 100%, 50%)"
+      end
 
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(120, 100%, 50%)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(0)
-      rgb.not_nil!.g.should eq(255)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(120, 100%, 50%)")
+        rgb.r.should eq(0)
+        rgb.g.should eq(255)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for hsl(120, 100%, 50%)"
+      end
     end
 
     it "parses hsla() colors" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("hsla(240, 100%, 50%, 0.5)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(0)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(255)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("hsla(240, 100%, 50%, 0.5)")
+        rgb.r.should eq(0)
+        rgb.g.should eq(0)
+        rgb.b.should eq(255)
+      else
+        fail "Expected valid RGB color for hsla(240, 100%, 50%, 0.5)"
+      end
     end
 
     it "parses named colors" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("red")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(255)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("red")
+        rgb.r.should eq(255)
+        rgb.g.should eq(0)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for red"
+      end
 
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("blue")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(0)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(255)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("blue")
+        rgb.r.should eq(0)
+        rgb.g.should eq(0)
+        rgb.b.should eq(255)
+      else
+        fail "Expected valid RGB color for blue"
+      end
 
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("lime")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(0)
-      rgb.not_nil!.g.should eq(255)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("lime")
+        rgb.r.should eq(0)
+        rgb.g.should eq(255)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for lime"
+      end
     end
 
     it "handles currentColor" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("currentColor")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(0)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("currentColor")
+        rgb.r.should eq(0)
+        rgb.g.should eq(0)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for currentColor"
+      end
     end
 
     it "returns nil for none" do
@@ -242,59 +272,73 @@ describe PrismatIQ::SVGColorExtractor do
 
   describe "hsl conversion accuracy" do
     it "converts red correctly (hsl(0, 100%, 50%))" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(0, 100%, 50%)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(255)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(0, 100%, 50%)")
+        rgb.r.should eq(255)
+        rgb.g.should eq(0)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for hsl(0, 100%, 50%)"
+      end
     end
 
     it "converts green correctly (hsl(120, 100%, 50%))" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(120, 100%, 50%)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(0)
-      rgb.not_nil!.g.should eq(255)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(120, 100%, 50%)")
+        rgb.r.should eq(0)
+        rgb.g.should eq(255)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for hsl(120, 100%, 50%)"
+      end
     end
 
     it "converts blue correctly (hsl(240, 100%, 50%))" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(240, 100%, 50%)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(0)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(255)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(240, 100%, 50%)")
+        rgb.r.should eq(0)
+        rgb.g.should eq(0)
+        rgb.b.should eq(255)
+      else
+        fail "Expected valid RGB color for hsl(240, 100%, 50%)"
+      end
     end
 
     it "converts yellow correctly (hsl(60, 100%, 50%))" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(60, 100%, 50%)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(255)
-      rgb.not_nil!.g.should eq(255)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(60, 100%, 50%)")
+        rgb.r.should eq(255)
+        rgb.g.should eq(255)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for hsl(60, 100%, 50%)"
+      end
     end
 
     it "converts gray correctly (hsl(0, 0%, 50%))" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(0, 0%, 50%)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(128)
-      rgb.not_nil!.g.should eq(128)
-      rgb.not_nil!.b.should eq(128)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(0, 0%, 50%)")
+        rgb.r.should eq(128)
+        rgb.g.should eq(128)
+        rgb.b.should eq(128)
+      else
+        fail "Expected valid RGB color for hsl(0, 0%, 50%)"
+      end
     end
 
     it "converts white correctly (hsl(0, 0%, 100%))" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(0, 0%, 100%)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(255)
-      rgb.not_nil!.g.should eq(255)
-      rgb.not_nil!.b.should eq(255)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(0, 0%, 100%)")
+        rgb.r.should eq(255)
+        rgb.g.should eq(255)
+        rgb.b.should eq(255)
+      else
+        fail "Expected valid RGB color for hsl(0, 0%, 100%)"
+      end
     end
 
     it "converts black correctly (hsl(0, 0%, 0%))" do
-      rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(0, 0%, 0%)")
-      rgb.should_not be_nil
-      rgb.not_nil!.r.should eq(0)
-      rgb.not_nil!.g.should eq(0)
-      rgb.not_nil!.b.should eq(0)
+      if rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(0, 0%, 0%)")
+        rgb.r.should eq(0)
+        rgb.g.should eq(0)
+        rgb.b.should eq(0)
+      else
+        fail "Expected valid RGB color for hsl(0, 0%, 0%)"
+      end
     end
   end
 end

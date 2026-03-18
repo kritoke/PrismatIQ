@@ -80,10 +80,8 @@ module PrismatIQ
     end
 
     Result(Array(RGB), Error).ok(result)
-  rescue ex : ValidationError
-    Result(Array(RGB), Error).err(Error.invalid_options("path", path, ex.message))
   rescue ex : Exception
-    Result(Array(RGB), Error).err(Error.file_not_found(path, ex.message || "File not found"))
+    Result(Array(RGB), Error).err(Error.from_exception_with_path(ex, path))
   end
 
   # Extract palette from a file path, raising exceptions on errors.
@@ -118,10 +116,8 @@ module PrismatIQ
     end
 
     Result(Array(RGB), Error).ok(result)
-  rescue ex : ValidationError
-    Result(Array(RGB), Error).err(Error.invalid_options("io", "IO object", ex.message))
   rescue ex : Exception
-    Result(Array(RGB), Error).err(Error.corrupted_image(ex.message || "Corrupted image"))
+    Result(Array(RGB), Error).err(Error.from_exception_for_io(ex))
   end
 
   # Extract palette from an IO source, raising exceptions on errors.
@@ -159,10 +155,8 @@ module PrismatIQ
     end
 
     Result(Array(RGB), Error).ok(result)
-  rescue ex : ValidationError
-    Result(Array(RGB), Error).err(Error.invalid_options("buffer", "buffer", ex.message || "Validation failed"))
   rescue ex : Exception
-    Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "Processing failed"))
+    Result(Array(RGB), Error).err(Error.from_exception(ex, "buffer", "buffer"))
   end
 
   # Extract palette from raw RGBA pixel buffer, raising exceptions on errors.
@@ -200,10 +194,8 @@ module PrismatIQ
     end
 
     Result(Array(RGB), Error).ok(result)
-  rescue ex : ValidationError
-    Result(Array(RGB), Error).err(Error.invalid_options("image", "image", ex.message))
   rescue ex : Exception
-    Result(Array(RGB), Error).err(Error.corrupted_image(ex.message || "Corrupted image"))
+    Result(Array(RGB), Error).err(Error.from_exception(ex, "image", "image"))
   end
 
   # ============================================================================

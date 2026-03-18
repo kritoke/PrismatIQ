@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.5.0] - 2026-03-18
+
+### Changed
+
+- **Code Quality & Readability**: Significant improvements to code maintainability and readability
+  - Replaced non-idiomatic Crystal patterns with proper idiomatic alternatives
+  - Renamed internal/private functions with overly long names (4+ words) to use maximum 2-3 words while maintaining clarity
+  - Improved overall code structure and consistency across the codebase
+  - Added explanatory comments for `Time.monotonic` usage due to Crystal 1.18.2 constraint
+
+### Internal Improvements
+
+- **Function Naming**: Shortened internal function names for better readability while preserving all functionality
+  - ThemeExtractor: `extract_bg_from_ico` → `extract_ico_bg`, `extract_colors_from_pixels` → `extract_pixel_colors`
+  - PaletteExtractor: `build_histo_from_buffer` → `build_buffer_histo`
+  - ICO Parser: `find_png_at_entry` → `find_png_entry`, `find_best_bmp_entry` → `find_best_bmp`
+  - MMCQ Algorithm: `log_debug_popped_box` → `log_popped_box`, `log_debug_split_result` → `log_split_result`
+  - BMP Parser: `mask_to_shift_and_bits` → `mask_to_shift_bits`, `parse_header_fields_only` → `parse_header_fields`
+
+- **Public API Stability**: All public APIs remain unchanged and fully backward compatible
+
 ## [0.5.4.0] - 2026-03-16
 
 ### Fixed

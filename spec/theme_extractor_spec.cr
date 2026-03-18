@@ -32,11 +32,13 @@ describe PrismatIQ::ThemeResult do
   describe ".from_json" do
     it "parses valid JSON" do
       json = "{\"bg\":\"rgb(100, 150, 200)\",\"text\":{\"light\":\"#ffffff\",\"dark\":\"#000000\"}}"
-      result = PrismatIQ::ThemeResult.from_json(json)
-      result.should_not be_nil
-      result.not_nil!.bg.should eq("rgb(100, 150, 200)")
-      result.not_nil!.text["light"].should eq("#ffffff")
-      result.not_nil!.text["dark"].should eq("#000000")
+      if result = PrismatIQ::ThemeResult.from_json(json)
+        result.bg.should eq("rgb(100, 150, 200)")
+        result.text["light"].should eq("#ffffff")
+        result.text["dark"].should eq("#000000")
+      else
+        fail "Expected valid ThemeResult from JSON"
+      end
     end
 
     it "returns nil for invalid JSON" do
@@ -50,20 +52,24 @@ describe PrismatIQ::ThemeExtractor do
   describe "#extract_from_file" do
     it "extracts theme from valid ICO file" do
       extractor = PrismatIQ::ThemeExtractor.new
-      result = extractor.extract_from_file("spec/fixtures/ico/png_icon_32x32.ico")
-      result.should_not be_nil
-      result.not_nil!.bg.should start_with("rgb(")
-      result.not_nil!.text.has_key?("light").should be_true
-      result.not_nil!.text.has_key?("dark").should be_true
+      if result = extractor.extract_from_file("spec/fixtures/ico/png_icon_32x32.ico")
+        result.bg.should start_with("rgb(")
+        result.text.has_key?("light").should be_true
+        result.text.has_key?("dark").should be_true
+      else
+        fail "Expected valid theme result from ICO file"
+      end
     end
 
     it "extracts theme from valid PNG file" do
       extractor = PrismatIQ::ThemeExtractor.new
-      result = extractor.extract_from_file("spec/fixtures/ico/golden_png_32.png")
-      result.should_not be_nil
-      result.not_nil!.bg.should start_with("rgb(")
-      result.not_nil!.text.has_key?("light").should be_true
-      result.not_nil!.text.has_key?("dark").should be_true
+      if result = extractor.extract_from_file("spec/fixtures/ico/golden_png_32.png")
+        result.bg.should start_with("rgb(")
+        result.text.has_key?("light").should be_true
+        result.text.has_key?("dark").should be_true
+      else
+        fail "Expected valid theme result from PNG file"
+      end
     end
 
     it "returns nil for non-existent file" do
@@ -77,11 +83,15 @@ describe PrismatIQ::ThemeExtractor do
     it "corrects non-compliant theme" do
       extractor = PrismatIQ::ThemeExtractor.new
       theme_json = "{\"bg\":\"#ffffff\",\"text\":{\"light\":\"#ffffff\",\"dark\":\"#000000\"}}"
-      result = extractor.fix_theme(theme_json)
-      result.should_not be_nil
-      
-      corrected = PrismatIQ::ThemeResult.from_json(result.not_nil!)
-      corrected.should_not be_nil
+      if result = extractor.fix_theme(theme_json)
+        if corrected = PrismatIQ::ThemeResult.from_json(result)
+          corrected.should_not be_nil
+        else
+          fail "Expected valid ThemeResult from corrected JSON"
+        end
+      else
+        fail "Expected valid theme result from fix_theme"
+      end
     end
 
     it "preserves already compliant theme" do
@@ -103,9 +113,11 @@ end
 describe PrismatIQ do
   describe ".extract_theme" do
     it "extracts theme using global extractor" do
-      result = PrismatIQ.extract_theme("spec/fixtures/ico/golden_png_32.png")
-      result.should_not be_nil
-      result.not_nil!.bg.should start_with("rgb(")
+      if result = PrismatIQ.extract_theme("spec/fixtures/ico/golden_png_32.png")
+        result.bg.should start_with("rgb(")
+      else
+        fail "Expected valid theme result from global extractor"
+      end
     end
 
     it "respects skip_if_configured option" do

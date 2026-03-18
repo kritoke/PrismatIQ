@@ -110,11 +110,11 @@ module PrismatIQ
       @colors_used = 0_u32
 
       # Parse other header fields but skip dimensions (already provided)
-      parse_header_fields_only if @data.size >= 40
+      parse_header_fields if @data.size >= 40
     end
 
     # Parse header fields except dimensions (used when dimensions are pre-set)
-    private def parse_header_fields_only
+    private def parse_header_fields
       header_size = read_u32_le(0)
       return if header_size < 40
 
@@ -306,7 +306,7 @@ module PrismatIQ
         while x < @width
           src_idx = row_start + x * bytes_per_pixel
 
-          r, g, b, a = read_rgb_or_rgba(src_idx)
+          r, g, b, a = read_rgb_rgba(src_idx)
 
           dest_idx = (y * @width + x) * 4
           pixels[dest_idx] = r
@@ -321,7 +321,7 @@ module PrismatIQ
     end
 
     # Read RGB or RGBA pixel data at given index
-    private def read_rgb_or_rgba(src_idx : Int32) : Tuple(UInt8, UInt8, UInt8, UInt8)
+    private def read_rgb_rgba(src_idx : Int32) : Tuple(UInt8, UInt8, UInt8, UInt8)
       if @bit_count == 32
         if src_idx + 3 < @data.size
           return {@data[src_idx + 2], @data[src_idx + 1], @data[src_idx], @data[src_idx + 3]}
@@ -430,7 +430,7 @@ module PrismatIQ
     end
 
     # Convert a bit mask to shift amount and bit count
-    private def mask_to_shift_and_bits(mask : UInt32) : Tuple(Int32, Int32)
+    private def mask_to_shift_bits(mask : UInt32) : Tuple(Int32, Int32)
       return {-1, 0} if mask == 0_u32
 
       shift = 0

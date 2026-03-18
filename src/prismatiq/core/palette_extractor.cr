@@ -4,6 +4,8 @@ require "../config"
 require "../algorithm/mmcq"
 require "../algorithm/color_space"
 require "../core/histogram_pool"
+require "../utils/histogram_processor"
+require "../utils/image_loader"
 
 module PrismatIQ
   module Core
@@ -34,26 +36,29 @@ module PrismatIQ
     # palette = extractor.extract_from_path("image.jpg", options)
     # ```
     class PaletteExtractor
+      include Utils::HistogramProcessor
+
       def initialize(@config : Config = Config.default)
       end
 
       def extract_from_path(path : String, options : Options) : Array(RGB)
-        options.validate!
         @config.debug_log "get_palette(path): path=#{path} options=#{options.inspect}"
-        img = CrImage.read(path)
-        extract_from_image(img.as(CrImage::Image), options)
+        rgba_image = ImageLoader.load(path)
+        extract_from_image_data(rgba_image, options)
       end
 
       def extract_from_io(io : IO, options : Options) : Array(RGB)
-        options.validate!
-        img = CrImage.read(io)
-        extract_from_image(img.as(CrImage::Image), options)
+        rgba_image = ImageLoader.load(io)
+        extract_from_image_data(rgba_image, options)
       end
 
       def extract_from_image(image, options : Options) : Array(RGB)
-        options.validate!
         @config.debug_log "get_palette_from_image: image.class=#{image.class} options=#{options.inspect}"
-        rgba_image = CrImage::Pipeline.new(image).result
+        rgba_image = ImageLoader.load(image)
+        extract_image_data(rgba_image, options)
+      end
+
+      private def extract_image_data(rgba_image, options : Options)
         width = rgba_image.bounds.width.to_i32
         height = rgba_image.bounds.height.to_i32
 
@@ -62,8 +67,7 @@ module PrismatIQ
       end
 
       def extract_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options) : Array(RGB)
-        options.validate!
-        histo, total_pixels = build_histo_from_buffer(pixels, width, height, options)
+        histo, total_pixels = build_buffer_histo(pixels, width, height, options)
 
         if total_pixels == 0
           return [] of RGB
@@ -84,7 +88,7 @@ module PrismatIQ
         sort_by_popularity(palette, histo)
       end
 
-      private def build_histo_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options) : Tuple(Array(UInt32), Int32)
+      private def build_buffer_histo(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options) : Tuple(Array(UInt32), Int32)
         histo = Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32)
         step = options.quality < 1 ? 1 : options.quality
         alpha_threshold = options.alpha_threshold
@@ -93,7 +97,7 @@ module PrismatIQ
         use_parallel = AdaptiveChunkSizer.should_use_parallel?(image_size) && options.threads != 1
 
         if !use_parallel || options.threads <= 1
-          total_pixels = process_pixel_range(pixels, width, 0, height, step, alpha_threshold, histo)
+          total_pixels = Utils::HistogramProcessor.process_pixel_range(pixels, width, 0, height, step, alpha_threshold, histo)
         else
           thread_count = AdaptiveChunkSizer.optimal_thread_count(image_size, @config.thread_count_for(height, options.threads))
 
@@ -102,7 +106,7 @@ module PrismatIQ
           rows_per = (height + thread_count - 1) // thread_count
 
           pool = HistogramPool.new(thread_count)
-          
+
           # Track actual number of spawned fibers to avoid deadlock
           spawned_count = 0
 
@@ -110,13 +114,13 @@ module PrismatIQ
             start_row = thread_idx * rows_per
             break if start_row >= height
             end_row = {start_row + rows_per, height}.min
-            
+
             spawned_count += 1
 
             spawn do
               begin
                 local_histo = pool.acquire(thread_idx)
-                local_count = process_pixel_range(pixels, width, start_row, end_row, step, alpha_threshold, local_histo)
+                local_count = Utils::HistogramProcessor.process_pixel_range(pixels, width, start_row, end_row, step, alpha_threshold, local_histo)
                 channel.send({local_histo, local_count})
               rescue ex : Exception
                 @config.debug_log "Worker fiber failed: #{ex.class.name}: #{ex.message}"
@@ -142,33 +146,6 @@ module PrismatIQ
         dest.size.times do |i|
           dest[i] += src[i]
         end
-      end
-
-      @[AlwaysInline]
-      private def process_pixel_range(pixels : Slice(UInt8), width : Int32, start_row : Int32, end_row : Int32, step : Int32, alpha_threshold : UInt8, histo : Array(UInt32)) : Int32
-        count = 0
-        y_coord = start_row
-        while y_coord < end_row
-          x_coord = 0
-          while x_coord < width
-            idx = (y_coord * width + x_coord) * 4
-            break if idx + 3 >= pixels.size
-
-            a = pixels[idx + 3]
-            if a >= alpha_threshold
-              r = pixels[idx].to_i
-              g = pixels[idx + 1].to_i
-              b = pixels[idx + 2].to_i
-              y, i, q = YIQConverter.quantize_from_rgb(r, g, b)
-              histo[VBox.to_index(y, i, q)] += 1_u32
-              count += 1
-            end
-
-            x_coord += step
-          end
-          y_coord += step
-        end
-        count
       end
 
       private def sort_by_popularity(palette : Array(RGB), histo : Array(UInt32))

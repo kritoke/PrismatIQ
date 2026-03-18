@@ -1,5 +1,5 @@
 name: prismatiq
-version: 0.5.4.0
+version: 0.5.5.0
 
 authors:
   - kritoke <3081486+kritoke@users.noreply.github.com>
@@ -12,6 +12,6 @@ dependencies:
     version: ~> 1.0
   crtemp:
     github: kritoke/crtemp
-    version: 0.1.0
+    version: 0.1.1
 
 license: MIT

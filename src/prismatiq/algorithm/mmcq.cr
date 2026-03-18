@@ -33,7 +33,7 @@ module PrismatIQ
 
           box = pq.pop
           break unless box
-          log_debug_popped_box(box)
+          log_popped_box(box)
 
           vbox1, vbox2 = box.split
 
@@ -42,7 +42,7 @@ module PrismatIQ
             break
           end
 
-          log_debug_split_result(vbox1, vbox2)
+          log_split_result(vbox1, vbox2)
 
           pq.push(vbox1) if vbox1.count > 0
           pq.push(vbox2) if vbox2.count > 0
@@ -73,12 +73,12 @@ module PrismatIQ
         @config.debug_log "MMCQ iter=#{iteration} pq_size=#{pq_size}"
       end
 
-      private def log_debug_popped_box(box : VBox?)
+      private def log_popped_box(box : VBox?)
         msg = box ? "MMCQ popped box count=#{box.count}" : "MMCQ popped nil box"
         @config.debug_log msg
       end
 
-      private def log_debug_split_result(vbox1 : VBox, vbox2 : VBox)
+      private def log_split_result(vbox1 : VBox, vbox2 : VBox)
         @config.debug_log "MMCQ split -> vbox1.count=#{vbox1.count} vbox2.count=#{vbox2.count}"
       end
 

@@ -92,6 +92,33 @@ module PrismatIQ
       )
     end
 
+    def self.from_exception(ex : Exception, field : String? = nil, value : String? = nil) : Error
+      case ex.class.name
+      when "PrismatIQ::ValidationError"
+        invalid_options(field || "unknown", value || "unknown", ex.message || "Validation failed")
+      else
+        processing_failed(ex.message || "Unknown error")
+      end
+    end
+
+    def self.from_exception_with_path(ex : Exception, path : String) : Error
+      case ex.class.name
+      when "PrismatIQ::ValidationError"
+        invalid_options("path", path, ex.message || "Validation failed")
+      else
+        file_not_found(path, ex.message)
+      end
+    end
+
+    def self.from_exception_for_io(ex : Exception, context : String = "IO") : Error
+      case ex.class.name
+      when "PrismatIQ::ValidationError"
+        invalid_options(context, "IO object", ex.message || "Validation failed")
+      else
+        corrupted_image(ex.message || "IO error")
+      end
+    end
+
     def to_s(io : IO)
       io << "[#{@type}] #{@message}"
       if ctx = @context

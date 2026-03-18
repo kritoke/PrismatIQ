@@ -1,4 +1,5 @@
 require "crtemp"
+require "crtemp/constants"
 HAVE_CRTEMP = true
 
 module PrismatIQ
@@ -36,11 +37,13 @@ module PrismatIQ
       begin
         Dir.mktmpdir do |dir|
           base = dir.is_a?(Crtemp) ? dir.path : dir.to_s
-          safe_prefix = prefix.size > 100 ? prefix[0, 100] : prefix
+          safe_prefix = prefix.size > CrtempConstants::MAX_PREFIX_LENGTH ? prefix[0, CrtempConstants::MAX_PREFIX_LENGTH] : prefix
 
           if dir.is_a?(Crtemp)
-            created = dir.create_tempfile(safe_prefix, data)
-            next created if created
+            result = dir.create_tempfile_result(safe_prefix, data)
+            if result.success?
+              next result.value!
+            end
           end
 
           path = "#{base}/#{prefix}#{Process.pid}_#{Time.local.to_unix}.bin"

@@ -604,7 +604,7 @@ module PrismatIQ
       entry_base = 6
       i = 0
       while i < count && (entry_base + 16) <= @data.size
-        png_data = find_png_at_entry(i, entry_base)
+        png_data = find_png_entry(i, entry_base)
         return png_data if png_data
         i += 1
       end
@@ -613,7 +613,7 @@ module PrismatIQ
     end
 
     # Check a single ICO entry for PNG data
-    private def find_png_at_entry(index : Int32, entry_base : Int32) : Tuple(Int32, Int32, Slice(UInt8))?
+    private def find_png_entry(index : Int32, entry_base : Int32) : Tuple(Int32, Int32, Slice(UInt8))?
       off = entry_base + index * 16
 
       size = @data[off + 8].to_u64 |
@@ -671,13 +671,13 @@ module PrismatIQ
       return if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
 
       entry_base = 6
-      best_entry = find_best_bmp_entry(entry_base, count)
+      best_entry = find_best_bmp(entry_base, count)
 
       return unless best_entry
       {best_entry[0], best_entry[1], best_entry[2]}
     end
 
-    private def find_best_bmp_entry(entry_base : Int32, count : UInt16) : Tuple(Int32, Int32, Slice(UInt8))?
+    private def find_best_bmp(entry_base : Int32, count : UInt16) : Tuple(Int32, Int32, Slice(UInt8))?
       best_area = 0_i32
       best_bitcount = 0_i32
       best_w : Int32 = 0
@@ -686,7 +686,7 @@ module PrismatIQ
 
       i = 0
       while i < count && (entry_base + 16) <= @data.size
-        result = find_bmp_at_entry(i, entry_base)
+        result = find_bmp_entry(i, entry_base)
         if result
           w, h, bit_count, hdr = result
           area = w * h
@@ -707,7 +707,7 @@ module PrismatIQ
     end
 
     # Check a single ICO entry for BMP data, returns dimensions and data if valid
-    private def find_bmp_at_entry(index : Int32, entry_base : Int32) : Tuple(Int32, Int32, Int32, Slice(UInt8))?
+    private def find_bmp_entry(index : Int32, entry_base : Int32) : Tuple(Int32, Int32, Int32, Slice(UInt8))?
       off = entry_base + index * 16
 
       size = @data[off + 8].to_u64 |

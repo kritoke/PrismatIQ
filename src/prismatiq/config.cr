@@ -11,6 +11,7 @@ module PrismatIQ
     def initialize(@rate : Int32, burst : Int32? = nil)
       @burst = burst || @rate
       @tokens = @burst.to_f64
+      # Using Time.monotonic instead of Time::Instant due to Crystal 1.18.2 constraint
       @last_refill = Time.monotonic
       @mutex = Mutex.new
     end
@@ -56,6 +57,7 @@ module PrismatIQ
     end
 
     private def refill_tokens : Nil
+      # Using Time.monotonic instead of Time::Instant due to Crystal 1.18.2 constraint
       now = Time.monotonic
       elapsed = (now - @last_refill).total_seconds
       return if elapsed <= 0

@@ -81,9 +81,9 @@ module PrismatIQ
       return unless File.exists?(path)
 
       bg_rgb = if path.downcase.ends_with?(".ico")
-                 extract_bg_from_ico(path, options)
+                 extract_ico_bg(path, options)
                else
-                 extract_bg_from_image(path, options)
+                 extract_image_bg(path, options)
                end
 
       return unless bg_rgb
@@ -99,9 +99,9 @@ module PrismatIQ
       return unless data
 
       bg_rgb = if url.downcase.ends_with?(".ico")
-                 extract_bg_from_ico_buffer(data, options)
+                 extract_ico_buffer_bg(data, options)
                else
-                 extract_bg_from_image_buffer(data, options)
+                 extract_buffer_bg(data, options)
                end
 
       return unless bg_rgb
@@ -135,7 +135,7 @@ module PrismatIQ
         end
       end
 
-      text_colors = find_compliant_text_colors(bg_rgb)
+      text_colors = find_text_colors(bg_rgb)
       ThemeResult.new(bg_rgb, text_colors[:light], text_colors[:dark]).to_json
     end
 
@@ -146,7 +146,7 @@ module PrismatIQ
       begin
         parsed = JSON.parse(theme_json)
         bg_val = parsed["bg"]?.try(&.as_s) || parsed["background"]?.try(&.as_s)
-        bg_rgb = parse_color_to_rgb(bg_val) if bg_val
+        bg_rgb = parse_to_rgb(bg_val) if bg_val
 
         if txt = parsed["text"]?
           if txt.is_a?(Hash)
@@ -166,34 +166,34 @@ module PrismatIQ
       @cache.clear
     end
 
-    private def extract_bg_from_ico(path : String, options : ThemeOptions) : Array(Int32)?
+    private def extract_ico_bg(path : String, options : ThemeOptions) : Array(Int32)?
       ico = ICOFile.from_path(path)
       return unless ico && ico.valid?
-      extract_colors_from_pixels(ico.to_rgba, ico.width, ico.height, options)
+      extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
     rescue Exception
       return
     end
 
-    private def extract_bg_from_ico_buffer(data : Slice(UInt8), options : ThemeOptions) : Array(Int32)?
+    private def extract_ico_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : Array(Int32)?
       ico = ICOFile.from_slice(data)
       return unless ico && ico.valid?
-      extract_colors_from_pixels(ico.to_rgba, ico.width, ico.height, options)
+      extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
     rescue Exception
       return
     end
 
-    private def extract_bg_from_image(path : String, options : ThemeOptions) : Array(Int32)?
+    private def extract_image_bg(path : String, options : ThemeOptions) : Array(Int32)?
       # Handle SVG files separately since CrImage doesn't support them
       if path.downcase.ends_with?(".svg")
         svg_colors = SVGColorExtractor.extract_from_file(path)
         return unless svg_colors.ok?
-        
+
         # Use the first extracted color as background candidate
         return unless svg_colors.value.size > 0
         first_color = svg_colors.value[0]
         return [first_color.r, first_color.g, first_color.b]
       end
-      
+
       img = CrImage.read(path)
       return unless img
 
@@ -204,12 +204,12 @@ module PrismatIQ
       rgba = CrImage::Pipeline.new(img).result
       return unless rgba
 
-      extract_colors_from_pixels(rgba.pix, w.to_i32, h.to_i32, options)
+      extract_pixel_colors(rgba.pix, w.to_i32, h.to_i32, options)
     rescue Exception
       return
     end
 
-    private def extract_bg_from_image_buffer(data : Slice(UInt8), options : ThemeOptions) : Array(Int32)?
+    private def extract_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : Array(Int32)?
       # Check if data appears to be SVG (starts with <svg or <?xml)
       if data.size > 0 && data[0] == '<'.ord
         svg_content = String.new(data)
@@ -220,15 +220,15 @@ module PrismatIQ
           return [first_color.r, first_color.g, first_color.b]
         end
       end
-      
+
       TempfileHelper.with_tempfile("prismatiq_theme_", data) do |tmp_path|
-        extract_bg_from_image(tmp_path, options)
+        extract_image_bg(tmp_path, options)
       end
     rescue Exception
       return
     end
 
-    private def extract_colors_from_pixels(pixels, w, h, options : ThemeOptions) : Array(Int32)?
+    private def extract_pixel_colors(pixels, w, h, options : ThemeOptions) : Array(Int32)?
       extractor_opts = ColorExtractor::Options.new
       extractor_opts.sample_size = options.quality
       ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
@@ -295,15 +295,15 @@ module PrismatIQ
     end
 
     private def build_theme_result(bg_rgb : Array(Int32)) : ThemeResult
-      text_colors = find_compliant_text_colors(bg_rgb)
+      text_colors = find_text_colors(bg_rgb)
       ThemeResult.new(bg_rgb, text_colors[:light], text_colors[:dark])
     end
 
-    private def find_compliant_text_colors(bg_rgb : Array(Int32)) : NamedTuple(light: String, dark: String)
+    private def find_text_colors(bg_rgb : Array(Int32)) : NamedTuple(light: String, dark: String)
       bg = RGB.new(bg_rgb[0], bg_rgb[1], bg_rgb[2])
 
-      dark_text = find_compliant_dark_text(bg)
-      light_text = find_compliant_light_text(bg)
+      dark_text = find_dark_text(bg)
+      light_text = find_light_text(bg)
 
       {
         light: RGB.new(dark_text[0], dark_text[1], dark_text[2]).to_hex,
@@ -311,7 +311,7 @@ module PrismatIQ
       }
     end
 
-    private def find_compliant_dark_text(bg : RGB) : Array(Int32)
+    private def find_dark_text(bg : RGB) : Array(Int32)
       (0..255).step(5) do |val|
         candidate = RGB.new(val, val, val)
         if @accessibility.contrast_ratio(candidate, bg) >= 4.5
@@ -321,7 +321,7 @@ module PrismatIQ
       [17, 17, 17]
     end
 
-    private def find_compliant_light_text(bg : RGB) : Array(Int32)
+    private def find_light_text(bg : RGB) : Array(Int32)
       val = 255
       while val >= 0
         candidate = RGB.new(val, val, val)
@@ -333,7 +333,7 @@ module PrismatIQ
       [238, 238, 238]
     end
 
-    private def parse_color_to_rgb(color_str : String?) : Array(Int32)?
+    private def parse_to_rgb(color_str : String?) : Array(Int32)?
       return unless color_str
 
       s = color_str.strip
@@ -366,7 +366,7 @@ module PrismatIQ
     end
 
     private def meets_contrast?(text_color : String, bg_rgb : Array(Int32)) : Bool
-      text_rgb = parse_color_to_rgb(text_color)
+      text_rgb = parse_to_rgb(text_color)
       return false unless text_rgb
 
       text = RGB.new(text_rgb[0], text_rgb[1], text_rgb[2])

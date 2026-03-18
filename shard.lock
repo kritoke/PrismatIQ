@@ -7,5 +7,5 @@ shards:
 
   crtemp:
     git: https://github.com/kritoke/crtemp.git
-    version: 0.1.0
+    version: 0.1.1
 

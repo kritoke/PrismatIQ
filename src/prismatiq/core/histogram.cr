@@ -1,16 +1,19 @@
 require "../types"
 require "../algorithm/color_space"
+require "../utils/histogram_processor"
 
 module PrismatIQ
   module Core
     class HistogramBuilder
+      include Utils::HistogramProcessor
+
       def self.build(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options, config : Config = Config.default) : Tuple(Array(UInt32), Int32)
         histo = Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32)
         step = options.quality < 1 ? 1 : options.quality
         alpha_threshold = options.alpha_threshold
 
         if options.threads <= 1
-          total_pixels = process_pixel_range(pixels, width, 0, height, step, alpha_threshold, histo)
+          total_pixels = Utils::HistogramProcessor.process_pixel_range(pixels, width, 0, height, step, alpha_threshold, histo)
         else
           total_pixels = build_parallel(pixels, width, height, step, alpha_threshold, histo, options, config)
         end
@@ -35,7 +38,7 @@ module PrismatIQ
 
           workers << Thread.new do
             local_histo = Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32)
-            local_count = process_pixel_range(pixels, width, start_row, end_row, step, alpha_threshold, local_histo)
+            local_count = Utils::HistogramProcessor.process_pixel_range(pixels, width, start_row, end_row, step, alpha_threshold, local_histo)
             locals[local_idx] = local_histo
             totals[local_idx] = local_count
           end
@@ -43,33 +46,6 @@ module PrismatIQ
 
         workers.each(&.join)
         merge_chunked(histo, locals, config)
-      end
-
-      @[AlwaysInline]
-      private def self.process_pixel_range(pixels : Slice(UInt8), width : Int32, start_row : Int32, end_row : Int32, step : Int32, alpha_threshold : UInt8, histo : Array(UInt32)) : Int32
-        count = 0
-        y_coord = start_row
-        while y_coord < end_row
-          x_coord = 0
-          while x_coord < width
-            idx = (y_coord * width + x_coord) * 4
-            break if idx + 3 >= pixels.size
-
-            a = pixels[idx + 3]
-            if a >= alpha_threshold
-              r = pixels[idx].to_i
-              g = pixels[idx + 1].to_i
-              b = pixels[idx + 2].to_i
-              y, i, q = YIQConverter.quantize_from_rgb(r, g, b)
-              histo[VBox.to_index(y, i, q)] += 1_u32
-              count += 1
-            end
-
-            x_coord += step
-          end
-          y_coord += step
-        end
-        count
       end
 
       private def self.merge_chunked(histo : Array(UInt32), locals : Array(Array(UInt32)?), config : Config) : Int32
