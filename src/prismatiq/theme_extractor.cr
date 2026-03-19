@@ -5,6 +5,7 @@ require "./theme_result"
 require "./rgb"
 require "./utils/ip_validator"
 require "./errors"
+require "./accessibility_calculator"
 
 module PrismatIQ
   class ThemeExtractionError < Exception
@@ -269,7 +270,7 @@ module PrismatIQ
       client.connect_timeout = options.http_timeout.seconds
 
       headers = HTTP::Headers{
-        "User-Agent" => "PrismatIQ/#{VERSION}",
+        "User-Agent" => "PrismatIQ/#{Version::VERSION}",
         "Accept"     => "image/*,*/*;q=0.8",
       }
 

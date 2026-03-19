@@ -1,5 +1,6 @@
 require "./thread_safe_cache"
 require "./rgb"
+require "./luminance_calculator"
 
 module PrismatIQ
   class AccessibilityCalculator
@@ -20,15 +21,7 @@ module PrismatIQ
       key = {rgb.r, rgb.g, rgb.b}
 
       @luminance_cache.get_or_compute(key) do
-        r = rgb.r / 255.0
-        g = rgb.g / 255.0
-        b = rgb.b / 255.0
-
-        r = r <= 0.03928 ? r / 12.92 : ((r + 0.055) / 1.055) ** 2.4
-        g = g <= 0.03928 ? g / 12.92 : ((g + 0.055) / 1.055) ** 2.4
-        b = b <= 0.03928 ? b / 12.92 : ((b + 0.055) / 1.055) ** 2.4
-
-        0.2126 * r + 0.7152 * g + 0.0722 * b
+        LuminanceCalculator.relative_luminance(rgb)
       end
     end
 

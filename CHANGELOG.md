@@ -1,6 +1,22 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [0.5.6.0] - 2026-03-19
+
+### Added
+- **Compile-time VERSION derivation**: The `VERSION` constant is now automatically derived from `shard.yml` at compile time, ensuring consistency between source and package metadata
+- **Shared luminance calculation module**: Extracted duplicate `relative_luminance` logic into a shared `LuminanceCalculator` module used by both `AccessibilityCalculator` and `ThemeDetector`
+
+### Improved
+- **ThreadSafeCache performance**: Implemented double-checked locking pattern to reduce contention during cache operations
+- **VBox.split algorithm**: Optimized median finding with quickselect algorithm (O(n) vs O(n log n) sort)
+- **AccessibilityCalculator reuse**: ThemeDetector now accepts AccessibilityCalculator as constructor dependency, reducing object allocation
+
+### Fixed
+- **VERSION mismatch**: Previously hardcoded VERSION constant (0.5.4.0) didn't match shard.yml (0.5.5.0)
+
+### Compatibility
+- **Crystal 1.18.2**: This release requires Crystal 1.18.2 or higher
+- **No breaking changes**: All public APIs remain unchanged; existing code will work without modification
 
 ## [0.5.5.0] - 2026-03-18
 

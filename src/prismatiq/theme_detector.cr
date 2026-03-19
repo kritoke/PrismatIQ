@@ -1,5 +1,6 @@
 require "./thread_safe_cache"
 require "./rgb"
+require "./luminance_calculator"
 
 module PrismatIQ
   struct ThemeInfo
@@ -58,10 +59,12 @@ module PrismatIQ
   class ThemeDetector
     @luminance_cache : ThreadSafeCache(Tuple(Int32, Int32, Int32), Float64)
     @theme_cache : ThreadSafeCache(Tuple(Int32, Int32, Int32), Symbol)
+    @accessibility : AccessibilityCalculator
 
-    def initialize
+    def initialize(accessibility : AccessibilityCalculator? = nil)
       @luminance_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Float64).new
       @theme_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Symbol).new
+      @accessibility = accessibility || AccessibilityCalculator.new
     end
 
     def detect_theme(color : RGB) : Symbol
@@ -82,15 +85,7 @@ module PrismatIQ
     def relative_luminance(rgb : RGB) : Float64
       key = {rgb.r, rgb.g, rgb.b}
       @luminance_cache.get_or_compute(key) do
-        r = rgb.r / 255.0
-        g = rgb.g / 255.0
-        b = rgb.b / 255.0
-
-        r = r <= 0.03928 ? r / 12.92 : ((r + 0.055) / 1.055) ** 2.4
-        g = g <= 0.03928 ? g / 12.92 : ((g + 0.055) / 1.055) ** 2.4
-        b = b <= 0.03928 ? b / 12.92 : ((b + 0.055) / 1.055) ** 2.4
-
-        0.2126 * r + 0.7152 * g + 0.0722 * b
+        LuminanceCalculator.relative_luminance(rgb)
       end
     end
 
@@ -124,17 +119,17 @@ module PrismatIQ
     def suggest_text_palette(background : RGB, level : WCAGLevel = WCAGLevel::AA) : TextColorPalette
       theme_type = detect_theme(background)
 
-      primary = AccessibilityCalculator.new.recommend_text_color(background, level, large_text: false)
+      primary = @accessibility.recommend_text_color(background, level, large_text: false)
 
       if theme_type == :dark
-        secondary_raw = AccessibilityCalculator.new.lighten(primary, 0.3)
+        secondary_raw = @accessibility.lighten(primary, 0.3)
         accent_raw = RGB.new(
           (primary.r * 0.8 + 100).to_i.clamp(0, 255),
           (primary.g * 0.8 + 150).to_i.clamp(0, 255),
           (primary.b * 0.8 + 255).to_i.clamp(0, 255)
         )
       else
-        secondary_raw = AccessibilityCalculator.new.darken(primary, 0.3)
+        secondary_raw = @accessibility.darken(primary, 0.3)
         accent_raw = RGB.new(
           (primary.r * 0.6).to_i.clamp(0, 255),
           (primary.g * 0.6 + 50).to_i.clamp(0, 255),
@@ -142,8 +137,8 @@ module PrismatIQ
         )
       end
 
-      secondary_adjusted = AccessibilityCalculator.new.find_nearest_compliant(secondary_raw, background, level, large_text: true) || secondary_raw
-      accent_adjusted = AccessibilityCalculator.new.find_nearest_compliant(accent_raw, background, level, large_text: true) || accent_raw
+      secondary_adjusted = @accessibility.find_nearest_compliant(secondary_raw, background, level, large_text: true) || secondary_raw
+      accent_adjusted = @accessibility.find_nearest_compliant(accent_raw, background, level, large_text: true) || accent_raw
 
       TextColorPalette.new(primary, secondary_adjusted, accent_adjusted, background, theme_type)
     end

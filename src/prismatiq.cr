@@ -1,5 +1,6 @@
 require "./prismatiq/errors"
 require "./prismatiq/result"
+require "./prismatiq/version"
 require "./prismatiq/options"
 require "./prismatiq/rgb"
 require "./prismatiq/utils/validation"
@@ -14,7 +15,7 @@ require "./prismatiq/thread_safe_cache"
 require "./prismatiq/algorithm/color_space"
 require "./prismatiq/color_extractor"
 require "./prismatiq/accessibility"
-require "./prismatiq/accessibility_calculator"
+require "./prismatiq/luminance_calculator"
 require "./prismatiq/theme"
 require "./prismatiq/theme_detector"
 require "./prismatiq/config"
@@ -30,8 +31,6 @@ require "json"
 require "yaml"
 
 module PrismatIQ
-  VERSION = "0.5.4.0"
-
   # High-performance Crystal shard for extracting dominant color palettes from images.
   #
   # ## Thread Safety

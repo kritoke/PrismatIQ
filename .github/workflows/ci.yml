@@ -19,13 +19,18 @@ jobs:
       - name: Setup Crystal
         uses: crystal-lang/install-crystal@v1
         with:
-          crystal: 1.11.0
+          crystal: 1.18.2
 
       - name: Install shards
         run: shards install
 
       - name: Run specs
         run: crystal spec
+
+      - name: Download sample test image
+        run: |
+          curl -sL -o bench/test_1080p.jpg "https://www.w3schools.com/css/img_5terre.jpg"
+          file bench/test_1080p.jpg
 
       - name: Run color-thief adapter on sample image
         run: |

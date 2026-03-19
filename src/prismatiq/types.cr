@@ -134,12 +134,12 @@ module PrismatIQ
       return {self, VBox.new(0, 0, 0, 0, 0, 0)} if axis == -1
 
       indices = get_indices(axis)
-      indices.sort!
 
+      return {self, VBox.new(0, 0, 0, 0, 0, 0)} if indices.empty?
+
+      # Use quickselect for O(n) median finding instead of O(n log n) sort
       mid = indices.size // 2
-      return {self, VBox.new(0, 0, 0, 0, 0, 0)} if mid == 0
-
-      split_at = indices[mid - 1]
+      split_at = VBox.quickselect(indices, mid - 1)
 
       box1_y1, box1_y2, box1_i1, box1_i2, box1_q1, box1_q2 = @y1, @y2, @i1, @i2, @q1, @q2
       box2_y1, box2_y2, box2_i1, box2_i2, box2_q1, box2_q2 = @y1, @y2, @i1, @i2, @q1, @q2
@@ -160,6 +160,42 @@ module PrismatIQ
       box2 = VBox.new(box2_y1, box2_y2, box2_i1, box2_i2, box2_q1, box2_q2, 0, @histo)
 
       {box1.recalc_count, box2.recalc_count}
+    end
+
+    # Quickselect algorithm to find k-th smallest element in O(n) average time
+    def self.quickselect(arr : Array(Int32), k : Int32) : Int32
+      # For small arrays, just sort (faster than quickselect overhead)
+      if arr.size <= 32
+        sorted = arr.sort
+        return sorted[k]
+      end
+
+      # Use random pivot for average O(n) performance
+      rng = Random::PCG32.new
+      pivot_idx = rng.rand(arr.size)
+      pivot = arr[pivot_idx]
+
+      left = [] of Int32
+      right = [] of Int32
+      pivot_count = 0
+
+      arr.each do |v|
+        if v < pivot
+          left << v
+        elsif v > pivot
+          right << v
+        else
+          pivot_count += 1
+        end
+      end
+
+      if k < left.size
+        quickselect(left, k)
+      elsif k < left.size + pivot_count
+        pivot
+      else
+        quickselect(right, k - left.size - pivot_count)
+      end
     end
 
     private def find_split_axis : Int32

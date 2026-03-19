@@ -10,10 +10,8 @@ module PrismatIQ
   # - Only one thread executes computation for a given key even with concurrent access
   #
   # ### Performance Note
-  # Computation happens while holding the global mutex, which means other cache operations
-  # will be blocked during slow computations. For most use cases in this library
-  # (color extraction, theme detection), computations are fast enough that this is not
-  # a significant issue.
+  # Uses double-checked locking pattern to allow concurrent reads while computation
+  # happens under the lock. This reduces contention for frequently accessed cache entries.
   #
   # ### Example
   # ```
@@ -36,15 +34,22 @@ module PrismatIQ
 
     # Retrieves the cached value for the given key, or computes and stores it if not present.
     #
-    # This method is fully thread-safe: all operations are synchronized via mutex.
-    # When multiple threads call this method concurrently with the same key,
-    # only one thread executes the computation block. All threads receive
-    # the same cached result.
+    # This method uses double-checked locking for optimal performance:
+    # 1. Fast path: check without lock - if cached, return immediately
+    # 2. Slow path: acquire lock, double-check, then compute if needed
+    #
+    # This allows concurrent reads while only serializing writes/computations.
     #
     # @param key the cache key
     # @return the cached or computed value
     def get_or_compute(key : K, &block : -> V) : V
+      # Fast path: check without lock
+      cached = @cache[key]?
+      return cached if cached
+
+      # Slow path: acquire lock and double-check
       @mutex.synchronize do
+        # Double-check inside lock to avoid race condition
         cached = @cache[key]?
         return cached if cached
 
