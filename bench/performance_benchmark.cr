@@ -246,83 +246,83 @@ puts "\nRunning benchmarks...\n\n"
 # Small image benchmarks
 runner.run("checker_10x10_single") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
-  PrismatIQ.get_palette(checker_10, 10, 10, options)
+  PrismatIQ.get_palette_from_buffer(checker_10, 10, 10, options)
 end
 
 runner.run("checker_32x32_single") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
-  PrismatIQ.get_palette(checker_32, 32, 32, options)
+  PrismatIQ.get_palette_from_buffer(checker_32, 32, 32, options)
 end
 
 runner.run("checker_64x64_single") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
-  PrismatIQ.get_palette(checker_64, 64, 64, options)
+  PrismatIQ.get_palette_from_buffer(checker_64, 64, 64, options)
 end
 
 # Solid color
 runner.run("solid_100x100_single") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
-  PrismatIQ.get_palette(solid_100, 100, 100, options)
+  PrismatIQ.get_palette_from_buffer(solid_100, 100, 100, options)
 end
 
 # Gradient
 runner.run("gradient_100x100_single") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
-  PrismatIQ.get_palette(gradient_100, 100, 100, options)
+  PrismatIQ.get_palette_from_buffer(gradient_100, 100, 100, options)
 end
 
 # Random noise
 runner.run("random_100x100_single") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
-  PrismatIQ.get_palette(random_100, 100, 100, options)
+  PrismatIQ.get_palette_from_buffer(random_100, 100, 100, options)
 end
 
 runner.run("random_256x256_single") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
-  PrismatIQ.get_palette(random_256, 256, 256, options)
+  PrismatIQ.get_palette_from_buffer(random_256, 256, 256, options)
 end
 
 runner.run("random_512x512_single") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
-  PrismatIQ.get_palette(random_512, 512, 512, options)
+  PrismatIQ.get_palette_from_buffer(random_512, 512, 512, options)
 end
 
 # Multi-threaded benchmarks
 runner.run("random_256x256_multi_4") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 4)
-  PrismatIQ.get_palette(random_256, 256, 256, options)
+  PrismatIQ.get_palette_from_buffer(random_256, 256, 256, options)
 end
 
 # Quality variations
 runner.run("random_256x256_quality_1") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
-  PrismatIQ.get_palette(random_256, 256, 256, options)
+  PrismatIQ.get_palette_from_buffer(random_256, 256, 256, options)
 end
 
 runner.run("random_256x256_quality_5") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 5, threads: 1)
-  PrismatIQ.get_palette(random_256, 256, 256, options)
+  PrismatIQ.get_palette_from_buffer(random_256, 256, 256, options)
 end
 
 runner.run("random_256x256_quality_10") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 10, threads: 1)
-  PrismatIQ.get_palette(random_256, 256, 256, options)
+  PrismatIQ.get_palette_from_buffer(random_256, 256, 256, options)
 end
 
 # Color count variations
 runner.run("random_256x256_colors_3") do
   options = PrismatIQ::Options.new(color_count: 3, quality: 1, threads: 1)
-  PrismatIQ.get_palette(random_256, 256, 256, options)
+  PrismatIQ.get_palette_from_buffer(random_256, 256, 256, options)
 end
 
 runner.run("random_256x256_colors_10") do
   options = PrismatIQ::Options.new(color_count: 10, quality: 1, threads: 1)
-  PrismatIQ.get_palette(random_256, 256, 256, options)
+  PrismatIQ.get_palette_from_buffer(random_256, 256, 256, options)
 end
 
 runner.run("random_256x256_colors_20") do
   options = PrismatIQ::Options.new(color_count: 20, quality: 1, threads: 1)
-  PrismatIQ.get_palette(random_256, 256, 256, options)
+  PrismatIQ.get_palette_from_buffer(random_256, 256, 256, options)
 end
 
 # Stats API
@@ -331,23 +331,24 @@ runner.run("random_256x256_stats") do
   PrismatIQ.get_palette_with_stats(random_256, 256, 256, options)
 end
 
-# Result type API
+# Result type API (v2)
 runner.run("random_256x256_result") do
   options = PrismatIQ::Options.new(color_count: 5, quality: 1, threads: 1)
-  PrismatIQ.get_palette_result(random_256, 256, 256, options)
+  result = PrismatIQ.get_palette_v2(random_256, 256, 256, options)
+  result.value
 end
 
 # Edge cases
 runner.run("empty_image") do
   empty = Slice(UInt8).new(0)
   options = PrismatIQ::Options.new(color_count: 5)
-  PrismatIQ.get_palette(empty, 0, 0, options)
+  PrismatIQ.get_palette_from_buffer(empty, 0, 0, options)
 end
 
 runner.run("single_pixel") do
   single = Slice.new(4) { |_i| 255_u8 }
   options = PrismatIQ::Options.new(color_count: 5)
-  PrismatIQ.get_palette(single, 1, 1, options)
+  PrismatIQ.get_palette_from_buffer(single, 1, 1, options)
 end
 
 # Print and save results

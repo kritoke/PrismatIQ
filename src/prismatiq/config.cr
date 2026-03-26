@@ -118,6 +118,10 @@ module PrismatIQ
       STDERR.puts message if @debug
     end
 
+    def debug_log? : Bool
+      @debug
+    end
+
     def rate_limit_allow? : Bool
       @rate_limiter.try(&.acquire) || true
     end

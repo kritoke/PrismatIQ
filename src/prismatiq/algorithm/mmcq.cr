@@ -21,7 +21,9 @@ module PrismatIQ
         return [build_initial_box] if max_colors == 1
 
         initial_box = build_initial_box
-        log_debug_initial(initial_box)
+        if @config.debug_log?
+          log_debug_initial(initial_box)
+        end
 
         pq = Algorithm::PriorityQueue(VBox).new(&box_comparator)
         pq.push(initial_box)
@@ -29,11 +31,15 @@ module PrismatIQ
         iteration = 0
         while pq.size < max_colors && iteration < MAX_ITERATIONS
           iteration += 1
-          log_debug_iteration(iteration, pq.size)
+          if @config.debug_log?
+            log_debug_iteration(iteration, pq.size)
+          end
 
           box = pq.pop
           break unless box
-          log_popped_box(box)
+          if @config.debug_log?
+            log_popped_box(box)
+          end
 
           vbox1, vbox2 = box.split
 
@@ -42,7 +48,9 @@ module PrismatIQ
             break
           end
 
-          log_split_result(vbox1, vbox2)
+          if @config.debug_log?
+            log_split_result(vbox1, vbox2)
+          end
 
           pq.push(vbox1) if vbox1.count > 0
           pq.push(vbox2) if vbox2.count > 0

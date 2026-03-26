@@ -42,7 +42,9 @@ module PrismatIQ
       end
 
       def extract_from_path(path : String, options : Options) : Array(RGB)
-        @config.debug_log "get_palette(path): path=#{path} options=#{options.inspect}"
+        if @config.debug_log?
+          @config.debug_log "get_palette(path): path=#{path} options=#{options.inspect}"
+        end
         rgba_image = ImageLoader.load(path)
         extract_from_image_data(rgba_image, options)
       end
@@ -53,7 +55,9 @@ module PrismatIQ
       end
 
       def extract_from_image(image, options : Options) : Array(RGB)
-        @config.debug_log "get_palette_from_image: image.class=#{image.class} options=#{options.inspect}"
+        if @config.debug_log?
+          @config.debug_log "get_palette_from_image: image.class=#{image.class} options=#{options.inspect}"
+        end
         rgba_image = ImageLoader.load(image)
         extract_image_data(rgba_image, options)
       end
@@ -123,7 +127,9 @@ module PrismatIQ
                 local_count = Utils::HistogramProcessor.process_pixel_range(pixels, width, start_row, end_row, step, alpha_threshold, local_histo)
                 channel.send({local_histo, local_count})
               rescue ex : Exception
-                @config.debug_log "Worker fiber failed: #{ex.class.name}: #{ex.message}"
+                if @config.debug_log?
+                  @config.debug_log "Worker fiber failed: #{ex.class.name}: #{ex.message}"
+                end
                 channel.send({nil, 0})
               end
             end

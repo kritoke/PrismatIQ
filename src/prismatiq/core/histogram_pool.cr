@@ -5,7 +5,7 @@ module PrismatIQ
     # Optimized histogram allocation for parallel processing.
     #
     # Instead of using a shared pool with mutex contention, this implementation
-    # pre-allocates histograms for each worker fiber and provides direct access.
+    # provides lazy allocation for each worker fiber with direct access.
     #
     # ### Thread Safety
     # - Each histogram is used by only one fiber at a time
@@ -13,9 +13,9 @@ module PrismatIQ
     # - Safe for concurrent use across multiple extraction operations
     #
     # ### Memory Management
-    # - Histograms are pre-allocated based on expected worker count
-    # - No dynamic allocation during processing
-    # - Memory usage is predictable and bounded
+    # - Histograms are allocated on-demand per worker (lazy allocation)
+    # - Only the histograms actually used are allocated
+    # - Memory usage is predictable and bounded by worker count
     class HistogramPool
       @histograms : Array(Array(UInt32)?)
       @used : Array(Bool)

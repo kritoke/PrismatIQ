@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.6.1] - 2026-03-26
+
+### Improved
+- **Debug logging overhead**: Added `debug_log?` method to `Config` to avoid string interpolation overhead when debug logging is disabled. Hot paths in `PaletteExtractor` and `MMCQ` now guard debug calls with `debug_log?` checks.
+- **HistogramPool documentation**: Fixed misleading documentation - the implementation already uses lazy allocation (not pre-allocation) as documented.
+
+### Fixed
+- **Benchmark API consistency**: Updated `bench/performance_benchmark.cr` to use current v2 APIs (`get_palette_from_buffer` and `get_palette_v2`) instead of non-existent deprecated methods.
+
+### Compatibility
+- **Crystal 1.18.2**: Maintained - no new features that would break compatibility
+
 ## [0.5.6.0] - 2026-03-19
 
 ### Added
