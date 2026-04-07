@@ -109,14 +109,20 @@ module PrismatIQ
 
       return suggestions if current_ratio >= target_ratio
 
-      bg_lum = relative_luminance(background)
+      step = Constants::Accessibility::COLOR_SUGGESTION_STEP
 
-      adjuster = bg_lum > 0.5 ? ->(c : RGB, a : Int32) { darken(c, a.to_f / 100.0) } : ->(c : RGB, a : Int32) { lighten(c, a.to_f / 100.0) }
+      (0..255).step(step) do |adjustment|
+        fraction = adjustment.to_f / 100.0
 
-      (0..255).step(Constants::Accessibility::COLOR_SUGGESTION_STEP) do |adjustment|
-        adjusted = adjuster.call(color, adjustment)
-        if contrast_ratio(adjusted, background) >= target_ratio
-          suggestions << adjusted
+        darkened = darken(color, fraction)
+        if contrast_ratio(darkened, background) >= target_ratio
+          suggestions << darkened
+          break if suggestions.size >= 5
+        end
+
+        lightened = lighten(color, fraction)
+        if contrast_ratio(lightened, background) >= target_ratio
+          suggestions << lightened
           break if suggestions.size >= 5
         end
       end

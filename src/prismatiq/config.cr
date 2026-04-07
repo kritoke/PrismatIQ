@@ -117,7 +117,7 @@ module PrismatIQ
       {t, height}.min
     end
 
-    def debug_log(message : String) : Nil
+    def log_debug(message : String) : Nil
       STDERR.puts message if @debug
     end
 

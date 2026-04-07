@@ -2,6 +2,7 @@ require "./palette_extractor"
 require "../types"
 require "../options"
 require "../config"
+require "../utils/histogram_processor"
 
 module PrismatIQ
   module Core
@@ -17,7 +18,7 @@ module PrismatIQ
             palette = extractor.extract_from_path(path, options)
             ch.send(palette)
           rescue ex : Exception
-            @config.debug_log "get_palette_channel: #{ex.class}: #{ex.message}"
+            @config.log_debug "get_palette_channel: #{ex.class}: #{ex.message}"
             ch.send([RGB.new(0, 0, 0)])
           ensure
             ch.close
@@ -57,7 +58,7 @@ module PrismatIQ
           palette = extractor.extract_from_path(path, options)
           palette.first? || RGB.new(0, 0, 0)
         rescue ex : Exception
-          @config.debug_log "get_color_from_path: #{ex.class}: #{ex.message}"
+          @config.log_debug "get_color_from_path: #{ex.class}: #{ex.message}"
           RGB.new(0, 0, 0)
         end
       end
@@ -69,7 +70,7 @@ module PrismatIQ
           palette = extractor.extract_from_io(io, options)
           palette.first? || RGB.new(0, 0, 0)
         rescue ex : Exception
-          @config.debug_log "get_color_from_io: #{ex.class}: #{ex.message}"
+          @config.log_debug "get_color_from_io: #{ex.class}: #{ex.message}"
           RGB.new(0, 0, 0)
         end
       end
@@ -87,7 +88,7 @@ module PrismatIQ
             palette = extractor.extract_from_image(read_img.as(CrImage::Image), options)
             palette.first? || RGB.new(0, 0, 0)
           rescue ex : Exception
-            @config.debug_log "get_color: #{ex.class}: #{ex.message}"
+            @config.log_debug "get_color: #{ex.class}: #{ex.message}"
             RGB.new(0, 0, 0)
           end
         end
@@ -96,29 +97,7 @@ module PrismatIQ
       private def build_histogram(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options) : Array(UInt32)
         histo = Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32)
         step = options.quality < 1 ? 1 : options.quality
-        alpha_threshold = options.alpha_threshold
-
-        y_coord = 0
-        while y_coord < height
-          x_coord = 0
-          while x_coord < width
-            idx = (y_coord * width + x_coord) * 4
-            break if idx + 3 >= pixels.size
-
-            a = pixels[idx + 3]
-            if a >= alpha_threshold
-              r = pixels[idx].to_i
-              g = pixels[idx + 1].to_i
-              b = pixels[idx + 2].to_i
-              y, i, q = YIQConverter.quantize_from_rgb(r, g, b)
-              histo[VBox.to_index(y, i, q)] += 1
-            end
-
-            x_coord += step
-          end
-          y_coord += step
-        end
-
+        Utils::HistogramProcessor.process_pixel_range(pixels, width, 0, height, step, options.alpha_threshold, histo)
         histo
       end
 

@@ -65,7 +65,7 @@ module PrismatIQ
       if result
         @cache[cache_key] = result
       elsif @config.debug_log?
-        @config.debug_log "extract: failed to extract theme from '#{source}'"
+        @config.log_debug "extract: failed to extract theme from '#{source}'"
       end
 
       result
@@ -130,7 +130,7 @@ module PrismatIQ
       end
 
       text_colors = find_text_colors(bg_rgb)
-      ThemeResult.new(bg_rgb, text_colors[:light], text_colors[:dark]).to_json
+      ThemeResult.new(bg_rgb, text_colors[:light].to_hex, text_colors[:dark].to_hex).to_json
     end
 
     private def parse_theme_json(theme_json : String) : Tuple(Array(Int32)?, Hash(String, String))
@@ -150,7 +150,7 @@ module PrismatIQ
           end
         end
       rescue ex : JSON::ParseException | TypeCastError
-        @config.debug_log "fix_theme: JSON parse error (#{ex.class.name}): #{ex.message}"
+        @config.log_debug "fix_theme: JSON parse error (#{ex.class.name}): #{ex.message}"
       end
 
       {bg_rgb, text_hash}
@@ -165,7 +165,7 @@ module PrismatIQ
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
     rescue ex : Exception
-      @config.debug_log "extract_ico_bg: #{ex.class}: #{ex.message}"
+      @config.log_debug "extract_ico_bg: #{ex.class}: #{ex.message}"
       return
     end
 
@@ -174,7 +174,7 @@ module PrismatIQ
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
     rescue ex : Exception
-      @config.debug_log "extract_ico_buffer_bg: #{ex.class}: #{ex.message}"
+      @config.log_debug "extract_ico_buffer_bg: #{ex.class}: #{ex.message}"
       return
     end
 
@@ -202,7 +202,7 @@ module PrismatIQ
 
       extract_pixel_colors(rgba.pix, w.to_i32, h.to_i32, options)
     rescue ex : Exception
-      @config.debug_log "extract_image_bg: #{ex.class}: #{ex.message}"
+      @config.log_debug "extract_image_bg: #{ex.class}: #{ex.message}"
       return
     end
 
@@ -222,7 +222,7 @@ module PrismatIQ
         extract_image_bg(tmp_path, options)
       end
     rescue ex : Exception
-      @config.debug_log "extract_buffer_bg: #{ex.class}: #{ex.message}"
+      @config.log_debug "extract_buffer_bg: #{ex.class}: #{ex.message}"
       return
     end
 
@@ -234,14 +234,14 @@ module PrismatIQ
 
     private def fetch_url(url : String, options : ThemeOptions) : Slice(UInt8)?
       unless @config.rate_limit_allow?
-        @config.debug_log "fetch_url: rate limited, please retry later"
+        @config.log_debug "fetch_url: rate limited, please retry later"
         return
       end
 
       uri = URI.parse(url)
 
       unless {"http", "https"}.includes?(uri.scheme)
-        @config.debug_log "fetch_url: rejected non-http(s) scheme: #{uri.scheme}"
+        @config.log_debug "fetch_url: rejected non-http(s) scheme: #{uri.scheme}"
         return
       end
 
@@ -256,13 +256,13 @@ module PrismatIQ
       if @config.ssrf_protection? && !allowlist_allows?(host)
         resolved_ips = Utils::IPValidator.resolve_host(host)
         if resolved_ips.empty?
-          @config.debug_log "fetch_url: DNS resolution failed for '#{host}'"
+          @config.log_debug "fetch_url: DNS resolution failed for '#{host}'"
           return
         end
 
         resolved_ips.each do |ip|
           if Utils::IPValidator.private_address?(ip)
-            @config.debug_log "fetch_url: SSRF blocked - host=#{host} ip=#{ip.address} reason=private_address"
+            @config.log_debug "fetch_url: SSRF blocked - host=#{host} ip=#{ip.address} reason=private_address"
             return
           end
         end
@@ -296,7 +296,7 @@ module PrismatIQ
 
         content_type = response.headers["Content-Type"]?
         if content_type && !content_type.starts_with?("image/")
-          @config.debug_log "fetch_url: rejected non-image content-type: #{content_type}"
+          @config.log_debug "fetch_url: rejected non-image content-type: #{content_type}"
           return
         end
 
@@ -305,7 +305,7 @@ module PrismatIQ
           begin
             length = content_length.to_i64
             if length > options.max_file_size
-              @config.debug_log "fetch_url: rejected due to Content-Length: #{length}"
+              @config.log_debug "fetch_url: rejected due to Content-Length: #{length}"
               return
             end
           rescue ex : ArgumentError
@@ -317,7 +317,7 @@ module PrismatIQ
         return if body.size > options.max_file_size
         body.to_slice
       rescue ex : Exception
-        @config.debug_log "fetch_url: exception #{ex.class.name}: #{ex.message}"
+        @config.log_debug "fetch_url: exception #{ex.class.name}: #{ex.message}"
         nil
       ensure
         client.try(&.close)
@@ -347,41 +347,34 @@ module PrismatIQ
 
     private def build_theme_result(bg_rgb : Array(Int32)) : ThemeResult
       text_colors = find_text_colors(bg_rgb)
-      ThemeResult.new(bg_rgb, text_colors[:light], text_colors[:dark])
+      ThemeResult.new(bg_rgb, text_colors[:light].to_hex, text_colors[:dark].to_hex)
     end
 
-    private def find_text_colors(bg_rgb : Array(Int32)) : NamedTuple(light: String, dark: String)
+    private def find_text_colors(bg_rgb : Array(Int32)) : NamedTuple(light: RGB, dark: RGB)
       bg = RGB.new(bg_rgb[0], bg_rgb[1], bg_rgb[2])
 
-      dark_bg_text = find_dark_contrast_text(bg)
-      light_bg_text = find_light_contrast_text(bg)
-
       {
-        light: RGB.new(light_bg_text[0], light_bg_text[1], light_bg_text[2]).to_hex,
-        dark:  RGB.new(dark_bg_text[0], dark_bg_text[1], dark_bg_text[2]).to_hex,
+        light: find_light_contrast_text(bg),
+        dark:  find_dark_contrast_text(bg),
       }
     end
 
-    private def find_light_contrast_text(bg : RGB) : Array(Int32)
+    private def find_light_contrast_text(bg : RGB) : RGB
       (0..255).step(Constants::ThemeExtraction::GRAY_STEP) do |val|
         candidate = RGB.new(val, val, val)
-        if @accessibility.contrast_ratio(candidate, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
-          return [val, val, val]
-        end
+        return candidate if @accessibility.contrast_ratio(candidate, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
       end
-      Constants::ThemeExtraction::DARK_TEXT_FALLBACK
+      RGB.new(Constants::ThemeExtraction::DARK_TEXT_FALLBACK[0], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[1], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[2])
     end
 
-    private def find_dark_contrast_text(bg : RGB) : Array(Int32)
+    private def find_dark_contrast_text(bg : RGB) : RGB
       val = 255
       while val >= 0
         candidate = RGB.new(val, val, val)
-        if @accessibility.contrast_ratio(candidate, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
-          return [val, val, val]
-        end
+        return candidate if @accessibility.contrast_ratio(candidate, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
         val -= Constants::ThemeExtraction::GRAY_STEP
       end
-      Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK
+      RGB.new(Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[0], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[1], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[2])
     end
 
     private def parse_to_rgb(color_str : String?) : Array(Int32)?

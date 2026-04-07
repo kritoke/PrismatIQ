@@ -28,7 +28,7 @@ module PrismatIQ
 
       [r_avg.clamp(0, 255), g_avg.clamp(0, 255), b_avg.clamp(0, 255)]
       rescue ex : ArgumentError
-        config.debug_log "ColorExtractor.extract_from_buffer: exception: #{ex.class.name}: #{ex.message}"
+        config.log_debug "ColorExtractor.extract_from_buffer: exception: #{ex.class.name}: #{ex.message}"
         nil
     end
 
@@ -57,7 +57,7 @@ module PrismatIQ
             count += 1
           end
         else
-          config.debug_log "ColorExtractor.extract_from_buffer: skipping out-of-bounds idx=#{idx} pixels.size=#{pixels.size}"
+          config.log_debug "ColorExtractor.extract_from_buffer: skipping out-of-bounds idx=#{idx} pixels.size=#{pixels.size}"
         end
 
         p += step

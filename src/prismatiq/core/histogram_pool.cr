@@ -30,13 +30,10 @@ module PrismatIQ
           raise ArgumentError.new("Index #{index} out of bounds for pool size #{@histograms.size}")
         end
 
-        if @histograms[index].nil?
-          @histograms[index] = Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32)
-        else
-          @histograms[index].as(Array(UInt32)).fill(0_u32)
-        end
+        histo = (@histograms[index] ||= Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32))
+        histo.fill(0_u32)
         @used[index] = true
-        @histograms[index].as(Array(UInt32))
+        histo
       end
 
       def release(index : Int32) : Nil
@@ -51,11 +48,7 @@ module PrismatIQ
 
       def clear : Nil
         @used.fill(false)
-        @histograms.each do |histo|
-          if histo
-            histo.fill(0_u32)
-          end
-        end
+        @histograms.each &.try &.fill(0_u32)
       end
 
       def stats : NamedTuple(pool_size: Int32, total_capacity: Int32)

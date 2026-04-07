@@ -179,7 +179,7 @@ module PrismatIQ
       parser = new(data, config)
       parser.valid? ? parser : nil
     rescue ex : Exception
-      config.debug_log "BMPParser.from_slice?: #{ex.class}: #{ex.message}"
+      config.log_debug "BMPParser.from_slice?: #{ex.class}: #{ex.message}"
       nil
     end
 

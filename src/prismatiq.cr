@@ -277,7 +277,7 @@ module PrismatIQ
     theme_extractor.clear_cache
   end
 
-  def self.debug_log(message : String) : Nil
+  def self.log_debug(message : String) : Nil
     STDERR.puts message if ENV["PRISMATIQ_DEBUG"]?
   end
 end

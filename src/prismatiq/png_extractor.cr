@@ -148,7 +148,7 @@ module PrismatIQ
     end
 
     private def debug_log(*parts)
-      @config.debug_log "PNGExtractor: #{parts.join(" ")}"
+      @config.log_debug "PNGExtractor: #{parts.join(" ")}"
     end
 
     class PNGExtractError < Exception

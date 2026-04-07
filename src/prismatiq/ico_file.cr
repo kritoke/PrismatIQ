@@ -46,7 +46,7 @@ module PrismatIQ
       bytes = File.read(path).to_slice
       new(bytes, config)
     rescue ex : Exception
-      config.debug_log "ICOFile.from_path: failed to read #{path}: #{ex.message}"
+      config.log_debug "ICOFile.from_path: failed to read #{path}: #{ex.message}"
       nil
     end
 
@@ -55,7 +55,7 @@ module PrismatIQ
     def self.from_slice(data : Slice(UInt8), config : Config = Config.default) : ICOFile?
       new(data, config)
     rescue ex : Exception
-      config.debug_log "ICOFile.from_slice: failed to parse: #{ex.message}"
+      config.log_debug "ICOFile.from_slice: failed to parse: #{ex.message}"
       nil
     end
 
@@ -272,7 +272,7 @@ module PrismatIQ
     end
 
     private def ico_debug_log(*parts)
-      @config.debug_log parts.join(" ")
+      @config.log_debug parts.join(" ")
     end
 
     class ICOError < Exception
