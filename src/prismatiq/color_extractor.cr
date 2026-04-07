@@ -3,14 +3,11 @@ module PrismatIQ
   # Public API: extract_from_buffer(pixels, width, height, sample_size = 1000)
   module ColorExtractor
     struct Options
-      # Approximate number of pixels to sample (not strict); default keeps work bounded
       property sample_size : Int32 = 1000
-      # Minimum alpha to consider a pixel opaque (0-255)
       property alpha_threshold : UInt8 = 1_u8
     end
 
-    # Accept a Slice(UInt8) RGBA buffer for best compatibility with other APIs
-    def self.extract_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.new) : Array(Int32)?
+    def self.extract_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.new, config : Config = Config.default) : Array(Int32)?
       return if width <= 0 || height <= 0
 
       total = width.to_i32 * height.to_i32
@@ -21,24 +18,21 @@ module PrismatIQ
       step = (total.to_f / sample_size.to_f).ceil.to_i32
       step = 1 if step < 1
 
-      r_total, g_total, b_total, count = sample_pixels(pixels, total, step, options)
+      r_total, g_total, b_total, count = sample_pixels(pixels, total, step, options, config)
 
       return if count == 0
 
-      # integer average: use truncation/floor to match tests' expected values
       r_avg = (r_total / count.to_i64).to_i32
       g_avg = (g_total / count.to_i64).to_i32
       b_avg = (b_total / count.to_i64).to_i32
 
       [r_avg.clamp(0, 255), g_avg.clamp(0, 255), b_avg.clamp(0, 255)]
-    rescue ex
-      if ENV["PRISMATIQ_DEBUG"]?
-        STDERR.puts "DBG: extract_from_buffer: exception: #{ex.message}"
-      end
-      nil
+      rescue ex : ArgumentError
+        config.debug_log "ColorExtractor.extract_from_buffer: exception: #{ex.class.name}: #{ex.message}"
+        nil
     end
 
-    private def self.sample_pixels(pixels : Slice(UInt8), total : Int32, step : Int32, options : Options) : Tuple(Int64, Int64, Int64, Int32)
+    private def self.sample_pixels(pixels : Slice(UInt8), total : Int32, step : Int32, options : Options, config : Config) : Tuple(Int64, Int64, Int64, Int32)
       r_total = 0_i64
       g_total = 0_i64
       b_total = 0_i64
@@ -47,7 +41,6 @@ module PrismatIQ
       p = 0_i32
       while p < total
         idx = p * 4
-        # bounds check (defensive)
         if idx + 3 < pixels.size
           a = pixels[idx + 3]
           if a >= options.alpha_threshold
@@ -64,9 +57,7 @@ module PrismatIQ
             count += 1
           end
         else
-          if ENV["PRISMATIQ_DEBUG"]?
-            STDERR.puts "DBG: extract_from_buffer: skipping out-of-bounds idx=#{idx} pixels.size=#{pixels.size}"
-          end
+          config.debug_log "ColorExtractor.extract_from_buffer: skipping out-of-bounds idx=#{idx} pixels.size=#{pixels.size}"
         end
 
         p += step
@@ -91,9 +82,8 @@ module PrismatIQ
       end
     end
 
-    # Backwards-compatible wrapper for Array(UInt8)
-    def self.extract_from_buffer(pixels : Array(UInt8), width : Int32, height : Int32, options : Options = Options.new) : Array(Int32)?
-      extract_from_buffer(pixels.to_slice, width, height, options)
+    def self.extract_from_buffer(pixels : Array(UInt8), width : Int32, height : Int32, options : Options = Options.new, config : Config = Config.default) : Array(Int32)?
+      extract_from_buffer(pixels.to_slice, width, height, options, config)
     end
   end
 end

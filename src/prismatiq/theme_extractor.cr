@@ -1,31 +1,31 @@
 require "http/client"
 require "uri"
+require "socket"
+require "openssl"
 require "./thread_safe_cache"
 require "./theme_result"
 require "./rgb"
 require "./utils/ip_validator"
 require "./errors"
 require "./accessibility_calculator"
+require "./constants"
 
 module PrismatIQ
   class ThemeExtractionError < Exception
   end
 
   struct ThemeOptions
-    DEFAULT_CACHE_TTL     = 7 * 24 * 60 * 60
     DEFAULT_QUALITY       = 1000
     DEFAULT_HTTP_TIMEOUT  =   10
     DEFAULT_MAX_FILE_SIZE = 10_i64 * 1024 * 1024
 
     property skip_if_configured : String?
-    property cache_ttl : Int32
     property quality : Int32
     property http_timeout : Int32
     property max_file_size : Int64
 
     def initialize
       @skip_if_configured = nil
-      @cache_ttl = DEFAULT_CACHE_TTL
       @quality = DEFAULT_QUALITY
       @http_timeout = DEFAULT_HTTP_TIMEOUT
       @max_file_size = DEFAULT_MAX_FILE_SIZE
@@ -33,22 +33,13 @@ module PrismatIQ
   end
 
   class ThemeExtractor
-    @@mutex = Mutex.new
-    @@instance : ThemeExtractor?
-
-    def self.instance : ThemeExtractor
-      @@mutex.synchronize do
-        @@instance ||= new
-      end
-    end
-
     @cache : ThreadSafeCache(String, ThemeResult)
     @theme_detector : ThemeDetector
     @accessibility : AccessibilityCalculator
     @config : Config
 
     def initialize(@config : Config = Config.default)
-      @cache = ThreadSafeCache(String, ThemeResult).new
+      @cache = ThreadSafeCache(String, ThemeResult).new(max_entries: 1000)
       @theme_detector = ThemeDetector.new
       @accessibility = AccessibilityCalculator.new
     end
@@ -66,13 +57,15 @@ module PrismatIQ
       return cached if cached
 
       result = if source.starts_with?("http://") || source.starts_with?("https://")
-                 extract_from_url(source, options)
-               else
-                 extract_from_file(source, options)
-               end
+                  extract_from_url(source, options)
+                else
+                  extract_from_file(source, options)
+                end
 
       if result
         @cache[cache_key] = result
+      elsif @config.debug_log?
+        @config.debug_log "extract: failed to extract theme from '#{source}'"
       end
 
       result
@@ -82,10 +75,10 @@ module PrismatIQ
       return unless File.exists?(path)
 
       bg_rgb = if path.downcase.ends_with?(".ico")
-                 extract_ico_bg(path, options)
-               else
-                 extract_image_bg(path, options)
-               end
+                  extract_ico_bg(path, options)
+                else
+                  extract_image_bg(path, options)
+                end
 
       return unless bg_rgb
 
@@ -118,7 +111,7 @@ module PrismatIQ
     def fix_theme(theme_json : String, legacy_bg : String? = nil, legacy_text : String? = nil) : String?
       bg_rgb, text_hash = parse_theme_json(theme_json)
 
-      bg_rgb ||= parse_color_to_rgb(legacy_bg) if legacy_bg
+      bg_rgb ||= parse_to_rgb(legacy_bg) if legacy_bg
 
       if text_hash.empty? && legacy_text
         text_hash["light"] = legacy_text
@@ -156,8 +149,8 @@ module PrismatIQ
             end
           end
         end
-      rescue ex : Exception
-        @config.debug_log "fix_theme: JSON.parse error (#{ex.class.name}): #{ex.message}"
+      rescue ex : JSON::ParseException | TypeCastError
+        @config.debug_log "fix_theme: JSON parse error (#{ex.class.name}): #{ex.message}"
       end
 
       {bg_rgb, text_hash}
@@ -168,18 +161,20 @@ module PrismatIQ
     end
 
     private def extract_ico_bg(path : String, options : ThemeOptions) : Array(Int32)?
-      ico = ICOFile.from_path(path)
+      ico = ICOFile.from_path(path, @config)
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
-    rescue Exception
+    rescue ex : Exception
+      @config.debug_log "extract_ico_bg: #{ex.class}: #{ex.message}"
       return
     end
 
     private def extract_ico_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : Array(Int32)?
-      ico = ICOFile.from_slice(data)
+      ico = ICOFile.from_slice(data, @config)
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
-    rescue Exception
+    rescue ex : Exception
+      @config.debug_log "extract_ico_buffer_bg: #{ex.class}: #{ex.message}"
       return
     end
 
@@ -206,7 +201,8 @@ module PrismatIQ
       return unless rgba
 
       extract_pixel_colors(rgba.pix, w.to_i32, h.to_i32, options)
-    rescue Exception
+    rescue ex : Exception
+      @config.debug_log "extract_image_bg: #{ex.class}: #{ex.message}"
       return
     end
 
@@ -225,7 +221,8 @@ module PrismatIQ
       TempfileHelper.with_tempfile("prismatiq_theme_", data) do |tmp_path|
         extract_image_bg(tmp_path, options)
       end
-    rescue Exception
+    rescue ex : Exception
+      @config.debug_log "extract_buffer_bg: #{ex.class}: #{ex.message}"
       return
     end
 
@@ -251,38 +248,91 @@ module PrismatIQ
       host = uri.host
       return unless host
 
-      if @config.ssrf_protection?
-        if allowlist_allows?(host)
-          @config.debug_log "fetch_url: host '#{host}' allowed via allowlist"
-        else
-          ips = Utils::IPValidator.resolve_host(host)
-          ips.each do |ip|
-            if Utils::IPValidator.private_address?(ip)
-              @config.debug_log "fetch_url: SSRF blocked - host=#{host} ip=#{ip.address} reason=private_address"
-              return
-            end
+      port = uri.port || (uri.scheme == "https" ? 443 : 80)
+      use_tls = uri.scheme == "https"
+
+      validated_ip : Socket::IPAddress? = nil
+
+      if @config.ssrf_protection? && !allowlist_allows?(host)
+        resolved_ips = Utils::IPValidator.resolve_host(host)
+        if resolved_ips.empty?
+          @config.debug_log "fetch_url: DNS resolution failed for '#{host}'"
+          return
+        end
+
+        resolved_ips.each do |ip|
+          if Utils::IPValidator.private_address?(ip)
+            @config.debug_log "fetch_url: SSRF blocked - host=#{host} ip=#{ip.address} reason=private_address"
+            return
           end
         end
+
+        validated_ip = resolved_ips.first
       end
 
-      client = HTTP::Client.new(uri)
-      client.read_timeout = options.http_timeout.seconds
-      client.connect_timeout = options.http_timeout.seconds
+      client : HTTP::Client? = nil
+      begin
+        if validated_ip
+          client = connect_to_ip(validated_ip, host, port, use_tls)
+        else
+          client = HTTP::Client.new(host, port, tls: use_tls)
+        end
 
-      headers = HTTP::Headers{
-        "User-Agent" => "PrismatIQ/#{Version::VERSION}",
-        "Accept"     => "image/*,*/*;q=0.8",
-      }
+        client.read_timeout = options.http_timeout.seconds
+        client.connect_timeout = options.http_timeout.seconds
 
-      response = client.get(uri.request_target, headers: headers)
+        default_port = use_tls ? 443 : 80
+        host_value = port == default_port ? host : "#{host}:#{port}"
 
-      return unless response.status_code == 200
-      return if response.body.size > options.max_file_size
+        headers = HTTP::Headers{
+          "User-Agent" => "PrismatIQ/#{Version::VERSION}",
+          "Accept"     => "image/*,*/*;q=0.8",
+          "Host"       => host_value,
+        }
 
-      response.body.to_slice
-    rescue ex : Exception
-      @config.debug_log "fetch_url: exception #{ex.class.name}: #{ex.message}"
-      nil
+        response = client.get(uri.request_target, headers: headers)
+
+        return unless response.status_code == 200
+
+        content_type = response.headers["Content-Type"]?
+        if content_type && !content_type.starts_with?("image/")
+          @config.debug_log "fetch_url: rejected non-image content-type: #{content_type}"
+          return
+        end
+
+        content_length = response.headers["Content-Length"]?
+        if content_length
+          begin
+            length = content_length.to_i64
+            if length > options.max_file_size
+              @config.debug_log "fetch_url: rejected due to Content-Length: #{length}"
+              return
+            end
+          rescue ex : ArgumentError
+          end
+        end
+
+        body = response.body
+
+        return if body.size > options.max_file_size
+        body.to_slice
+      rescue ex : Exception
+        @config.debug_log "fetch_url: exception #{ex.class.name}: #{ex.message}"
+        nil
+      ensure
+        client.try(&.close)
+      end
+    end
+
+    private def connect_to_ip(ip : Socket::IPAddress, original_host : String, port : Int32, use_tls : Bool) : HTTP::Client
+      tcp = TCPSocket.new(ip.address, port)
+      io : IO = tcp
+
+      if use_tls
+        io = OpenSSL::SSL::Socket::Client.new(tcp, hostname: original_host)
+      end
+
+      HTTP::Client.new(io, original_host)
     end
 
     private def allowlist_allows?(host : String) : Bool
@@ -303,66 +353,51 @@ module PrismatIQ
     private def find_text_colors(bg_rgb : Array(Int32)) : NamedTuple(light: String, dark: String)
       bg = RGB.new(bg_rgb[0], bg_rgb[1], bg_rgb[2])
 
-      dark_text = find_dark_text(bg)
-      light_text = find_light_text(bg)
+      dark_bg_text = find_dark_contrast_text(bg)
+      light_bg_text = find_light_contrast_text(bg)
 
       {
-        light: RGB.new(dark_text[0], dark_text[1], dark_text[2]).to_hex,
-        dark:  RGB.new(light_text[0], light_text[1], light_text[2]).to_hex,
+        light: RGB.new(light_bg_text[0], light_bg_text[1], light_bg_text[2]).to_hex,
+        dark:  RGB.new(dark_bg_text[0], dark_bg_text[1], dark_bg_text[2]).to_hex,
       }
     end
 
-    private def find_dark_text(bg : RGB) : Array(Int32)
-      (0..255).step(5) do |val|
+    private def find_light_contrast_text(bg : RGB) : Array(Int32)
+      (0..255).step(Constants::ThemeExtraction::GRAY_STEP) do |val|
         candidate = RGB.new(val, val, val)
-        if @accessibility.contrast_ratio(candidate, bg) >= 4.5
+        if @accessibility.contrast_ratio(candidate, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
           return [val, val, val]
         end
       end
-      [17, 17, 17]
+      Constants::ThemeExtraction::DARK_TEXT_FALLBACK
     end
 
-    private def find_light_text(bg : RGB) : Array(Int32)
+    private def find_dark_contrast_text(bg : RGB) : Array(Int32)
       val = 255
       while val >= 0
         candidate = RGB.new(val, val, val)
-        if @accessibility.contrast_ratio(candidate, bg) >= 4.5
+        if @accessibility.contrast_ratio(candidate, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
           return [val, val, val]
         end
-        val -= 5
+        val -= Constants::ThemeExtraction::GRAY_STEP
       end
-      [238, 238, 238]
+      Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK
     end
 
     private def parse_to_rgb(color_str : String?) : Array(Int32)?
       return unless color_str
-
       s = color_str.strip
-
-      if s.starts_with?("rgb(")
-        s = s.sub("rgb(", "").sub(")", "").gsub(" ", "")
-        parts = s.split(",")
-        return unless parts.size == 3
-        r = parts[0].to_i32?
-        g = parts[1].to_i32?
-        b = parts[2].to_i32?
-        return unless r && g && b
-        return [r, g, b]
-      end
-
-      if s.starts_with?("#")
-        s = s[1..-1] if s.size == 7
-        return unless s.size == 6
-        begin
-          r = s[0..1].to_i(16)
-          g = s[2..3].to_i(16)
-          b = s[4..5].to_i(16)
-          return [r, g, b]
-        rescue
-          return
+      begin
+        if s.starts_with?("rgb(") || s.starts_with?("rgba(")
+          rgb = RGB.from_rgb_string(s)
+          return [rgb.r, rgb.g, rgb.b]
         end
+        if s.starts_with?("#")
+          rgb = RGB.from_hex(s)
+          return [rgb.r, rgb.g, rgb.b]
+        end
+      rescue ValidationError
       end
-
       nil
     end
 
@@ -373,7 +408,7 @@ module PrismatIQ
       text = RGB.new(text_rgb[0], text_rgb[1], text_rgb[2])
       bg = RGB.new(bg_rgb[0], bg_rgb[1], bg_rgb[2])
 
-      @accessibility.contrast_ratio(text, bg) >= 4.5
+      @accessibility.contrast_ratio(text, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
     end
   end
 end

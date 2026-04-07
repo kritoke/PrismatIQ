@@ -8,8 +8,8 @@ module PrismatIQ
     @contrast_cache : ThreadSafeCache(Tuple(Int32, Int32, Int32, Int32, Int32, Int32), Float64)
 
     def initialize
-      @luminance_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Float64).new
-      @contrast_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32, Int32, Int32, Int32), Float64).new
+      @luminance_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Float64).new(max_entries: 10_000)
+      @contrast_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32, Int32, Int32, Int32), Float64).new(max_entries: 10_000)
     end
 
     def clear_cache : Nil
@@ -109,13 +109,12 @@ module PrismatIQ
 
       return suggestions if current_ratio >= target_ratio
 
-      (0..255).step(10) do |adjustment|
-        adjusted = RGB.new(
-          (color.r + adjustment).clamp(0, 255),
-          (color.g + adjustment).clamp(0, 255),
-          (color.b + adjustment).clamp(0, 255)
-        )
+      bg_lum = relative_luminance(background)
 
+      adjuster = bg_lum > 0.5 ? ->(c : RGB, a : Int32) { darken(c, a.to_f / 100.0) } : ->(c : RGB, a : Int32) { lighten(c, a.to_f / 100.0) }
+
+      (0..255).step(Constants::Accessibility::COLOR_SUGGESTION_STEP) do |adjustment|
+        adjusted = adjuster.call(color, adjustment)
         if contrast_ratio(adjusted, background) >= target_ratio
           suggestions << adjusted
           break if suggestions.size >= 5
@@ -139,8 +138,7 @@ module PrismatIQ
       fg_lum = relative_luminance(foreground)
 
       if bg_lum > fg_lum
-        # Background is lighter, try darkening foreground
-        (1..100).each do |i|
+        (1..Constants::Accessibility::ADJUSTMENT_ITERATIONS).each do |i|
           amount = i * 0.01
           adjusted = darken(foreground, amount)
           if wcag_level(adjusted, background, large_text) >= target_level
@@ -148,8 +146,7 @@ module PrismatIQ
           end
         end
       else
-        # Background is darker, try lightening foreground
-        (1..100).each do |i|
+        (1..Constants::Accessibility::ADJUSTMENT_ITERATIONS).each do |i|
           amount = i * 0.01
           adjusted = lighten(foreground, amount)
           if wcag_level(adjusted, background, large_text) >= target_level
@@ -166,10 +163,10 @@ module PrismatIQ
       return adjusted if adjusted
 
       candidates = [
-        RGB.new(0, 0, 0),
-        RGB.new(255, 255, 255),
-        RGB.new(30, 30, 30),
-        RGB.new(225, 225, 225),
+        RGB.new(*Constants::Accessibility::FALLBACK_BLACK),
+        RGB.new(*Constants::Accessibility::FALLBACK_WHITE),
+        RGB.new(*Constants::Accessibility::FALLBACK_NEAR_BLACK),
+        RGB.new(*Constants::Accessibility::FALLBACK_NEAR_WHITE),
       ]
 
       compliant_candidates = candidates.select do |candidate|

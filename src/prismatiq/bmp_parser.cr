@@ -1,3 +1,5 @@
+require "./utils/binary_reader"
+
 module PrismatIQ
   # BMPParser: Parser for legacy BMP/DIB format parsing
   #
@@ -26,9 +28,10 @@ module PrismatIQ
   # ```
   # parser = BMPParser.new(bmp_slice)
   # if parser.valid?
-  #   pixels = parser.to_rgba
-  #   width = parser.width
-  #   height = parser.height
+  #   image = parser.to_image
+  #   width = image.width
+  #   height = image.height
+  #   pixels = image.pixels
   # end
   # ```
   #
@@ -41,47 +44,33 @@ module PrismatIQ
   # - **AND Mask**: 1bpp transparency mask (height equals image height for ICO)
   #
   class BMPParser
-    # Result of BMP parsing containing RGBA pixel data and dimensions
-    struct ParsedImage
-      getter width : Int32
-      getter height : Int32
-      getter pixels : Slice(UInt8)
+    include BinaryReader
 
-      def initialize(@width, @height, @pixels)
-      end
-    end
-
-    # Error types for BMP parsing
     class BMPParseError < Exception
     end
 
-    # Whether the BMP data was successfully parsed
     getter? valid : Bool
-
-    # Width of the image in pixels
     getter width : Int32
-
-    # Height of the image in pixels
     getter height : Int32
-
-    # Bits per pixel (1, 4, 8, 16, 24, or 32)
     getter bit_count : Int32
-
-    # Compression type (BI_RGB = 0, BI_BITFIELDS = 3)
     getter compression : UInt32
-
-    # Number of colors used in the palette
     getter colors_used : UInt32
 
-    # Creates a new BMPParser from a byte slice
-    #
-    # The slice should contain a complete BMP/DIB structure starting from
-    # the BITMAPINFOHEADER.
-    #
-    # ```
-    # parser = BMPParser.new(bmp_data)
-    # ```
-    def initialize(@data : Slice(UInt8))
+    private getter config : Config
+
+    private def read_u16_le(idx : Int) : UInt16
+      BinaryReader.read_u16_le(@data, idx)
+    end
+
+    private def read_u32_le(idx : Int) : UInt32
+      BinaryReader.read_u32_le(@data, idx)
+    end
+
+    private def read_i32_le(idx : Int) : Int32
+      BinaryReader.read_i32_le(@data, idx)
+    end
+
+    def initialize(@data : Slice(UInt8), @config : Config = Config.default)
       @valid = false
       @width = 0
       @height = 0
@@ -92,16 +81,7 @@ module PrismatIQ
       parse_header
     end
 
-    # Creates a new BMPParser from a slice with specific dimensions (used by ICO)
-    #
-    # This constructor is used when the caller has already determined the
-    # dimensions from the ICO entry metadata. The provided dimensions will
-    # be used directly without reading from the BMP header.
-    #
-    # ```
-    # parser = BMPParser.new(bmp_slice, 32, 32)
-    # ```
-    def initialize(@data : Slice(UInt8), width : Int32, height : Int32)
+    def initialize(@data : Slice(UInt8), width : Int32, height : Int32, @config : Config = Config.default)
       @valid = false
       @width = width
       @height = height
@@ -109,7 +89,6 @@ module PrismatIQ
       @compression = 0_u32
       @colors_used = 0_u32
 
-      # Parse other header fields but skip dimensions (already provided)
       parse_header_fields if @data.size >= 40
     end
 
@@ -126,17 +105,24 @@ module PrismatIQ
         @colors_used = read_u32_le(32)
       end
 
-      # Validate basic parameters
+      validate_dimensions
+    end
+
+    private def validate_dimensions
       return unless @width > 0 && @height > 0
       return unless [1, 4, 8, 16, 24, 32].includes?(@bit_count)
       return unless @compression == 0 || @compression == 3
-
+      pixel_count = @width.to_i64 * @height.to_i64
+      return if pixel_count > MAX_PIXEL_COUNT
       @valid = true
     end
 
-    # Returns whether the BMP data appears to be valid
-    def valid?
-      @valid
+    MAX_PIXEL_COUNT = 268_435_456_i64 # 16384 * 16384
+
+    private def safe_pixel_buffer_size : Int32?
+      total = @width.to_i64 * @height.to_i64 * 4
+      return nil if total > Int32::MAX.to_i64 || total > MAX_PIXEL_COUNT * 4
+      total.to_i32
     end
 
     # Returns the pixel data as RGBA bytes
@@ -153,7 +139,9 @@ module PrismatIQ
     def to_rgba : Slice(UInt8)
       raise BMPParseError.new("Invalid BMP data") unless @valid
 
-      pixels = Slice(UInt8).new(@width * @height * 4)
+      buf_size = safe_pixel_buffer_size
+      raise BMPParseError.new("BMP dimensions too large") unless buf_size
+      pixels = Slice(UInt8).new(buf_size)
       decode_pixels(pixels)
       pixels
     end
@@ -170,7 +158,9 @@ module PrismatIQ
     def to_image : ParsedImage
       raise BMPParseError.new("Invalid BMP data") unless @valid
 
-      pixels = Slice(UInt8).new(@width * @height * 4)
+      buf_size = safe_pixel_buffer_size
+      raise BMPParseError.new("BMP dimensions too large") unless buf_size
+      pixels = Slice(UInt8).new(buf_size)
       decode_pixels(pixels)
       ParsedImage.new(@width, @height, pixels)
     end
@@ -185,10 +175,11 @@ module PrismatIQ
     #   # process
     # end
     # ```
-    def self.from_slice?(data : Slice(UInt8)) : BMPParser?
-      parser = new(data)
+    def self.from_slice?(data : Slice(UInt8), config : Config = Config.default) : BMPParser?
+      parser = new(data, config)
       parser.valid? ? parser : nil
-    rescue
+    rescue ex : Exception
+      config.debug_log "BMPParser.from_slice?: #{ex.class}: #{ex.message}"
       nil
     end
 
@@ -210,12 +201,7 @@ module PrismatIQ
         @colors_used = read_u32_le(32)
       end
 
-      # Validate basic parameters
-      return unless @width > 0 && @height > 0
-      return unless [1, 4, 8, 16, 24, 32].includes?(@bit_count)
-      return unless @compression == 0 || @compression == 3
-
-      @valid = true
+      validate_dimensions
     end
 
     # Decode all pixels into the provided RGBA buffer
@@ -254,6 +240,11 @@ module PrismatIQ
         green_mask = read_u32_le(44)
         blue_mask = read_u32_le(48)
         alpha_mask = read_u32_le(52) if @data.size >= 56
+      elsif @bit_count == 16 && @compression == 0
+        red_mask = 0x0000F800_u32
+        green_mask = 0x000007E0_u32
+        blue_mask = 0x0000001F_u32
+        alpha_mask = 0_u32
       end
 
       # Fast path for common uncompressed formats
@@ -300,7 +291,9 @@ module PrismatIQ
       y = 0
       while y < @height
         src_row = top_down ? y : (@height - 1 - y)
-        row_start = (pixel_offset + src_row * row_size).to_i32
+        row_offset = pixel_offset.to_i64 + src_row.to_i64 * row_size.to_i64
+        next if row_offset >= @data.size.to_i64 || row_offset < 0
+        row_start = row_offset.to_i32
 
         x = 0
         while x < @width
@@ -357,12 +350,22 @@ module PrismatIQ
       when 16
         offset = row_start + x * 2
         if offset + 1 < @data.size
-          pixel = @data[offset] | (@data[offset + 1] << 8)
-          r = ((pixel & red_mask) >> 0) & 0xFF
-          g = ((pixel & green_mask) >> 8) & 0xFF
-          b = ((pixel & blue_mask) >> 16) & 0xFF
-          a = ((pixel & alpha_mask) >> 24) & 0xFF
-          return {r.to_u8, g.to_u8, b.to_u8, a.to_u8}
+          pixel = @data[offset].to_u32 | (@data[offset + 1].to_u32 << 8)
+          r_shift = mask_to_shift_bits(red_mask)
+          g_shift = mask_to_shift_bits(green_mask)
+          b_shift = mask_to_shift_bits(blue_mask)
+          a_shift = mask_to_shift_bits(alpha_mask)
+
+          r_val = ((pixel & red_mask) >> r_shift[0]) & 0xFF if r_shift[0] >= 0
+          g_val = ((pixel & green_mask) >> g_shift[0]) & 0xFF if g_shift[0] >= 0
+          b_val = ((pixel & blue_mask) >> b_shift[0]) & 0xFF if b_shift[0] >= 0
+          a_val = ((pixel & alpha_mask) >> a_shift[0]) & 0xFF if a_shift[0] >= 0
+
+          r = (r_val || 0_u32).to_u8
+          g = (g_val || 0_u32).to_u8
+          b = (b_val || 0_u32).to_u8
+          a = (a_val || 255_u32).to_u8
+          return {r, g, b, a}
         end
       end
       {0_u8, 0_u8, 0_u8, 255_u8}
@@ -378,16 +381,20 @@ module PrismatIQ
       y = 0
       while y < @height
         src_row = top_down ? y : (actual_height - 1 - y)
-        row_start = (pixel_offset + src_row * xor_row_size).to_i32
+        row_offset = pixel_offset.to_i64 + src_row.to_i64 * xor_row_size.to_i64
+        next if row_offset >= @data.size.to_i64 || row_offset < 0
+        row_start = row_offset.to_i32
 
         x = 0
         while x < @width
           px_r, px_g, px_b, px_a = decode_generic_pixel(x, y, row_start, src_row, palette, red_mask, green_mask, blue_mask, alpha_mask)
 
           # Apply AND mask transparency
-          mask_row_start = (and_offset + src_row * and_row_size).to_i32
+          mask_row_offset = and_offset.to_i64 + src_row.to_i64 * and_row_size.to_i64
+          next unless mask_row_offset < @data.size.to_i64
+          mask_row_start = mask_row_offset.to_i32
           mask_byte_idx = mask_row_start + (x // 8)
-          if mask_byte_idx < @data.size
+          if mask_byte_idx >= 0 && mask_byte_idx < @data.size
             mask_val = @data[mask_byte_idx]
             bit = 7 - (x % 8)
             px_a = 0_u8 if ((mask_val >> bit) & 1) == 1
@@ -405,31 +412,6 @@ module PrismatIQ
       end
     end
 
-    # Read a 16-bit unsigned little-endian value
-    private def read_u16_le(idx : Int) : UInt16
-      return 0_u16 if idx + 1 >= @data.size
-      (@data[idx].to_u16 | (@data[idx + 1].to_u16 << 8))
-    end
-
-    # Read a 32-bit unsigned little-endian value
-    private def read_u32_le(idx : Int) : UInt32
-      return 0_u32 if idx + 3 >= @data.size
-      @data[idx].to_u32 |
-        (@data[idx + 1].to_u32 << 8) |
-        (@data[idx + 2].to_u32 << 16) |
-        (@data[idx + 3].to_u32 << 24)
-    end
-
-    # Read a 32-bit signed little-endian value
-    private def read_i32_le(idx : Int) : Int32
-      return 0 if idx + 3 >= @data.size
-      (@data[idx].to_u32 |
-        (@data[idx + 1].to_u32 << 8) |
-        (@data[idx + 2].to_u32 << 16) |
-        (@data[idx + 3].to_u32 << 24)).to_i32
-    end
-
-    # Convert a bit mask to shift amount and bit count
     private def mask_to_shift_bits(mask : UInt32) : Tuple(Int32, Int32)
       return {-1, 0} if mask == 0_u32
 

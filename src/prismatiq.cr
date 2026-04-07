@@ -12,7 +12,7 @@ require "./prismatiq/types"
 require "./prismatiq/algorithm/priority_queue"
 require "./prismatiq/algorithm/mmcq"
 require "./prismatiq/thread_safe_cache"
-require "./prismatiq/lru_cache"
+
 require "./prismatiq/algorithm/color_space"
 require "./prismatiq/color_extractor"
 require "./prismatiq/accessibility"
@@ -24,24 +24,24 @@ require "./prismatiq/core/palette_extractor"
 require "./prismatiq/core/palette_convenience"
 require "./prismatiq/tempfile_helper"
 require "./prismatiq/bmp_parser"
-require "./prismatiq/ico"
+require "./prismatiq/parsed_image"
+require "./prismatiq/png_extractor"
+require "./prismatiq/ico_entry"
+require "./prismatiq/ico_file"
 require "./prismatiq/svg_color_extractor"
 require "./prismatiq/theme_result"
 require "./prismatiq/theme_extractor"
-require "json"
-require "yaml"
 
 module PrismatIQ
   # High-performance Crystal shard for extracting dominant color palettes from images.
   #
   # ## Thread Safety
   #
-  # All public API methods are fully thread-safe and can be called concurrently
-  # from multiple fibers without any race conditions. The library uses:
-  # - Instance-based state (no shared mutable global state)
-  # - Thread-local histogram processing
-  # - Synchronized shared resources when necessary
-  # - Fiber-based concurrency (`spawn`) instead of OS threads
+  # All public API methods are safe for concurrent use from multiple Crystal fibers
+  # within the same thread. Shared mutable state is protected by Mutex synchronization.
+  # Note: Crystal fibers are cooperatively scheduled within a single OS thread by default.
+  # The Mutex-based synchronization in this library also provides safety if you create
+  # explicit OS threads, but the primary concurrency model is fiber-based.
   #
   # ## Memory Optimization
   #
@@ -256,8 +256,13 @@ module PrismatIQ
     Core::PaletteConvenience.new.get_color(img)
   end
 
+  @@theme_extractor : ThemeExtractor?
+  @@theme_extractor_mutex = Mutex.new
+
   private def self.theme_extractor : ThemeExtractor
-    ThemeExtractor.instance
+    @@theme_extractor_mutex.synchronize do
+      @@theme_extractor ||= ThemeExtractor.new
+    end
   end
 
   def self.extract_theme(source : String, options : ThemeOptions = ThemeOptions.new) : ThemeResult?
@@ -270,5 +275,9 @@ module PrismatIQ
 
   def self.clear_theme_cache
     theme_extractor.clear_cache
+  end
+
+  def self.debug_log(message : String) : Nil
+    STDERR.puts message if ENV["PRISMATIQ_DEBUG"]?
   end
 end

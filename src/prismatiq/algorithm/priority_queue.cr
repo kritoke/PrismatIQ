@@ -41,12 +41,7 @@ module PrismatIQ
       end
 
       private def cmp(a : T, b : T) : Int32
-        res = @compare.call(a, b)
-        if res.nil?
-          0
-        else
-          res
-        end
+        @compare.call(a, b) || 0
       end
 
       private def bubble_up(index : Int32)

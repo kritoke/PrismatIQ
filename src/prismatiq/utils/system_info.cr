@@ -9,8 +9,8 @@ module PrismatIQ
 
         # Use Crystal's built-in CPU count detection
         # This is secure and doesn't use shell commands
-        count = System.cpu_count || 1_i64
-        result = count.is_a?(Int64) ? count.to_i32 : count
+        count = System.cpu_count
+        result = count.to_i32
         result > 0 ? result : 1_i32
       rescue
         1_i32

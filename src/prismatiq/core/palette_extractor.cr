@@ -46,12 +46,12 @@ module PrismatIQ
           @config.debug_log "get_palette(path): path=#{path} options=#{options.inspect}"
         end
         rgba_image = ImageLoader.load(path)
-        extract_from_image_data(rgba_image, options)
+        do_extract_from_image_data(rgba_image, options)
       end
 
       def extract_from_io(io : IO, options : Options) : Array(RGB)
         rgba_image = ImageLoader.load(io)
-        extract_from_image_data(rgba_image, options)
+        do_extract_from_image_data(rgba_image, options)
       end
 
       def extract_from_image(image, options : Options) : Array(RGB)
@@ -59,10 +59,10 @@ module PrismatIQ
           @config.debug_log "get_palette_from_image: image.class=#{image.class} options=#{options.inspect}"
         end
         rgba_image = ImageLoader.load(image)
-        extract_image_data(rgba_image, options)
+        do_extract_from_image_data(rgba_image, options)
       end
 
-      private def extract_image_data(rgba_image, options : Options)
+      private def do_extract_from_image_data(rgba_image, options : Options)
         width = rgba_image.bounds.width.to_i32
         height = rgba_image.bounds.height.to_i32
 
@@ -94,7 +94,7 @@ module PrismatIQ
 
       private def build_buffer_histo(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options) : Tuple(Array(UInt32), Int32)
         histo = Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32)
-        step = options.quality < 1 ? 1 : options.quality
+        step = options.quality
         alpha_threshold = options.alpha_threshold
 
         image_size = width * height
@@ -143,6 +143,8 @@ module PrismatIQ
               total_pixels += local_count
             end
           end
+
+          pool.clear
         end
 
         {histo, total_pixels}

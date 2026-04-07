@@ -14,6 +14,7 @@ module PrismatIQ
           @total += v.to_i
         end
         @config = config
+        @rng = Random::PCG32.new
       end
 
       def quantize(max_colors : Int32) : Array(VBox)
@@ -41,7 +42,7 @@ module PrismatIQ
             log_popped_box(box)
           end
 
-          vbox1, vbox2 = box.split
+          vbox1, vbox2 = box.split(@rng)
 
           if vbox1 == box
             pq.push(box)

@@ -127,19 +127,18 @@ describe "Thread Safety" do
     end
   end
 
-  describe "ThemeExtractor singleton" do
-    it "returns same instance from concurrent access" do
+  describe "ThemeExtractor instance creation" do
+    it "creates independent instances safely from concurrent access" do
       instances = Channel(PrismatIQ::ThemeExtractor).new(10)
 
       10.times do
         spawn do
-          instances.send(PrismatIQ::ThemeExtractor.instance)
+          instances.send(PrismatIQ::ThemeExtractor.new)
         end
       end
 
-      first_instance = instances.receive
-      9.times do
-        instances.receive.should be(first_instance)
+      10.times do
+        instances.receive.should be_a(PrismatIQ::ThemeExtractor)
       end
     end
   end

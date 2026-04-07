@@ -16,10 +16,6 @@ module PrismatIQ
       YIQConverter.from_rgb(r, g, b)
     end
 
-    def self.from_rgb(r : Float64, g : Float64, b : Float64)
-      from_rgb(r.to_i, g.to_i, b.to_i)
-    end
-
     def to_rgb : Tuple(Int32, Int32, Int32)
       r = ((@y + Constants::YIQ::R_FROM_I * @i + Constants::YIQ::R_FROM_Q * @q).clamp(0, 255)).to_i
       g = ((@y + Constants::YIQ::G_FROM_I * @i + Constants::YIQ::G_FROM_Q * @q).clamp(0, 255)).to_i
@@ -40,18 +36,9 @@ module PrismatIQ
 
     def to_hex : String
       r, g, b = to_rgb
-      String.build do |str|
-        str << '#'
-        str << r.to_s(16).rjust(2, '0')
-        str << g.to_s(16).rjust(2, '0')
-        str << b.to_s(16).rjust(2, '0')
-      end
+      "#%02x%02x%02x" % [r, g, b]
     end
 
-    def to_rgb_obj
-      r, g, b = to_rgb
-      RGB.new(r, g, b)
-    end
   end
 
   struct VBox
@@ -129,7 +116,7 @@ module PrismatIQ
       {y_sum: y_sum, i_sum: i_sum, q_sum: q_sum, found: found}
     end
 
-    def split : Tuple(VBox, VBox)
+    def split(rng : Random::PCG32 = Random::PCG32.new) : Tuple(VBox, VBox)
       axis = find_split_axis
       return {self, VBox.new(0, 0, 0, 0, 0, 0)} if axis == -1
 
@@ -137,9 +124,8 @@ module PrismatIQ
 
       return {self, VBox.new(0, 0, 0, 0, 0, 0)} if indices.empty?
 
-      # Use quickselect for O(n) median finding instead of O(n log n) sort
       mid = indices.size // 2
-      split_at = VBox.quickselect(indices, mid - 1)
+      split_at = VBox.quickselect(indices, mid - 1, rng)
 
       box1_y1, box1_y2, box1_i1, box1_i2, box1_q1, box1_q2 = @y1, @y2, @i1, @i2, @q1, @q2
       box2_y1, box2_y2, box2_i1, box2_i2, box2_q1, box2_q2 = @y1, @y2, @i1, @i2, @q1, @q2
@@ -162,40 +148,45 @@ module PrismatIQ
       {box1.recalc_count, box2.recalc_count}
     end
 
-    # Quickselect algorithm to find k-th smallest element in O(n) average time
-    def self.quickselect(arr : Array(Int32), k : Int32) : Int32
-      # For small arrays, just sort (faster than quickselect overhead)
+    # Quickselect algorithm to find k-th smallest element in O(n) average time.
+    # Uses in-place Lomuto partitioning to avoid allocations.
+    def self.quickselect(arr : Array(Int32), k : Int32, rng : Random::PCG32 = Random::PCG32.new) : Int32
       if arr.size <= 32
         sorted = arr.sort
         return sorted[k]
       end
 
-      # Use random pivot for average O(n) performance
-      rng = Random::PCG32.new
-      pivot_idx = rng.rand(arr.size)
-      pivot = arr[pivot_idx]
+      lo = 0
+      hi = arr.size - 1
 
-      left = [] of Int32
-      right = [] of Int32
-      pivot_count = 0
+      while lo < hi
+        pivot_idx = lo + rng.rand(hi - lo + 1)
+        pivot = arr[pivot_idx]
+        arr[pivot_idx] = arr[hi]
+        arr[hi] = pivot
 
-      arr.each do |v|
-        if v < pivot
-          left << v
-        elsif v > pivot
-          right << v
+        store = lo
+        i = lo
+        while i < hi
+          if arr[i] < pivot
+            arr[store], arr[i] = arr[i], arr[store]
+            store += 1
+          end
+          i += 1
+        end
+
+        arr[store], arr[hi] = arr[hi], arr[store]
+
+        if k < store
+          hi = store - 1
+        elsif k > store
+          lo = store + 1
         else
-          pivot_count += 1
+          return arr[store]
         end
       end
 
-      if k < left.size
-        quickselect(left, k)
-      elsif k < left.size + pivot_count
-        pivot
-      else
-        quickselect(right, k - left.size - pivot_count)
-      end
+      arr[lo]
     end
 
     private def find_split_axis : Int32

@@ -2,6 +2,8 @@ require "json"
 
 module PrismatIQ
   struct ThemeResult
+    include JSON::Serializable
+
     getter bg : String
     getter text : Hash(String, String)
 
@@ -13,19 +15,9 @@ module PrismatIQ
       @text = {"light" => text_light, "dark" => text_dark}
     end
 
-    def to_json : String
-      {"bg" => @bg, "text" => @text}.to_json
-    end
-
-    def self.from_json(json_str : String) : ThemeResult?
-      parsed = JSON.parse(json_str)
-      bg = parsed["bg"].as_s
-      text_hash = {} of String => String
-      parsed["text"].as_h.each do |k, v|
-        text_hash[k] = v.as_s
-      end
-      new(bg, text_hash)
-    rescue
+    def self.from_json_string(json_str : String) : ThemeResult?
+      ThemeResult.from_json(json_str)
+    rescue ex : JSON::ParseException
       nil
     end
   end

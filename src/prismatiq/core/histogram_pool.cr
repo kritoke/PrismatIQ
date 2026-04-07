@@ -68,28 +68,32 @@ module PrismatIQ
 
     class AdaptiveChunkSizer
       def self.calculate(image_size : Int32, thread_count : Int32) : Int32
-        if image_size < 100_000
+        if image_size < Constants::ParallelProcessing::SMALL_IMAGE_THRESHOLD
           image_size
-        elsif image_size < 1_000_000
-          (image_size // thread_count // 2).clamp(10_000, 100_000)
+        elsif image_size < Constants::ParallelProcessing::MEDIUM_IMAGE_THRESHOLD
+          (image_size // thread_count // 2).clamp(
+            Constants::ParallelProcessing::MIN_CHUNK_SIZE_SMALL,
+            Constants::ParallelProcessing::MAX_CHUNK_SIZE_SMALL)
         else
-          (image_size // thread_count).clamp(50_000, 500_000)
+          (image_size // thread_count).clamp(
+            Constants::ParallelProcessing::MIN_CHUNK_SIZE_LARGE,
+            Constants::ParallelProcessing::MAX_CHUNK_SIZE_LARGE)
         end
       end
 
       def self.should_use_parallel?(image_size : Int32) : Bool
-        image_size > 100_000
+        image_size > Constants::ParallelProcessing::SMALL_IMAGE_THRESHOLD
       end
 
       def self.optimal_thread_count(image_size : Int32, max_threads : Int32) : Int32
-        if image_size < 100_000
+        if image_size < Constants::ParallelProcessing::SMALL_IMAGE_THRESHOLD
           1
-        elsif image_size < 500_000
+        elsif image_size < Constants::ParallelProcessing::THREAD_COUNT_MEDIUM_THRESHOLD
           2
-        elsif image_size < 2_000_000
-          4
+        elsif image_size < Constants::ParallelProcessing::LARGE_IMAGE_THRESHOLD
+          Constants::ParallelProcessing::GOOD_PARALLELISM
         else
-          {max_threads, 8}.min
+          {max_threads, Constants::ParallelProcessing::MAX_THREAD_COUNT}.min
         end
       end
     end

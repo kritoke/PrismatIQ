@@ -2,13 +2,11 @@ require "./prismatiq/utils/system_info"
 
 module PrismatIQ
   module CPU
-    def self.cores(config : Config? = nil) : Int32
-      # Use the new secure SystemInfo module
+    def self.cores : Int32
       Utils::SystemInfo.cpu_count
     end
 
-    def self.l2_cache_bytes(config : Config? = nil) : Int32?
-      # Use the new secure SystemInfo module
+    def self.l2_cache_bytes : Int32?
       Utils::SystemInfo.l2_cache_size
     end
   end

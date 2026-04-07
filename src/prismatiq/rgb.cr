@@ -3,9 +3,6 @@ require "yaml"
 
 module PrismatIQ
   struct RGB
-    include JSON::Serializable
-    include YAML::Serializable
-
     getter r : Int32
     getter g : Int32
     getter b : Int32
@@ -14,25 +11,47 @@ module PrismatIQ
     end
 
     def to_hex : String
-      String.build do |str|
-        str << '#'
-        str << @r.to_s(16).rjust(2, '0')
-        str << @g.to_s(16).rjust(2, '0')
-        str << @b.to_s(16).rjust(2, '0')
-      end
+      "#%02x%02x%02x" % [@r, @g, @b]
     end
 
     def self.from_hex(hex : String) : RGB
       hex = hex.lchop('#')
-      raise ValidationError.new("Invalid hex color: #{hex}") unless hex.size == 6
-      begin
-        r = hex[0, 2].to_i(16)
-        g = hex[2, 2].to_i(16)
-        b = hex[4, 2].to_i(16)
-        new(r, g, b)
-      rescue
-        raise ValidationError.new("Invalid hex color characters: #{hex}")
+      case hex.size
+      when 3
+        r = hex[0].to_s * 2
+        g = hex[1].to_s * 2
+        b = hex[2].to_s * 2
+        new(r.to_i(16), g.to_i(16), b.to_i(16))
+      when 6
+        begin
+          new(hex[0, 2].to_i(16), hex[2, 2].to_i(16), hex[4, 2].to_i(16))
+        rescue ex : ArgumentError
+          raise ValidationError.new("Invalid hex color characters: #{hex}")
+        end
+      else
+        raise ValidationError.new("Invalid hex color: #{hex}")
       end
+    end
+
+    def self.from_rgb_string(value : String) : RGB
+      inner = value.gsub(/^rgba?\(/, "").gsub(/\)$/, "")
+      parts = inner.split(',').map(&.strip)
+      raise ValidationError.new("Invalid rgb string: #{value}") unless parts.size >= 3
+
+      r = parse_rgb_component(parts[0])
+      g = parse_rgb_component(parts[1])
+      b = parse_rgb_component(parts[2])
+      raise ValidationError.new("Invalid rgb string: #{value}") unless r && g && b
+      new(r, g, b)
+    end
+
+    private def self.parse_rgb_component(value : String) : Int32?
+      value = value.strip
+      if value.ends_with?("%")
+        percent = value.rchop('%').to_f?
+        return ((percent / 100.0) * 255.0).round.to_i.clamp(0, 255) if percent
+      end
+      value.to_i?.try(&.clamp(0, 255))
     end
 
     def distance_to(other : RGB) : Float64

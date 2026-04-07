@@ -1,13 +1,4 @@
 module PrismatIQ
-  struct ThemeInfo
-    getter type : Symbol
-    getter luminance : Float64
-    getter perceived_brightness : Float64
-
-    def initialize(@type : Symbol, @luminance : Float64, @perceived_brightness : Float64)
-    end
-  end
-
   struct TextColorPalette
     getter primary : RGB
     getter secondary : RGB

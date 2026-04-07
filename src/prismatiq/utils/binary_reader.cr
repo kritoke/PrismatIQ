@@ -2,6 +2,16 @@ module PrismatIQ
   module BinaryReader
     extend self
 
+    PNG_SIGNATURE = Bytes[0x89_u8, 0x50_u8, 0x4E_u8, 0x47_u8]
+
+    def png_signature?(slice : Slice(UInt8)) : Bool
+      return false if slice.size < 4
+      slice[0] == PNG_SIGNATURE[0] &&
+        slice[1] == PNG_SIGNATURE[1] &&
+        slice[2] == PNG_SIGNATURE[2] &&
+        slice[3] == PNG_SIGNATURE[3]
+    end
+
     def read_u16_le(slice : Slice(UInt8), idx : Int) : UInt16
       return 0_u16 if idx + 1 >= slice.size
       slice[idx].to_u16 | (slice[idx + 1].to_u16 << 8)

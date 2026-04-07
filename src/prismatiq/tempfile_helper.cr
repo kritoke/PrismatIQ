@@ -1,6 +1,5 @@
 require "crtemp"
 require "crtemp/constants"
-HAVE_CRTEMP = true
 
 module PrismatIQ
   module TempfileHelper
@@ -10,49 +9,18 @@ module PrismatIQ
       fun close(fd : Int32) : Int32
     end
 
-    # Create a secure temp file and write the provided slice bytes.
-    # On Windows use a randomized-filename fallback; on Unix use mkstemp.
-    # Prefer using the installed crtemp shard when available. Dir.mktmpdir
-    # provides an atomic directory creation helper; we'll use it to create a
-    # secure directory and then create a file inside it atomically.
-    # Returns nil if data exceeds 100MB limit (aligned with Validation::MAX_FILE_SIZE).
     MAX_DATA_SIZE = 100 * 1024 * 1024_i64
 
-    def self.create_and_write(prefix : String, data : Slice(UInt8)) : String?
+    def self.create_and_write(prefix : String, data : Slice(UInt8), debug : Bool = false) : String?
       return if data.size > MAX_DATA_SIZE
 
-      result = try_crtemp_approach(prefix, data)
-      return result if result
-
       {% if flag?(:windows) %}
-        try_windows_fallback(prefix, data)
+        try_windows_fallback(prefix, data, debug)
       {% else %}
         try_unix_mkstemp(prefix, data)
       {% end %}
-    end
-
-    private def self.try_crtemp_approach(prefix : String, data : Slice(UInt8)) : String?
-      return unless HAVE_CRTEMP
-
-      begin
-        Dir.mktmpdir do |dir|
-          base = dir.is_a?(Crtemp) ? dir.path : dir.to_s
-          safe_prefix = prefix.size > CrtempConstants::MAX_PREFIX_LENGTH ? prefix[0, CrtempConstants::MAX_PREFIX_LENGTH] : prefix
-
-          if dir.is_a?(Crtemp)
-            result = dir.create_tempfile_result(safe_prefix, data)
-            if result.success?
-              next result.value!
-            end
-          end
-
-          path = "#{base}/#{prefix}#{Process.pid}_#{Time.local.to_unix}.bin"
-          write_buffer_to_file(path, data)
-          path
-        end
-      rescue ex : Exception
-        STDERR.puts "PrismatIQ: try_crtemp_approach failed (#{ex.class.name}): #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
-      end
+    rescue ex : Exception
+      STDERR.puts "PrismatIQ: create_and_write failed (#{ex.class.name}): #{ex.message}" if debug
       nil
     end
 
@@ -65,7 +33,7 @@ module PrismatIQ
       end
     end
 
-    private def self.try_windows_fallback(prefix : String, data : Slice(UInt8)) : String?
+    private def self.try_windows_fallback(prefix : String, data : Slice(UInt8), debug : Bool = false) : String?
       tmp_dir = ENV["TMPDIR"]? || ENV["TEMP"]? || "."
       tries = 0
       while tries < 16
@@ -82,7 +50,7 @@ module PrismatIQ
         rescue File::AlreadyExistsError
           next
         rescue ex : Exception
-          STDERR.puts "PrismatIQ: try_windows_fallback failed (#{ex.class.name}): #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+          STDERR.puts "PrismatIQ: try_windows_fallback failed (#{ex.class.name}): #{ex.message}" if debug
         end
         tries += 1
       end
@@ -124,11 +92,8 @@ module PrismatIQ
       end
     end
 
-    # Create a tempfile, write data, yield the path to the provided block and
-    # ensure the tempfile is removed afterwards. Returns the block's result or
-    # nil if tempfile creation failed.
-    def self.with_tempfile(prefix : String, data : Slice(UInt8), &)
-      path = create_and_write(prefix, data)
+    def self.with_tempfile(prefix : String, data : Slice(UInt8), debug : Bool = false, &)
+      path = create_and_write(prefix, data, debug)
       return unless path
 
       begin
@@ -137,7 +102,7 @@ module PrismatIQ
         begin
           File.delete(path) if path && File.exists?(path)
         rescue ex : Exception
-          STDERR.puts "PrismatIQ: with_tempfile cleanup failed (#{ex.class.name}): #{ex.message}" if ENV["PRISMATIQ_DEBUG"]?
+          STDERR.puts "PrismatIQ: with_tempfile cleanup failed (#{ex.class.name}): #{ex.message}" if debug
         end
       end
     end

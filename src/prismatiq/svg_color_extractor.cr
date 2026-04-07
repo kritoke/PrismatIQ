@@ -194,7 +194,7 @@ module PrismatIQ
     def self.parse_color(value : String) : RGB?
       value = value.strip.downcase
 
-      nil if value.empty? || value == "none" || value == "inherit" || value == "transparent"
+      return nil if value.empty? || value == "none" || value == "inherit" || value == "transparent"
 
       if value == "currentcolor"
         return RGB.new(0, 0, 0)
@@ -220,53 +220,19 @@ module PrismatIQ
     end
 
     private def self.parse_hex(value : String) : RGB?
-      hex = value.lchop('#')
-
-      case hex.size
-      when 3
-        r = hex[0].to_s * 2
-        g = hex[1].to_s * 2
-        b = hex[2].to_s * 2
-        RGB.new(r.to_i(16), g.to_i(16), b.to_i(16))
-      when 6
-        RGB.new(hex[0, 2].to_i(16), hex[2, 2].to_i(16), hex[4, 2].to_i(16))
-      when 8
-        RGB.new(hex[0, 2].to_i(16), hex[2, 2].to_i(16), hex[4, 2].to_i(16))
-      end
-    rescue
+      RGB.from_hex(value)
+    rescue ValidationError
       nil
     end
 
     private def self.parse_rgb(value : String) : RGB?
-      inner = value.gsub(/^(rgba?|hsla?)\(/, "").gsub(/\)$/, "")
-
-      parts = inner.split(',').map(&.strip)
-      return unless parts.size >= 3
-
-      r = parse_rgb_component(parts[0])
-      g = parse_rgb_component(parts[1])
-      b = parse_rgb_component(parts[2])
-
-      return unless r && g && b
-
-      RGB.new(r, g, b)
-    rescue
+      RGB.from_rgb_string(value)
+    rescue ValidationError
       nil
     end
 
-    private def self.parse_rgb_component(value : String) : Int32?
-      value = value.strip
-
-      if value.ends_with?("%")
-        percent = value.rchop('%').to_f?
-        return ((percent / 100.0) * 255.0).round.to_i.clamp(0, 255) if percent
-      end
-
-      value.to_i?.try(&.clamp(0, 255))
-    end
-
     private def self.parse_hsl(value : String) : RGB?
-      inner = value.gsub(/^(rgba?|hsla?)\(/, "").gsub(/\)$/, "")
+      inner = value.gsub(/^hsla?\(/, "").gsub(/\)$/, "")
 
       parts = inner.split(',').map(&.strip)
       return unless parts.size >= 3
@@ -278,7 +244,7 @@ module PrismatIQ
       return unless hue_val && sat_val && light_val
 
       hsl_to_rgb(hue_val, sat_val, light_val)
-    rescue
+    rescue ex : ArgumentError
       nil
     end
 
@@ -331,9 +297,23 @@ module PrismatIQ
       RGB.new(r, g, b)
     end
 
+    MAX_SVG_SIZE = 100 * 1024 * 1024_i64
+
     def self.extract_from_file(path : String) : Result(Array(RGB), Error)
       unless File.exists?(path)
         return Result(Array(RGB), Error).err(Error.file_not_found(path))
+      end
+
+      unless path.downcase.ends_with?(".svg")
+        return Result(Array(RGB), Error).err(Error.unsupported_format(File.extname(path)))
+      end
+
+      file_size = File.size(path) rescue 0_i64
+      if file_size > MAX_SVG_SIZE
+        return Result(Array(RGB), Error).err(Error.invalid_image_path(path, "SVG file exceeds #{MAX_SVG_SIZE / (1024 * 1024)}MB limit"))
+      end
+      if file_size == 0
+        return Result(Array(RGB), Error).err(Error.corrupted_image("SVG file is empty"))
       end
 
       content = File.read(path)

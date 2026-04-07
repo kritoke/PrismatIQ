@@ -16,7 +16,8 @@ module PrismatIQ
             extractor = PaletteExtractor.new(@config)
             palette = extractor.extract_from_path(path, options)
             ch.send(palette)
-          rescue
+          rescue ex : Exception
+            @config.debug_log "get_palette_channel: #{ex.class}: #{ex.message}"
             ch.send([RGB.new(0, 0, 0)])
           ensure
             ch.close
@@ -37,7 +38,7 @@ module PrismatIQ
         end
 
         histo = build_histogram(pixels, width, height, options)
-        total_pixels = histo.sum
+        total_pixels = histo.sum.to_i32
 
         entries = build_palette_entries(palette, histo, total_pixels)
         {entries, total_pixels.to_i32}
@@ -55,7 +56,8 @@ module PrismatIQ
           extractor = PaletteExtractor.new(@config)
           palette = extractor.extract_from_path(path, options)
           palette.first? || RGB.new(0, 0, 0)
-        rescue
+        rescue ex : Exception
+          @config.debug_log "get_color_from_path: #{ex.class}: #{ex.message}"
           RGB.new(0, 0, 0)
         end
       end
@@ -66,7 +68,8 @@ module PrismatIQ
           extractor = PaletteExtractor.new(@config)
           palette = extractor.extract_from_io(io, options)
           palette.first? || RGB.new(0, 0, 0)
-        rescue
+        rescue ex : Exception
+          @config.debug_log "get_color_from_io: #{ex.class}: #{ex.message}"
           RGB.new(0, 0, 0)
         end
       end
@@ -83,14 +86,15 @@ module PrismatIQ
             extractor = PaletteExtractor.new(@config)
             palette = extractor.extract_from_image(read_img.as(CrImage::Image), options)
             palette.first? || RGB.new(0, 0, 0)
-          rescue
+          rescue ex : Exception
+            @config.debug_log "get_color: #{ex.class}: #{ex.message}"
             RGB.new(0, 0, 0)
           end
         end
       end
 
-      private def build_histogram(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options) : Array(Int32)
-        histo = Array(Int32).new(Constants::HISTOGRAM_SIZE, 0)
+      private def build_histogram(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options) : Array(UInt32)
+        histo = Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32)
         step = options.quality < 1 ? 1 : options.quality
         alpha_threshold = options.alpha_threshold
 
@@ -118,13 +122,13 @@ module PrismatIQ
         histo
       end
 
-      private def build_palette_entries(palette : Array(RGB), histo : Array(Int32), total_pixels : Int32) : Array(PaletteEntry)
+      private def build_palette_entries(palette : Array(RGB), histo : Array(UInt32), total_pixels : Int32) : Array(PaletteEntry)
         return [] of PaletteEntry if total_pixels == 0
 
         palette.map do |rgb|
           y, i, q = YIQConverter.quantize_from_rgb(rgb.r, rgb.g, rgb.b)
           idx = YIQConverter.to_index(y, i, q)
-          count = histo[idx]? || 0
+          count = (histo[idx]? || 0_u32).to_i32
           percent = total_pixels > 0 ? count.to_f64 / total_pixels.to_f64 : 0.0
           PaletteEntry.new(rgb, count, percent)
         end

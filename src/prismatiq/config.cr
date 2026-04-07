@@ -28,10 +28,6 @@ module PrismatIQ
       end
     end
 
-    def try_consume : Bool
-      acquire
-    end
-
     def wait_time : Time::Span
       @mutex.synchronize do
         refill_tokens
@@ -69,6 +65,9 @@ module PrismatIQ
 
   # Configuration for PrismatIQ runtime behavior.
   struct Config
+    @@default : Config?
+    @@default_mutex = Mutex.new
+
     # Enable debug logging
     property? debug : Bool
     # Number of threads for parallel processing (nil = auto)
@@ -98,15 +97,19 @@ module PrismatIQ
     end
 
     def self.default : Config
-      rate_limit_val = ENV["PRISMATIQ_RATE_LIMIT"]?.try(&.to_i) || 10
-      new(
-        debug: ENV["PRISMATIQ_DEBUG"]? == "true" || ENV["PRISMATIQ_DEBUG"]? == "1",
-        threads: ENV["PRISMATIQ_THREADS"]?.try(&.to_i),
-        merge_chunk: ENV["PRISMATIQ_MERGE_CHUNK"]?.try(&.to_i),
-        ssrf_protection: ENV["PRISMATIQ_SSRF_PROTECTION"]? != "false",
-        ssrf_allowlist: ENV["PRISMATIQ_SSRF_ALLOWLIST"]?.try(&.split(",").map(&.strip)),
-        rate_limit: rate_limit_val
-      )
+      @@default_mutex.synchronize do
+        @@default ||= begin
+          rate_limit_val = ENV["PRISMATIQ_RATE_LIMIT"]?.try(&.to_i) || 10
+          new(
+            debug: ENV["PRISMATIQ_DEBUG"]? == "true" || ENV["PRISMATIQ_DEBUG"]? == "1",
+            threads: ENV["PRISMATIQ_THREADS"]?.try(&.to_i),
+            merge_chunk: ENV["PRISMATIQ_MERGE_CHUNK"]?.try(&.to_i),
+            ssrf_protection: ENV["PRISMATIQ_SSRF_PROTECTION"]? != "false",
+            ssrf_allowlist: ENV["PRISMATIQ_SSRF_ALLOWLIST"]?.try(&.split(",").map(&.strip)),
+            rate_limit: rate_limit_val
+          )
+        end
+      end
     end
 
     def thread_count_for(height : Int32, requested : Int32) : Int32

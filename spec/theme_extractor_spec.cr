@@ -42,7 +42,7 @@ describe PrismatIQ::ThemeResult do
     end
 
     it "returns nil for invalid JSON" do
-      result = PrismatIQ::ThemeResult.from_json("invalid json")
+      result = PrismatIQ::ThemeResult.from_json_string("invalid json")
       result.should be_nil
     end
   end

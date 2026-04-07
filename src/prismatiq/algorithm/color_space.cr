@@ -63,18 +63,11 @@ module PrismatIQ
     # puts q # 0-31
     # ```
     def self.quantize_from_rgb(r : Int32, g : Int32, b : Int32) : Tuple(Int32, Int32, Int32)
-      y = (Constants::YIQ::Y_FROM_R * r) + (Constants::YIQ::Y_FROM_G * g) + (Constants::YIQ::Y_FROM_B * b)
-      i = (Constants::YIQ::I_FROM_R * r) + (Constants::YIQ::I_FROM_G * g) + (Constants::YIQ::I_FROM_B * b)
-      q = (Constants::YIQ::Q_FROM_R * r) + (Constants::YIQ::Q_FROM_G * g) + (Constants::YIQ::Q_FROM_B * b)
+      color = from_rgb(r, g, b)
 
-      # Scale Y from [0, 255] to [0, 31]
-      y_q = ((y / 255.0) * 31).round.to_i.clamp(0, 31)
-
-      # Scale I from [-152, 152] to [0, 31]
-      i_q = (((i + 152.0) / 304.0) * 31).round.to_i.clamp(0, 31)
-
-      # Scale Q from [-134, 134] to [0, 31]
-      q_q = (((q + 134.0) / 268.0) * 31).round.to_i.clamp(0, 31)
+      y_q = ((color.y / 255.0) * 31).round.to_i.clamp(0, 31)
+      i_q = (((color.i + 152.0) / 304.0) * 31).round.to_i.clamp(0, 31)
+      q_q = (((color.q + 134.0) / 268.0) * 31).round.to_i.clamp(0, 31)
 
       {y_q, i_q, q_q}
     end

@@ -62,8 +62,8 @@ module PrismatIQ
     @accessibility : AccessibilityCalculator
 
     def initialize(accessibility : AccessibilityCalculator? = nil)
-      @luminance_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Float64).new
-      @theme_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Symbol).new
+      @luminance_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Float64).new(max_entries: 10_000)
+      @theme_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Symbol).new(max_entries: 10_000)
       @accessibility = accessibility || AccessibilityCalculator.new
     end
 
