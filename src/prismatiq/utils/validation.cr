@@ -67,13 +67,13 @@ module PrismatIQ
       private def self.contains_traversal?(path : String) : Bool
         parts = path.split('/')
         parts.each do |part|
-          return true if part == ".." || part == "~"
+          return true if part == ".." || part == "~" || part.starts_with?("~")
         end
         decoded = url_decode_path(path)
         return false if decoded == path
         parts = decoded.split('/')
         parts.each do |part|
-          return true if part == ".." || part == "~"
+          return true if part == ".." || part == "~" || part.starts_with?("~")
         end
         false
       end
