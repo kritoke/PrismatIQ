@@ -75,11 +75,12 @@ module PrismatIQ
     def extract_from_file(path : String, options : ThemeOptions = ThemeOptions.new) : ThemeResult?
       validation = Utils::Validation.validate_file_path(path)
       return unless validation.ok?
+      safe_path = validation.value
 
-      bg_rgb = if path.downcase.ends_with?(".ico")
-                 extract_ico_bg(path, options)
+      bg_rgb = if safe_path.downcase.ends_with?(".ico")
+                 extract_ico_bg(safe_path, options)
                else
-                 extract_image_bg(path, options)
+                 extract_image_bg(safe_path, options)
                end
 
       return unless bg_rgb
@@ -245,6 +246,10 @@ module PrismatIQ
       return unless host
       return unless {"http", "https"}.includes?(uri.scheme)
 
+      if allowlist_allows?(host)
+        return fetch_url_without_ssrf_checks(uri, options)
+      end
+
       port = uri.port || (uri.scheme == "https" ? 443 : 80)
       use_tls = uri.scheme == "https"
 
@@ -263,6 +268,36 @@ module PrismatIQ
 
         default_port = use_tls ? 443 : 80
         host_value = port == default_port ? host : "#{host}:#{port}"
+
+        headers = HTTP::Headers{
+          "User-Agent" => "PrismatIQ/#{Version::VERSION}",
+          "Accept"     => "image/*,*/*;q=0.8",
+          "Host"       => host_value,
+        }
+
+        response = client.get(uri.request_target, headers: headers)
+        return unless response_valid?(response, options)
+
+        stream_body(response.body_io, options.max_file_size)
+      rescue ex : IO::Error | OpenSSL::Error | ArgumentError
+        @config.log_debug "fetch_url: exception #{ex.class.name}: #{ex.message}"
+        nil
+      ensure
+        client.try(&.close)
+      end
+    end
+
+    private def fetch_url_without_ssrf_checks(uri : URI, options : ThemeOptions) : Slice(UInt8)?
+      port = uri.port || (uri.scheme == "https" ? 443 : 80)
+      use_tls = uri.scheme == "https"
+
+      begin
+        client = HTTP::Client.new(uri.host.not_nil!, port, tls: use_tls)
+        client.read_timeout = options.http_timeout.seconds
+        client.connect_timeout = options.http_timeout.seconds
+
+        default_port = use_tls ? 443 : 80
+        host_value = port == default_port ? uri.host.not_nil! : "#{uri.host.not_nil!}:#{port}"
 
         headers = HTTP::Headers{
           "User-Agent" => "PrismatIQ/#{Version::VERSION}",

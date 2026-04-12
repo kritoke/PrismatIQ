@@ -50,7 +50,7 @@ module PrismatIQ
         validation = Utils::Validation.validate_file_path(path)
         return [] of RGB if validation.err?
 
-        rgba_image = Utils::ImageLoader.load(path)
+        rgba_image = Utils::ImageLoader.load(validation.value)
         do_extract_from_image_data(rgba_image, options)
       end
 

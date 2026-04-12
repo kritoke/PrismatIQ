@@ -116,3 +116,11 @@ describe PrismatIQ::SSRFError do
     error.message.should contain("SSRF blocked")
   end
 end
+
+describe PrismatIQ::Config do
+  it "enforces the rate limiter" do
+    config = PrismatIQ::Config.new(rate_limit: 1)
+    config.rate_limit_allow?.should be_true
+    config.rate_limit_allow?.should be_false
+  end
+end

@@ -126,7 +126,11 @@ module PrismatIQ
     end
 
     def rate_limit_allow? : Bool
-      @rate_limiter.try(&.acquire) || true
+      if limiter = @rate_limiter
+        limiter.acquire
+      else
+        true
+      end
     end
 
     def rate_limit_wait_time : Time::Span

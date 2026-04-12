@@ -28,7 +28,7 @@ module PrismatIQ
         size_result = validate_file_size(path)
         return size_result if size_result.err?
 
-        Result(String, Error).ok(path)
+        Result(String, Error).ok(real_path)
       end
 
       private def self.validate_realpath(path : String) : Result(String, Error)

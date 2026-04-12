@@ -33,6 +33,14 @@ describe PrismatIQ::Utils::Validation do
       result.error.type.should eq(PrismatIQ::ErrorType::UnsupportedFormat)
       File.delete("/tmp/test_unsupported.xyz")
     end
+
+    it "returns the canonical real path on success" do
+      File.write("/tmp/test_realpath.png", "test")
+      result = PrismatIQ::Utils::Validation.validate_file_path("/tmp/test_realpath.png")
+      result.ok?.should be_true
+      result.value.should eq(File.realpath("/tmp/test_realpath.png"))
+      File.delete("/tmp/test_realpath.png")
+    end
   end
 
   describe ".validate_options" do
