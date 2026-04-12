@@ -8,34 +8,34 @@ module PrismatIQ
     LUMINANCE_THRESHOLD = 0.5
 
     module ThemeExtraction
-      GRAY_STEP                  =     5
-      LIGHT_TEXT_FALLBACK        = [238, 238, 238]
-      DARK_TEXT_FALLBACK         = [ 17,  17,  17]
+      GRAY_STEP           = 5
+      LIGHT_TEXT_FALLBACK = [238, 238, 238]
+      DARK_TEXT_FALLBACK  = [17, 17, 17]
     end
 
     module ParallelProcessing
-      SMALL_IMAGE_THRESHOLD      = 100_000
-      MEDIUM_IMAGE_THRESHOLD     = 1_000_000
-      LARGE_IMAGE_THRESHOLD      = 2_000_000
+      SMALL_IMAGE_THRESHOLD  =   100_000
+      MEDIUM_IMAGE_THRESHOLD = 1_000_000
+      LARGE_IMAGE_THRESHOLD  = 2_000_000
 
-      MIN_CHUNK_SIZE_SMALL       =  10_000
-      MAX_CHUNK_SIZE_SMALL       = 100_000
-      MIN_CHUNK_SIZE_LARGE       =  50_000
-      MAX_CHUNK_SIZE_LARGE       = 500_000
+      MIN_CHUNK_SIZE_SMALL =  10_000
+      MAX_CHUNK_SIZE_SMALL = 100_000
+      MIN_CHUNK_SIZE_LARGE =  50_000
+      MAX_CHUNK_SIZE_LARGE = 500_000
 
       THREAD_COUNT_MEDIUM_THRESHOLD = 500_000
-      GOOD_PARALLELISM           =     4
-      MAX_THREAD_COUNT           =     8
+      GOOD_PARALLELISM              =       4
+      MAX_THREAD_COUNT              =       8
     end
 
     module Accessibility
-      COLOR_SUGGESTION_STEP      =    10
-      ADJUSTMENT_ITERATIONS      =   100
+      COLOR_SUGGESTION_STEP =  10
+      ADJUSTMENT_ITERATIONS = 100
 
-      FALLBACK_BLACK             = {  0,   0,   0}
-      FALLBACK_WHITE             = {255, 255, 255}
-      FALLBACK_NEAR_BLACK        = { 30,  30,  30}
-      FALLBACK_NEAR_WHITE        = {225, 225, 225}
+      FALLBACK_BLACK      = {0, 0, 0}
+      FALLBACK_WHITE      = {255, 255, 255}
+      FALLBACK_NEAR_BLACK = {30, 30, 30}
+      FALLBACK_NEAR_WHITE = {225, 225, 225}
     end
 
     module WCAG

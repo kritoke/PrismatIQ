@@ -27,9 +27,9 @@ module PrismatIQ
       b_avg = (b_total / count.to_i64).to_i32
 
       [r_avg.clamp(0, 255), g_avg.clamp(0, 255), b_avg.clamp(0, 255)]
-      rescue ex : ArgumentError
-        config.log_debug "ColorExtractor.extract_from_buffer: exception: #{ex.class.name}: #{ex.message}"
-        nil
+    rescue ex : ArgumentError
+      config.log_debug "ColorExtractor.extract_from_buffer: exception: #{ex.class.name}: #{ex.message}"
+      nil
     end
 
     private def self.sample_pixels(pixels : Slice(UInt8), total : Int32, step : Int32, options : Options, config : Config) : Tuple(Int64, Int64, Int64, Int32)

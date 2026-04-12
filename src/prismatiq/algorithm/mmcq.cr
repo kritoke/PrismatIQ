@@ -22,9 +22,7 @@ module PrismatIQ
         return [build_initial_box] if max_colors == 1
 
         initial_box = build_initial_box
-        if @config.debug_log?
-          log_debug_initial(initial_box)
-        end
+        log_debug_initial(initial_box) if @config.debug_log?
 
         pq = Algorithm::PriorityQueue(VBox).new(&box_comparator)
         pq.push(initial_box)
@@ -32,32 +30,31 @@ module PrismatIQ
         iteration = 0
         while pq.size < max_colors && iteration < MAX_ITERATIONS
           iteration += 1
-          if @config.debug_log?
-            log_debug_iteration(iteration, pq.size)
-          end
+          log_debug_iteration(iteration, pq.size) if @config.debug_log?
 
           box = pq.pop
           break unless box
-          if @config.debug_log?
-            log_popped_box(box)
-          end
+          log_popped_box(box) if @config.debug_log?
 
-          vbox1, vbox2 = box.split(@rng)
-
-          if vbox1 == box
-            pq.push(box)
-            break
-          end
-
-          if @config.debug_log?
-            log_split_result(vbox1, vbox2)
-          end
-
-          pq.push(vbox1) if vbox1.count > 0
-          pq.push(vbox2) if vbox2.count > 0
+          break unless split_and_enqueue(pq, box)
         end
 
         collect_final_boxes(pq)
+      end
+
+      private def split_and_enqueue(pq : Algorithm::PriorityQueue(VBox), box : VBox) : Bool
+        vbox1, vbox2 = box.split(@rng)
+
+        if vbox1 == box
+          pq.push(box)
+          return false
+        end
+
+        log_split_result(vbox1, vbox2) if @config.debug_log?
+
+        pq.push(vbox1) if vbox1.count > 0
+        pq.push(vbox2) if vbox2.count > 0
+        true
       end
 
       private def box_comparator

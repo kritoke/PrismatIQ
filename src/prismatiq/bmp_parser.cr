@@ -121,7 +121,7 @@ module PrismatIQ
 
     private def safe_pixel_buffer_size : Int32?
       total = @width.to_i64 * @height.to_i64 * 4
-      return nil if total > Int32::MAX.to_i64 || total > MAX_PIXEL_COUNT * 4
+      return if total > Int32::MAX.to_i64 || total > MAX_PIXEL_COUNT * 4
       total.to_i32
     end
 
@@ -178,7 +178,7 @@ module PrismatIQ
     def self.from_slice?(data : Slice(UInt8), config : Config = Config.default) : BMPParser?
       parser = new(data, config)
       parser.valid? ? parser : nil
-    rescue ex : Exception
+    rescue ex : ArgumentError | IndexError
       config.log_debug "BMPParser.from_slice?: #{ex.class}: #{ex.message}"
       nil
     end
@@ -270,7 +270,7 @@ module PrismatIQ
 
       num_colors.times do |i|
         offset = palette_offset + i * 4
-        break if offset + 3 >= @data.size
+        break if offset + 4 > @data.size
 
         palette << {@data[offset + 2], @data[offset + 1], @data[offset], @data[offset + 3]}
       end
@@ -292,7 +292,7 @@ module PrismatIQ
       while y < @height
         src_row = top_down ? y : (@height - 1 - y)
         row_offset = pixel_offset.to_i64 + src_row.to_i64 * row_size.to_i64
-        next if row_offset >= @data.size.to_i64 || row_offset < 0
+        next if row_offset >= @data.size.to_i64 || row_offset < 0 || row_offset > Int32::MAX.to_i64
         row_start = row_offset.to_i32
 
         x = 0
@@ -336,39 +336,44 @@ module PrismatIQ
                                      blue_mask : UInt32, alpha_mask : UInt32)
       case @bit_count
       when 1, 4, 8
-        pixel_byte = @data[row_start + (x * @bit_count // 8)]
-        if @bit_count == 8
-          idx = pixel_byte
-        elsif @bit_count == 4
-          idx = (pixel_byte >> (4 - (x % 2) * 4)) & 0x0F
-        else
-          idx = (pixel_byte >> (7 - (x % 8))) & 1
-        end
-        if idx < palette.size
-          return palette[idx]
-        end
+        decode_paletted_pixel(x, row_start, palette)
       when 16
-        offset = row_start + x * 2
-        if offset + 1 < @data.size
-          pixel = @data[offset].to_u32 | (@data[offset + 1].to_u32 << 8)
-          r_shift = mask_to_shift_bits(red_mask)
-          g_shift = mask_to_shift_bits(green_mask)
-          b_shift = mask_to_shift_bits(blue_mask)
-          a_shift = mask_to_shift_bits(alpha_mask)
-
-          r_val = ((pixel & red_mask) >> r_shift[0]) & 0xFF if r_shift[0] >= 0
-          g_val = ((pixel & green_mask) >> g_shift[0]) & 0xFF if g_shift[0] >= 0
-          b_val = ((pixel & blue_mask) >> b_shift[0]) & 0xFF if b_shift[0] >= 0
-          a_val = ((pixel & alpha_mask) >> a_shift[0]) & 0xFF if a_shift[0] >= 0
-
-          r = (r_val || 0_u32).to_u8
-          g = (g_val || 0_u32).to_u8
-          b = (b_val || 0_u32).to_u8
-          a = (a_val || 255_u32).to_u8
-          return {r, g, b, a}
-        end
+        decode_16bit_pixel(x, row_start, red_mask, green_mask, blue_mask, alpha_mask)
+      else
+        {0_u8, 0_u8, 0_u8, 255_u8}
       end
-      {0_u8, 0_u8, 0_u8, 255_u8}
+    end
+
+    private def decode_paletted_pixel(x : Int32, row_start : Int32, palette : Array(Tuple(UInt8, UInt8, UInt8, UInt8))) : Tuple(UInt8, UInt8, UInt8, UInt8)
+      byte_offset = row_start + (x * @bit_count // 8)
+      return {0_u8, 0_u8, 0_u8, 255_u8} if byte_offset >= @data.size
+      pixel_byte = @data[byte_offset]
+
+      idx = case @bit_count
+            when 8 then pixel_byte
+            when 4 then (pixel_byte >> (4 - (x % 2) * 4)) & 0x0F
+            else        (pixel_byte >> (7 - (x % 8))) & 1
+            end
+
+      idx < palette.size ? palette[idx] : {0_u8, 0_u8, 0_u8, 255_u8}
+    end
+
+    private def decode_16bit_pixel(x : Int32, row_start : Int32, red_mask : UInt32, green_mask : UInt32, blue_mask : UInt32, alpha_mask : UInt32) : Tuple(UInt8, UInt8, UInt8, UInt8)
+      offset = row_start + x * 2
+      return {0_u8, 0_u8, 0_u8, 255_u8} unless offset + 1 < @data.size
+
+      pixel = @data[offset].to_u32 | (@data[offset + 1].to_u32 << 8)
+      r_shift = mask_to_shift_bits(red_mask)
+      g_shift = mask_to_shift_bits(green_mask)
+      b_shift = mask_to_shift_bits(blue_mask)
+      a_shift = mask_to_shift_bits(alpha_mask)
+
+      r = (((pixel & red_mask) >> r_shift[0]) & 0xFF if r_shift[0] >= 0) || 0_u32
+      g = (((pixel & green_mask) >> g_shift[0]) & 0xFF if g_shift[0] >= 0) || 0_u32
+      b = (((pixel & blue_mask) >> b_shift[0]) & 0xFF if b_shift[0] >= 0) || 0_u32
+      a = (((pixel & alpha_mask) >> a_shift[0]) & 0xFF if a_shift[0] >= 0) || 255_u32
+
+      {r.to_u8, g.to_u8, b.to_u8, a.to_u8}
     end
 
     # Generic decoding path for paletted and unusual formats
@@ -382,7 +387,7 @@ module PrismatIQ
       while y < @height
         src_row = top_down ? y : (actual_height - 1 - y)
         row_offset = pixel_offset.to_i64 + src_row.to_i64 * xor_row_size.to_i64
-        next if row_offset >= @data.size.to_i64 || row_offset < 0
+        next if row_offset >= @data.size.to_i64 || row_offset < 0 || row_offset > Int32::MAX.to_i64
         row_start = row_offset.to_i32
 
         x = 0

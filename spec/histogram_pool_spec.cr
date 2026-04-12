@@ -16,7 +16,6 @@ describe PrismatIQ::Core::HistogramPool do
 
       histo1 = pool.acquire(0)
       histo1[0] = 42_u32
-      pool.release(0)
 
       histo2 = pool.acquire(0)
       histo2[0].should eq(0_u32)
@@ -57,9 +56,6 @@ describe PrismatIQ::Core::HistogramPool do
 
       pool.acquire(1)
       pool.size.should eq(2)
-
-      pool.release(0)
-      pool.size.should eq(1)
     end
   end
 
@@ -94,7 +90,7 @@ describe PrismatIQ::Core::HistogramPool do
   end
 
   describe "thread safety" do
-    it "handles concurrent acquire/release safely for different indices" do
+    it "handles concurrent acquire for different indices" do
       pool = PrismatIQ::Core::HistogramPool.new(20)
       channel = Channel(Bool).new(100)
 
@@ -103,7 +99,6 @@ describe PrismatIQ::Core::HistogramPool do
           idx = i % 20
           pool.acquire(idx)
           sleep 0.001.milliseconds
-          pool.release(idx)
           channel.send(true)
         end
       end

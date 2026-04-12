@@ -69,6 +69,19 @@ module PrismatIQ
       fd = LibC.mkstemp(buf.to_unsafe)
       return if fd < 0
 
+      path_str = String.build do |str|
+        idx = 0
+        while buf[idx] != 0
+          str << buf[idx].chr
+          idx += 1
+        end
+      end
+
+      begin
+        File.chmod(path_str, 0o600)
+      rescue
+      end
+
       begin
         total = data.size
         written = 0
@@ -83,13 +96,7 @@ module PrismatIQ
         LibC.close(fd)
       end
 
-      idx = 0
-      String.build do |str|
-        while buf[idx] != 0
-          str << buf[idx].chr
-          idx += 1
-        end
-      end
+      path_str
     end
 
     def self.with_tempfile(prefix : String, data : Slice(UInt8), debug : Bool = false, &)

@@ -11,7 +11,7 @@ module PrismatIQ
           x_coord = 0
           while x_coord < width
             idx = (y_coord * width + x_coord) * 4
-            break if idx + 3 >= pixels.size
+            next if idx + 3 >= pixels.size
 
             a = pixels[idx + 3]
             if a >= alpha_threshold

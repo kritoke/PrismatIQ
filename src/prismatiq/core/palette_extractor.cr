@@ -6,6 +6,7 @@ require "../algorithm/color_space"
 require "../core/histogram_pool"
 require "../utils/histogram_processor"
 require "../utils/image_loader"
+require "../utils/validation"
 
 module PrismatIQ
   module Core
@@ -45,12 +46,16 @@ module PrismatIQ
         if @config.debug_log?
           @config.log_debug "get_palette(path): path=#{path} options=#{options.inspect}"
         end
-        rgba_image = ImageLoader.load(path)
+
+        validation = Utils::Validation.validate_file_path(path)
+        return [] of RGB if validation.err?
+
+        rgba_image = Utils::ImageLoader.load(path)
         do_extract_from_image_data(rgba_image, options)
       end
 
       def extract_from_io(io : IO, options : Options) : Array(RGB)
-        rgba_image = ImageLoader.load(io)
+        rgba_image = Utils::ImageLoader.load(io)
         do_extract_from_image_data(rgba_image, options)
       end
 
@@ -58,7 +63,7 @@ module PrismatIQ
         if @config.debug_log?
           @config.log_debug "get_palette_from_image: image.class=#{image.class} options=#{options.inspect}"
         end
-        rgba_image = ImageLoader.load(image)
+        rgba_image = Utils::ImageLoader.load(image)
         do_extract_from_image_data(rgba_image, options)
       end
 

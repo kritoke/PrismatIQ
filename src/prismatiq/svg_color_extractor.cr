@@ -154,6 +154,11 @@ module PrismatIQ
 
     def self.extract_colors(source : String | IO) : Array(RGB)
       svg_content = source.is_a?(String) ? source : source.gets_to_end
+
+      if svg_content.includes?("<!ENTITY")
+        return [] of RGB
+      end
+
       doc = XML.parse(svg_content)
 
       colors = [] of RGB
@@ -194,7 +199,7 @@ module PrismatIQ
     def self.parse_color(value : String) : RGB?
       value = value.strip.downcase
 
-      return nil if value.empty? || value == "none" || value == "inherit" || value == "transparent"
+      return if value.empty? || value == "none" || value == "inherit" || value == "transparent"
 
       if value == "currentcolor"
         return RGB.new(0, 0, 0)
@@ -244,7 +249,7 @@ module PrismatIQ
       return unless hue_val && sat_val && light_val
 
       hsl_to_rgb(hue_val, sat_val, light_val)
-    rescue ex : ArgumentError
+    rescue
       nil
     end
 
@@ -270,7 +275,7 @@ module PrismatIQ
         return RGB.new(val, val, val)
       end
 
-      h = h % 360.0
+      h = ((h % 360.0) + 360.0) % 360.0
 
       c = (1.0 - (2.0 * l - 1.0).abs) * s
       x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs)

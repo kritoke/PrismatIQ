@@ -48,6 +48,10 @@ module PrismatIQ
           return true
         end
 
+        if ipv4_mapped?(normalized)
+          return ipv4_mapped_private?(normalized)
+        end
+
         prefix = extract_ipv6_prefix(normalized, 16)
 
         if (prefix & 0xFE00_u128) == 0xFC00_u128
@@ -63,6 +67,10 @@ module PrismatIQ
 
       private def self.normalize_ipv6(address : String) : String
         addr = address.downcase
+
+        if addr.includes?("::") && addr.includes?(".")
+          return expand_ipv4_mapped_compressed(addr)
+        end
 
         if addr.includes?(".")
           return translate_ipv4_mapped(addr).ljust(32, '0')
@@ -84,18 +92,42 @@ module PrismatIQ
         addr.ljust(32, '0')
       end
 
-      private def self.translate_ipv4_mapped(address : String) : String
-        colon_count = address.count(':')
-        if colon_count >= 6
-          ipv4_start = address.rindex!(':') + 1
-          ipv4_part = address[ipv4_start..]
-          ipv6_prefix = address[0...ipv4_start - 1].gsub(":", "")
+      private def self.expand_ipv4_mapped_compressed(address : String) : String
+        parts = address.split("::", 2)
+        left_str = parts[0]? || ""
+        right_str = parts[1]? || ""
 
-          ipv4_parts = ipv4_part.split(".")
-          if ipv4_parts.size == 4
-            hex = ipv4_parts.map { |_p| _p.to_u8?.try(&.to_s(16).rjust(2, '0')) || "00" }.join
-            return ipv6_prefix + hex
-          end
+        left_groups = left_str.empty? ? [] of String : left_str.split(":")
+
+        last_colon = right_str.rindex(':')
+        if last_colon
+          ipv6_right = right_str[0...last_colon]
+          ipv4_str = right_str[(last_colon + 1)..]
+        else
+          ipv6_right = ""
+          ipv4_str = right_str
+        end
+
+        right_groups = ipv6_right.empty? ? [] of String : ipv6_right.split(":")
+
+        ipv4_hex = ipv4_str.split(".").map { |octet| octet.to_u8?.try(&.to_s(16).rjust(2, '0')) || "00" }.join
+
+        missing = 8 - left_groups.size - right_groups.size - 2
+        missing = Math.max(missing, 0)
+
+        expanded = left_groups + (["0000"] * missing) + right_groups + [ipv4_hex[0, 4], ipv4_hex[4, 4]]
+        expanded.map(&.rjust(4, '0')).join.ljust(32, '0')
+      end
+
+      private def self.translate_ipv4_mapped(address : String) : String
+        ipv4_start = address.rindex!(':') + 1
+        ipv4_part = address[ipv4_start..]
+        ipv6_prefix = address[0...ipv4_start - 1].gsub(":", "")
+
+        ipv4_parts = ipv4_part.split(".")
+        if ipv4_parts.size == 4
+          hex = ipv4_parts.map { |octet| octet.to_u8?.try(&.to_s(16).rjust(2, '0')) || "00" }.join
+          return ipv6_prefix + hex
         end
 
         address.gsub(":", "").ljust(32, '0')
@@ -107,15 +139,37 @@ module PrismatIQ
         prefix_str.to_u128?(base: 16) || 0_u128
       end
 
+      private def self.ipv4_mapped?(normalized : String) : Bool
+        return false unless normalized.size == 32
+        normalized[0, 20] == "00000000000000000000" && normalized[20, 4] == "ffff"
+      end
+
+      private def self.ipv4_mapped_private?(normalized : String) : Bool
+        octets = (0...4).map { |i| normalized[24 + i * 2, 2].to_u8?(base: 16) || 0_u8 }
+        ipv4_str = octets.join(".")
+        private_ipv4?(ipv4_str)
+      end
+
+      DNS_TIMEOUT_SECONDS = 5
+
       def self.resolve_host(host : String) : Array(Socket::IPAddress)
-        ips = [] of Socket::IPAddress
-        begin
-          Socket::Addrinfo.resolve(host, 0, type: Socket::Type::STREAM) do |addrinfo|
-            ips << addrinfo.ip_address
+        ch = Channel(Array(Socket::IPAddress)).new(1)
+        spawn do
+          ips = [] of Socket::IPAddress
+          begin
+            Socket::Addrinfo.resolve(host, 0, type: Socket::Type::STREAM) do |addrinfo|
+              ips << addrinfo.ip_address
+            end
+          rescue
           end
-        rescue
+          ch.send(ips)
         end
-        ips
+        select
+        when result = ch.receive
+          result
+        when timeout(DNS_TIMEOUT_SECONDS.seconds)
+          [] of Socket::IPAddress
+        end
       end
     end
   end

@@ -38,7 +38,6 @@ module PrismatIQ
       r, g, b = to_rgb
       "#%02x%02x%02x" % [r, g, b]
     end
-
   end
 
   struct VBox
@@ -150,6 +149,7 @@ module PrismatIQ
 
     # Quickselect algorithm to find k-th smallest element in O(n) average time.
     # Uses in-place Lomuto partitioning to avoid allocations.
+    # WARNING: Mutates the input array in-place.
     def self.quickselect(arr : Array(Int32), k : Int32, rng : Random::PCG32 = Random::PCG32.new) : Int32
       if arr.size <= 32
         sorted = arr.sort

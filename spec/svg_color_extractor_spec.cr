@@ -340,5 +340,44 @@ describe PrismatIQ::SVGColorExtractor do
         fail "Expected valid RGB color for hsl(0, 0%, 0%)"
       end
     end
+
+    it "normalizes negative hue correctly" do
+      neg_rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(-30, 100%, 50%)")
+      pos_rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(330, 100%, 50%)")
+      neg_rgb.should_not be_nil
+      pos_rgb.should_not be_nil
+      neg_rgb.as(PrismatIQ::RGB).r.should eq(pos_rgb.as(PrismatIQ::RGB).r)
+      neg_rgb.as(PrismatIQ::RGB).g.should eq(pos_rgb.as(PrismatIQ::RGB).g)
+      neg_rgb.as(PrismatIQ::RGB).b.should eq(pos_rgb.as(PrismatIQ::RGB).b)
+    end
+
+    it "normalizes hue > 360 correctly" do
+      over_rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(390, 100%, 50%)")
+      norm_rgb = PrismatIQ::SVGColorExtractor.parse_color("hsl(30, 100%, 50%)")
+      over_rgb.should_not be_nil
+      norm_rgb.should_not be_nil
+      over_rgb.as(PrismatIQ::RGB).r.should eq(norm_rgb.as(PrismatIQ::RGB).r)
+    end
+  end
+
+  describe "entity bomb protection" do
+    it "returns empty array for SVG with ENTITY declaration" do
+      svg = <<-SVG
+        <?xml version="1.0"?>
+        <!DOCTYPE svg [
+          <!ENTITY xxe "test">
+        ]>
+        <svg><rect fill="#FF0000"/></svg>
+        SVG
+      colors = PrismatIQ::SVGColorExtractor.extract_colors(svg)
+      colors.size.should eq(0)
+    end
+
+    it "still extracts colors from SVG without entities" do
+      svg = %(<svg><rect fill="#00FF00"/></svg>)
+      colors = PrismatIQ::SVGColorExtractor.extract_colors(svg)
+      colors.size.should eq(1)
+      colors[0].to_hex.should eq("#00ff00")
+    end
   end
 end

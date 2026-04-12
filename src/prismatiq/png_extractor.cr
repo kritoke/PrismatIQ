@@ -76,7 +76,7 @@ module PrismatIQ
 
       entry_base = 6
       i = 0
-      while i < count && (entry_base + 16) <= ico_data.size
+      while i < count && (entry_base + i * 16 + 16) <= ico_data.size
         png_extractor = try_png_entry_at(ico_data, entry_base, i, max_size)
         return png_extractor if png_extractor
         i += 1

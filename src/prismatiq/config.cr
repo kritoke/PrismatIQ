@@ -99,11 +99,11 @@ module PrismatIQ
     def self.default : Config
       @@default_mutex.synchronize do
         @@default ||= begin
-          rate_limit_val = ENV["PRISMATIQ_RATE_LIMIT"]?.try(&.to_i) || 10
+          rate_limit_val = ENV["PRISMATIQ_RATE_LIMIT"]?.try(&.to_i?) || 10
           new(
             debug: ENV["PRISMATIQ_DEBUG"]? == "true" || ENV["PRISMATIQ_DEBUG"]? == "1",
-            threads: ENV["PRISMATIQ_THREADS"]?.try(&.to_i),
-            merge_chunk: ENV["PRISMATIQ_MERGE_CHUNK"]?.try(&.to_i),
+            threads: ENV["PRISMATIQ_THREADS"]?.try(&.to_i?),
+            merge_chunk: ENV["PRISMATIQ_MERGE_CHUNK"]?.try(&.to_i?),
             ssrf_protection: ENV["PRISMATIQ_SSRF_PROTECTION"]? != "false",
             ssrf_allowlist: ENV["PRISMATIQ_SSRF_ALLOWLIST"]?.try(&.split(",").map(&.strip)),
             rate_limit: rate_limit_val

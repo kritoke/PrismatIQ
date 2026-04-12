@@ -251,3 +251,25 @@ describe "concurrent palette extraction" do
     end
   end
 end
+
+describe "PrismatIQ validation wiring" do
+  describe "get_palette_v2" do
+    it "returns error for path traversal" do
+      result = PrismatIQ.get_palette_v2("../../etc/passwd")
+      result.err?.should be_true
+    end
+
+    it "returns error for non-existent file" do
+      result = PrismatIQ.get_palette_v2("/tmp/nonexistent_prismatiq_test_12345.png")
+      result.err?.should be_true
+    end
+  end
+
+  describe "get_palette_v2!" do
+    it "raises for path traversal" do
+      expect_raises(Exception) do
+        PrismatIQ.get_palette_v2!("../../etc/passwd")
+      end
+    end
+  end
+end

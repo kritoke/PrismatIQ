@@ -30,8 +30,6 @@ module PrismatIQ
     include BinaryReader
 
     MAX_ENTRY_SIZE = 50_000_000_i64
-
-    getter? valid : Bool
     getter width : Int32
     getter height : Int32
     getter entry_count : Int32
@@ -42,19 +40,19 @@ module PrismatIQ
 
     def self.from_path(path : String, config : Config = Config.default) : ICOFile?
       file_size = File.size(path) rescue 0_i64
-      return nil if file_size > MAX_FILE_SIZE || file_size == 0
+      return if file_size > Constants::MAX_FILE_SIZE || file_size == 0
       bytes = File.read(path).to_slice
       new(bytes, config)
-    rescue ex : Exception
+    rescue ex : IO::Error | ArgumentError | IndexError
       config.log_debug "ICOFile.from_path: failed to read #{path}: #{ex.message}"
       nil
     end
 
-    MAX_FILE_SIZE = 100 * 1024 * 1024_i64
+    getter? valid : Bool
 
     def self.from_slice(data : Slice(UInt8), config : Config = Config.default) : ICOFile?
       new(data, config)
-    rescue ex : Exception
+    rescue ex : ArgumentError | IndexError
       config.log_debug "ICOFile.from_slice: failed to parse: #{ex.message}"
       nil
     end
@@ -91,7 +89,7 @@ module PrismatIQ
 
       entry_base = 6
       i = 0
-      while i < header[:count] && (entry_base + 16) <= @data.size
+      while i < header[:count] && (entry_base + i * 16 + 16) <= @data.size
         png_data = find_png_entry(i, entry_base)
         return png_data if png_data
         i += 1
@@ -152,7 +150,7 @@ module PrismatIQ
       best_slice = nil
 
       i = 0
-      while i < count && (entry_base + 16) <= @data.size
+      while i < count && (entry_base + i * 16 + 16) <= @data.size
         result = find_bmp_entry(i, entry_base)
         if result
           w, h, bit_count, hdr = result
@@ -250,7 +248,7 @@ module PrismatIQ
 
       entry_base = 6
       i = 0
-      while i < header[:count] && (entry_base + 16) <= @data.size
+      while i < header[:count] && (entry_base + i * 16 + 16) <= @data.size
         entry = ICOEntry.from_slice(@data, entry_base + i * 16)
         @entries << entry
         i += 1

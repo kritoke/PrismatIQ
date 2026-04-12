@@ -36,12 +36,6 @@ module PrismatIQ
         histo
       end
 
-      def release(index : Int32) : Nil
-        if index < @used.size
-          @used[index] = false
-        end
-      end
-
       def size : Int32
         @used.count(&.== true)
       end

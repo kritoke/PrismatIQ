@@ -6,6 +6,7 @@ require "./thread_safe_cache"
 require "./theme_result"
 require "./rgb"
 require "./utils/ip_validator"
+require "./utils/validation"
 require "./errors"
 require "./accessibility_calculator"
 require "./constants"
@@ -57,10 +58,10 @@ module PrismatIQ
       return cached if cached
 
       result = if source.starts_with?("http://") || source.starts_with?("https://")
-                  extract_from_url(source, options)
-                else
-                  extract_from_file(source, options)
-                end
+                 extract_from_url(source, options)
+               else
+                 extract_from_file(source, options)
+               end
 
       if result
         @cache[cache_key] = result
@@ -72,13 +73,14 @@ module PrismatIQ
     end
 
     def extract_from_file(path : String, options : ThemeOptions = ThemeOptions.new) : ThemeResult?
-      return unless File.exists?(path)
+      validation = Utils::Validation.validate_file_path(path)
+      return unless validation.ok?
 
       bg_rgb = if path.downcase.ends_with?(".ico")
-                  extract_ico_bg(path, options)
-                else
-                  extract_image_bg(path, options)
-                end
+                 extract_ico_bg(path, options)
+               else
+                 extract_image_bg(path, options)
+               end
 
       return unless bg_rgb
 
@@ -88,8 +90,9 @@ module PrismatIQ
     def extract_from_url(url : String, options : ThemeOptions = ThemeOptions.new) : ThemeResult?
       uri = URI.parse(url)
       return unless uri.scheme && uri.host
+      return unless {"http", "https"}.includes?(uri.scheme)
 
-      data = fetch_url(url, options)
+      data = fetch_url(uri, options)
       return unless data
 
       bg_rgb = if url.downcase.ends_with?(".ico")
@@ -164,7 +167,7 @@ module PrismatIQ
       ico = ICOFile.from_path(path, @config)
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
-    rescue ex : Exception
+    rescue ex : IO::Error | ArgumentError | IndexError
       @config.log_debug "extract_ico_bg: #{ex.class}: #{ex.message}"
       return
     end
@@ -173,7 +176,7 @@ module PrismatIQ
       ico = ICOFile.from_slice(data, @config)
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
-    rescue ex : Exception
+    rescue ex : IO::Error | ArgumentError | IndexError
       @config.log_debug "extract_ico_buffer_bg: #{ex.class}: #{ex.message}"
       return
     end
@@ -201,7 +204,7 @@ module PrismatIQ
       return unless rgba
 
       extract_pixel_colors(rgba.pix, w.to_i32, h.to_i32, options)
-    rescue ex : Exception
+    rescue ex : IO::Error | ArgumentError
       @config.log_debug "extract_image_bg: #{ex.class}: #{ex.message}"
       return
     end
@@ -221,7 +224,7 @@ module PrismatIQ
       TempfileHelper.with_tempfile("prismatiq_theme_", data) do |tmp_path|
         extract_image_bg(tmp_path, options)
       end
-    rescue ex : Exception
+    rescue ex : IO::Error | ArgumentError
       @config.log_debug "extract_buffer_bg: #{ex.class}: #{ex.message}"
       return
     end
@@ -232,51 +235,28 @@ module PrismatIQ
       ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
     end
 
-    private def fetch_url(url : String, options : ThemeOptions) : Slice(UInt8)?
+    private def fetch_url(uri : URI, options : ThemeOptions) : Slice(UInt8)?
       unless @config.rate_limit_allow?
         @config.log_debug "fetch_url: rate limited, please retry later"
         return
       end
 
-      uri = URI.parse(url)
-
-      unless {"http", "https"}.includes?(uri.scheme)
-        @config.log_debug "fetch_url: rejected non-http(s) scheme: #{uri.scheme}"
-        return
-      end
-
       host = uri.host
       return unless host
+      return unless {"http", "https"}.includes?(uri.scheme)
 
       port = uri.port || (uri.scheme == "https" ? 443 : 80)
       use_tls = uri.scheme == "https"
 
-      validated_ip : Socket::IPAddress? = nil
+      validated_ip = resolve_and_validate_host(host)
+      return if validated_ip == :blocked
 
-      if @config.ssrf_protection? && !allowlist_allows?(host)
-        resolved_ips = Utils::IPValidator.resolve_host(host)
-        if resolved_ips.empty?
-          @config.log_debug "fetch_url: DNS resolution failed for '#{host}'"
-          return
-        end
-
-        resolved_ips.each do |ip|
-          if Utils::IPValidator.private_address?(ip)
-            @config.log_debug "fetch_url: SSRF blocked - host=#{host} ip=#{ip.address} reason=private_address"
-            return
-          end
-        end
-
-        validated_ip = resolved_ips.first
-      end
-
-      client : HTTP::Client? = nil
       begin
-        if validated_ip
-          client = connect_to_ip(validated_ip, host, port, use_tls)
-        else
-          client = HTTP::Client.new(host, port, tls: use_tls)
-        end
+        client = if validated_ip.is_a?(Socket::IPAddress)
+                   connect_to_ip(validated_ip.as(Socket::IPAddress), host, port, use_tls)
+                 else
+                   HTTP::Client.new(host, port, tls: use_tls)
+                 end
 
         client.read_timeout = options.http_timeout.seconds
         client.connect_timeout = options.http_timeout.seconds
@@ -291,37 +271,76 @@ module PrismatIQ
         }
 
         response = client.get(uri.request_target, headers: headers)
+        return unless response_valid?(response, options)
 
-        return unless response.status_code == 200
-
-        content_type = response.headers["Content-Type"]?
-        if content_type && !content_type.starts_with?("image/")
-          @config.log_debug "fetch_url: rejected non-image content-type: #{content_type}"
-          return
-        end
-
-        content_length = response.headers["Content-Length"]?
-        if content_length
-          begin
-            length = content_length.to_i64
-            if length > options.max_file_size
-              @config.log_debug "fetch_url: rejected due to Content-Length: #{length}"
-              return
-            end
-          rescue ex : ArgumentError
-          end
-        end
-
-        body = response.body
-
-        return if body.size > options.max_file_size
-        body.to_slice
-      rescue ex : Exception
+        stream_body(response.body_io, options.max_file_size)
+      rescue ex : IO::Error | OpenSSL::Error | ArgumentError
         @config.log_debug "fetch_url: exception #{ex.class.name}: #{ex.message}"
         nil
       ensure
         client.try(&.close)
       end
+    end
+
+    private def resolve_and_validate_host(host : String) : Socket::IPAddress | Symbol?
+      return unless @config.ssrf_protection?
+
+      resolved_ips = Utils::IPValidator.resolve_host(host)
+      if resolved_ips.empty?
+        @config.log_debug "fetch_url: DNS resolution failed for '#{host}'"
+        return :blocked
+      end
+
+      resolved_ips.each do |ip|
+        if Utils::IPValidator.private_address?(ip)
+          @config.log_debug "fetch_url: SSRF blocked - host=#{host} ip=#{ip.address} reason=private_address"
+          return :blocked
+        end
+      end
+
+      resolved_ips.first
+    end
+
+    private def response_valid?(response : HTTP::Client::Response, options : ThemeOptions) : Bool
+      return false unless response.status_code == 200
+
+      content_type = response.headers["Content-Type"]?
+      if content_type && !content_type.starts_with?("image/")
+        @config.log_debug "fetch_url: rejected non-image content-type: #{content_type}"
+        return false
+      end
+
+      content_length = response.headers["Content-Length"]?
+      if content_length
+        begin
+          length = content_length.to_i64
+          if length > options.max_file_size
+            @config.log_debug "fetch_url: rejected due to Content-Length: #{length}"
+            return false
+          end
+        rescue
+        end
+      end
+
+      true
+    end
+
+    private def stream_body(body_io : IO, max_size : Int64) : Slice(UInt8)?
+      buffer = IO::Memory.new
+      chunk_size = 8192
+      loop do
+        tmp = Bytes.new(chunk_size)
+        read_bytes = body_io.read(tmp)
+        break if read_bytes == 0
+        remaining = max_size - buffer.bytesize
+        if remaining <= 0
+          @config.log_debug "fetch_url: response body exceeded max_file_size during streaming"
+          return
+        end
+        write_bytes = {read_bytes, remaining.to_i}.min
+        buffer.write(tmp[0, write_bytes])
+      end
+      buffer.to_slice
     end
 
     private def connect_to_ip(ip : Socket::IPAddress, original_host : String, port : Int32, use_tls : Bool) : HTTP::Client

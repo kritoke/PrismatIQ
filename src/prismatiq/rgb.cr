@@ -18,19 +18,27 @@ module PrismatIQ
       hex = hex.lchop('#')
       case hex.size
       when 3
-        r = hex[0].to_s * 2
-        g = hex[1].to_s * 2
-        b = hex[2].to_s * 2
-        new(r.to_i(16), g.to_i(16), b.to_i(16))
+        parse_hex_triplet(hex)
       when 6
-        begin
-          new(hex[0, 2].to_i(16), hex[2, 2].to_i(16), hex[4, 2].to_i(16))
-        rescue ex : ArgumentError
-          raise ValidationError.new("Invalid hex color characters: #{hex}")
-        end
+        parse_hex_sextet(hex)
       else
         raise ValidationError.new("Invalid hex color: #{hex}")
       end
+    end
+
+    private def self.parse_hex_triplet(hex : String) : RGB
+      r = hex[0].to_s * 2
+      g = hex[1].to_s * 2
+      b = hex[2].to_s * 2
+      new(r.to_i(16), g.to_i(16), b.to_i(16))
+    rescue ex : ArgumentError
+      raise ValidationError.new("Invalid hex color characters: #{hex} (#{ex.message})")
+    end
+
+    private def self.parse_hex_sextet(hex : String) : RGB
+      new(hex[0, 2].to_i(16), hex[2, 2].to_i(16), hex[4, 2].to_i(16))
+    rescue ex : ArgumentError
+      raise ValidationError.new("Invalid hex color characters: #{hex} (#{ex.message})")
     end
 
     def self.from_rgb_string(value : String) : RGB

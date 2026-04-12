@@ -17,7 +17,7 @@ module PrismatIQ
 
     def self.from_json_string(json_str : String) : ThemeResult?
       ThemeResult.from_json(json_str)
-    rescue ex : JSON::ParseException
+    rescue
       nil
     end
   end

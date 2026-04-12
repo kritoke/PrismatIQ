@@ -78,6 +78,31 @@ describe PrismatIQ::RGB do
       rgb.g.should eq(255)
       rgb.b.should eq(0)
     end
+
+    it "parses 3-digit hex" do
+      rgb = PrismatIQ::RGB.from_hex("#0f0")
+      rgb.r.should eq(0)
+      rgb.g.should eq(255)
+      rgb.b.should eq(0)
+    end
+
+    it "raises ValidationError for invalid 3-digit hex" do
+      expect_raises(PrismatIQ::ValidationError) do
+        PrismatIQ::RGB.from_hex("#ggg")
+      end
+    end
+
+    it "raises ValidationError for invalid 6-digit hex" do
+      expect_raises(PrismatIQ::ValidationError) do
+        PrismatIQ::RGB.from_hex("#gggggg")
+      end
+    end
+
+    it "raises ValidationError for invalid hex length" do
+      expect_raises(PrismatIQ::ValidationError) do
+        PrismatIQ::RGB.from_hex("#abcde")
+      end
+    end
   end
 
   describe "#distance_to" do
