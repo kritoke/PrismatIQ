@@ -150,7 +150,7 @@ module PrismatIQ
             Socket::Addrinfo.resolve(host, 0, type: Socket::Type::STREAM) do |addrinfo|
               ips << addrinfo.ip_address
             end
-          rescue
+          rescue Socket::Error | IO::Error
           end
           ch.send(ips)
         end

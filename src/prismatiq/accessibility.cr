@@ -1,8 +1,6 @@
 require "./thread_safe_cache"
 
 module PrismatIQ
-  # Import ThreadSafeCache - moved to top level
-
   enum WCAGLevel
     Fail     = 0
     AA_Large = 1

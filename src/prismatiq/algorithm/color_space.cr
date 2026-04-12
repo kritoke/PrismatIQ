@@ -1,10 +1,9 @@
 module PrismatIQ
-  # Centralized YIQ color space conversion module.
+  # YIQ color space conversion module.
   #
   # Provides methods for converting RGB color values to YIQ color space,
   # with support for both full-precision and quantized conversions.
-  # This module centralizes all YIQ conversion logic to eliminate duplication
-  # across the codebase.
+  # This module is the single source of truth for YIQ index encoding/decoding.
   #
   # ### Color Space
   # The YIQ color space is derived from RGB using NTSC coefficients:
@@ -89,6 +88,13 @@ module PrismatIQ
     # ```
     def self.to_index(y : Int32, i : Int32, q : Int32) : Int32
       (y << 10) | (i << 5) | q
+    end
+
+    def self.from_index(index : Int32) : Tuple(Int32, Int32, Int32)
+      y = index >> 10
+      i = (index >> 5) & 31
+      q = index & 31
+      {y, i, q}
     end
   end
 end

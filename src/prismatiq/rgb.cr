@@ -62,6 +62,87 @@ module PrismatIQ
       value.to_i?.try(&.clamp(0, 255))
     end
 
+    def self.from_hsl(h : Float64, s : Float64, l : Float64) : RGB
+      s_norm = s / 100.0
+      l_norm = l / 100.0
+
+      if s_norm == 0
+        val = (l_norm * 255).round.to_i
+        return new(val, val, val)
+      end
+
+      h_norm = ((h % 360.0) + 360.0) % 360.0
+      c = (1.0 - (2.0 * l_norm - 1.0).abs) * s_norm
+      x = c * (1.0 - ((h_norm / 60.0) % 2.0 - 1.0).abs)
+      m = l_norm - c / 2.0
+
+      r1, g1, b1 = if h_norm < 60.0
+                     {c, x, 0.0}
+                   elsif h_norm < 120.0
+                     {x, c, 0.0}
+                   elsif h_norm < 180.0
+                     {0.0, c, x}
+                   elsif h_norm < 240.0
+                     {0.0, x, c}
+                   elsif h_norm < 300.0
+                     {x, 0.0, c}
+                   else
+                     {c, 0.0, x}
+                   end
+
+      new(
+        ((r1 + m) * 255).round.to_i.clamp(0, 255),
+        ((g1 + m) * 255).round.to_i.clamp(0, 255),
+        ((b1 + m) * 255).round.to_i.clamp(0, 255)
+      )
+    end
+
+    def self.from_color_string(value : String) : RGB?
+      s = value.strip.downcase
+      return if s.empty? || s == "none" || s == "inherit" || s == "transparent"
+
+      if s == "currentcolor"
+        return new(0, 0, 0)
+      end
+
+      if s.starts_with?("#")
+        from_hex(s)
+      elsif s.starts_with?("rgb(") || s.starts_with?("rgba(")
+        from_rgb_string(s)
+      elsif s.starts_with?("hsl(") || s.starts_with?("hsla(")
+        from_hsl_string(s)
+      end
+    rescue ValidationError
+      nil
+    end
+
+    private def self.from_hsl_string(value : String) : RGB
+      inner = value.gsub(/^hsla?\(/, "").gsub(/\)$/, "")
+      parts = inner.split(',').map(&.strip)
+      raise ValidationError.new("Invalid hsl string: #{value}") unless parts.size >= 3
+
+      hue_val = parse_hue(parts[0])
+      sat_val = parse_percentage(parts[1])
+      light_val = parse_percentage(parts[2])
+
+      raise ValidationError.new("Invalid hsl values in: #{value}") unless hue_val && sat_val && light_val
+
+      from_hsl(hue_val, sat_val, light_val)
+    end
+
+    private def self.parse_hue(value : String) : Float64?
+      value = value.strip
+      value = value.rchop("deg") if value.ends_with?("deg")
+      value = value.rchop("°") if value.ends_with?("°")
+      value.to_f?
+    end
+
+    private def self.parse_percentage(value : String) : Float64?
+      value = value.strip
+      return unless value.ends_with?("%")
+      value.rchop('%').to_f?
+    end
+
     def distance_to(other : RGB) : Float64
       Math.sqrt((@r - other.r)**2 + (@g - other.g)**2 + (@b - other.b)**2)
     end

@@ -1,5 +1,98 @@
 # Changelog
 
+## [0.6.0] - 2026-04-12
+
+### Breaking Changes
+
+- **`ColorExtractor.extract_from_buffer`** now returns `Array(RGB)?` instead of `Array(Int32)?`. Callers that unpacked the return as `r, g, b = result` must change to `rgb = result.not_nil!.first`.
+- **`get_color(path)`, `get_color(io)`, `get_color(img)`** now return `RGB?` (nil on failure) instead of always returning `RGB`. This allows callers to distinguish "dominant color is black" from "extraction failed".
+- **`ThemeResult.new(bg_rgb, text_light, text_dark)`** now accepts `RGB` instead of `Array(Int32)`.
+- **`extract_theme` / `fix_theme`** module-level methods no longer use a global singleton. Each call creates a fresh `ThemeExtractor` instance. For caching, manage your own instance: `extractor = PrismatIQ::ThemeExtractor.new`.
+- **`clear_theme_cache`** is now a no-op. Cache clearing requires managing a `ThemeExtractor` instance directly.
+- **Removed `VBox.contains?`** — compared Float64 values against Int32 bounds and was always incorrect.
+- **Removed `VBox.from_index` / `VBox.to_index`** — use `YIQConverter.from_index` / `YIQConverter.to_index` instead.
+
+### Added
+
+- **`RGB.from_color_string(value)`** — unified color parser returning `RGB?`. Handles hex (`#fff`, `#ffffff`), rgb/rgba, hsl/hsla, and `currentcolor`.
+- **`RGB.from_hsl(h, s, l)`** — HSL to RGB conversion.
+
+### Changed
+
+- **Theme extraction** uses `RGB` throughout instead of `Array(Int32)`, eliminating ~15 conversion sites.
+- **ThemeDetector** luminance caching deduplicated — delegates to `AccessibilityCalculator` instead of maintaining its own independent cache.
+- **`find_light_contrast_text`** renamed to **`find_darkest_compliant_text`** (private method).
+- **`find_dark_contrast_text`** renamed to **`find_lightest_compliant_text`** (private method).
+- **`get_palette_channel`** error fallback now sends `[] of RGB` instead of `[RGB.new(0,0,0)]`.
+
+### Improved
+
+- **Exception specificity**: Replaced ~15 bare `rescue` and overly broad `rescue ex : Exception` with specific types (`IO::Error`, `JSON::ParseException`, `File::Error`, etc.).
+- **ICO entry parsing** now uses `BinaryReader.read_u32_le` instead of hand-rolled byte shifting.
+- **`system_directory?`** path checks are now platform-conditional (`{% if flag?(:linux) %}`).
+- Removed dead code: `AdaptiveChunkSizer.calculate`, `CPU` module wrapper, stale comments.
+
+### Migration Guide
+
+#### ColorExtractor return type
+```crystal
+# Before
+result = ColorExtractor.extract_from_buffer(pixels, w, h, opts)
+r, g, b = result.not_nil!
+
+# After
+result = ColorExtractor.extract_from_buffer(pixels, w, h, opts)
+rgb = result.as(Array(RGB)).first
+puts rgb.r, rgb.g, rgb.b
+```
+
+#### get_color now returns nil on failure
+```crystal
+# Before — silently returns black on error
+color = PrismatIQ.get_color("missing.png")
+puts color.to_hex  # "#000000" — was it black or an error?
+
+# After — nil on error
+color = PrismatIQ.get_color("missing.png")
+if color
+  puts color.to_hex
+else
+  puts "Extraction failed"
+end
+```
+
+#### ThemeResult constructor
+```crystal
+# Before
+result = ThemeResult.new([100, 150, 200], "#fff", "#000")
+
+# After
+result = ThemeResult.new(RGB.new(100, 150, 200), "#fff", "#000")
+```
+
+#### Theme extraction with caching
+```crystal
+# Before — used global singleton with implicit caching
+theme = PrismatIQ.extract_theme("favicon.ico")
+PrismatIQ.clear_theme_cache
+
+# After — manage instance for caching
+extractor = PrismatIQ::ThemeExtractor.new
+theme = extractor.extract("favicon.ico")
+extractor.clear_cache
+```
+
+#### VBox index methods
+```crystal
+# Before
+y, i, q = VBox.from_index(idx)
+idx = VBox.to_index(y, i, q)
+
+# After
+y, i, q = YIQConverter.from_index(idx)
+idx = YIQConverter.to_index(y, i, q)
+```
+
 ## [0.5.6.1] - 2026-03-26
 
 ### Improved

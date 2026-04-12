@@ -34,15 +34,19 @@ module PrismatIQ
       private def self.validate_realpath(path : String) : Result(String, Error)
         real = File.realpath(path)
         Result(String, Error).ok(real)
-      rescue ex : Exception
+      rescue ex : File::Error | ArgumentError
         Result(String, Error).err(Error.invalid_image_path(path, "Cannot resolve path: #{ex.message}"))
       end
 
       private def self.system_directory?(path : String) : Bool
-        path.starts_with?("/etc/") || path.starts_with?("/sys/") || path.starts_with?("/proc/") ||
-          path.starts_with?("/dev/") || path.starts_with?("/boot/") || path.starts_with?("/root/") ||
-          path.starts_with?("/usr/") || path.starts_with?("/var/") || path.starts_with?("/lib/") ||
-          path.starts_with?("/sbin/") || path.starts_with?("/bin/") || path == "/"
+        {% if flag?(:linux) %}
+          path.starts_with?("/etc/") || path.starts_with?("/sys/") || path.starts_with?("/proc/") ||
+            path.starts_with?("/dev/") || path.starts_with?("/boot/") || path.starts_with?("/root/") ||
+            path.starts_with?("/usr/") || path.starts_with?("/var/") || path.starts_with?("/lib/") ||
+            path.starts_with?("/sbin/") || path.starts_with?("/bin/") || path == "/"
+        {% else %}
+          false
+        {% end %}
       end
 
       private def self.validate_file_size(path : String) : Result(String, Error)
@@ -50,7 +54,7 @@ module PrismatIQ
         return Result(String, Error).err(Error.invalid_image_path(path, "File size exceeds 100MB limit")) if size > MAX_FILE_SIZE
         return Result(String, Error).err(Error.corrupted_image("File is empty")) if size == 0
         Result(String, Error).ok(path)
-      rescue ex : Exception
+      rescue ex : File::Error | IO::Error
         Result(String, Error).err(Error.invalid_image_path(path, "Cannot read file: #{ex.message}"))
       end
 

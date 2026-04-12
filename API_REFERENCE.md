@@ -1,6 +1,6 @@
 # API Reference
 
-This document provides a complete reference of all public APIs available in PrismatIQ v0.5.0.
+This document provides a complete reference of all public APIs available in PrismatIQ v0.6.0.
 
 ## Palette Extraction APIs
 
@@ -55,10 +55,11 @@ This document provides a complete reference of all public APIs available in Pris
 - **Raises**: `Exception` or `ValidationError` on errors
 - **Description**: Extract palette from raw RGBA buffer, raising exceptions on errors.
 
-### `PrismatIQ.get_palette_from_ico_v2(path, options)`
+### `PrismatIQ.get_palette_from_ico_v2(path, options, config)`
 - **Parameters**:
   - `path : String` - Path to ICO file
   - `options : Options = Options.default` - Extraction configuration
+  - `config : Config = Config.default` - Runtime configuration
 - **Returns**: `Result(Array(RGB), Error)`
 - **Description**: Extract palette from Windows ICO files (supports both PNG and BMP encoded icons) with explicit error handling.
 
@@ -73,9 +74,9 @@ This document provides a complete reference of all public APIs available in Pris
 - **Description**: Buffer-based extraction returning array directly (no Result wrapper). This is the foundation method used by other APIs.
 
 ### `PrismatIQ.get_color(path)` / `get_color(io)` / `get_color(img)`
-- **Parameters**: Image source (path, IO, or CrImage::Image)
-- **Returns**: `RGB`
-- **Description**: Convenience methods to extract just the single dominant color.
+- **Parameters**: Image source (path as `String`, IO, or `CrImage::Image`)
+- **Returns**: `RGB?` (nil on failure)
+- **Description**: Convenience methods to extract just the single dominant color. Returns nil when extraction fails (missing file, corrupt image, unsupported format) rather than returning a sentinel value. Note: `nil` means failure, not that the color is black.
 
 ### `PrismatIQ.get_palette_with_stats(pixels, width, height, options, config)`
 - **Parameters**: Same as buffer-based extraction
@@ -163,11 +164,33 @@ Result type inspired by Rust's Result:
 ### `PrismatIQ::AccessibilityCalculator`
 Instance-based accessibility calculations with caching.
 
-### `PrismatIQ::ThemeDetector`  
-Instance-based theme detection with caching.
+### `PrismatIQ::ThemeDetector`
+Instance-based theme detection with caching. Luminance calculations delegate to an `AccessibilityCalculator`.
 
 ### `PrismatIQ::RGB`
 Color representation with utility methods:
 - `to_hex` / `from_hex` - Hex string conversion
+- `from_rgb_string(value)` - Parse `rgb(r, g, b)` / `rgba(r, g, b, a)` strings
+- `from_hsl(h, s, l)` - HSL to RGB conversion
+- `from_color_string(value)` - Unified parser for hex, rgb, rgba, hsl, hsla; returns `RGB?` (nil on parse failure)
 - `distance_to(other)` - Euclidean distance calculation
 - JSON/YAML serialization support
+
+### `PrismatIQ::YIQConverter`
+YIQ color space conversion and histogram index encoding:
+- `from_rgb(r, g, b)` - Convert RGB to YIQ `Color`
+- `quantize_from_rgb(r, g, b)` - Convert RGB to quantized YIQ tuple (0-31 per axis)
+- `to_index(y, i, q)` - Encode quantized YIQ to histogram index (single source of truth)
+- `from_index(index)` - Decode histogram index to quantized YIQ tuple (single source of truth)
+
+### `PrismatIQ::ColorExtractor`
+Simple dominant color extraction (buffer-based):
+- `extract_from_buffer(pixels, width, height, options, config)` - Returns `Array(RGB)?` (nil on failure or no valid pixels)
+
+### `PrismatIQ::ThemeExtractor`
+Instance-based theme extraction with caching:
+- `extract(source, options)` - Extract theme from file path or URL
+- `extract_from_file(path, options)` - Extract theme from local file
+- `extract_from_url(url, options)` - Extract theme from URL
+- `fix_theme(theme_json, legacy_bg, legacy_text)` - Fix theme JSON for WCAG compliance
+- `clear_cache` - Clear the instance's theme cache

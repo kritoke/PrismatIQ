@@ -102,7 +102,7 @@ module PrismatIQ
 
         @histo.each_with_index do |freq, index|
           next if freq == 0
-          y, i, q = VBox.from_index(index)
+          y, i, q = YIQConverter.from_index(index)
           y1 = y if y < y1
           y2 = y if y > y2
           i1 = i if i < i1

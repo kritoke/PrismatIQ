@@ -1,13 +1,11 @@
 module PrismatIQ
-  # Simple dominant color extractor (buffer-based)
-  # Public API: extract_from_buffer(pixels, width, height, sample_size = 1000)
   module ColorExtractor
     struct Options
       property sample_size : Int32 = 1000
       property alpha_threshold : UInt8 = 1_u8
     end
 
-    def self.extract_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.new, config : Config = Config.default) : Array(Int32)?
+    def self.extract_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.new, config : Config = Config.default) : Array(RGB)?
       return if width <= 0 || height <= 0
 
       total_i64 = width.to_i64 * height.to_i64
@@ -23,11 +21,11 @@ module PrismatIQ
 
       return if count == 0
 
-      r_avg = (r_total / count.to_i64).to_i32
-      g_avg = (g_total / count.to_i64).to_i32
-      b_avg = (b_total / count.to_i64).to_i32
+      r_avg = (r_total / count.to_i64).to_i32.clamp(0, 255)
+      g_avg = (g_total / count.to_i64).to_i32.clamp(0, 255)
+      b_avg = (b_total / count.to_i64).to_i32.clamp(0, 255)
 
-      [r_avg.clamp(0, 255), g_avg.clamp(0, 255), b_avg.clamp(0, 255)]
+      [RGB.new(r_avg, g_avg, b_avg)]
     rescue ex : ArgumentError | OverflowError
       config.log_debug "ColorExtractor.extract_from_buffer: exception: #{ex.class.name}: #{ex.message}"
       nil
@@ -72,18 +70,16 @@ module PrismatIQ
 
       af = a.to_f / 255.0
       if af > 0.001
-        # unpremultiply: use truncation/floor to match test expectations
         r = (r.to_f / af).to_i32.clamp(0, 255)
         g = (g.to_f / af).to_i32.clamp(0, 255)
         b = (b.to_f / af).to_i32.clamp(0, 255)
         {r, g, b}
       else
-        # alpha extremely small, ignore pixel
         {nil, nil, nil}
       end
     end
 
-    def self.extract_from_buffer(pixels : Array(UInt8), width : Int32, height : Int32, options : Options = Options.new, config : Config = Config.default) : Array(Int32)?
+    def self.extract_from_buffer(pixels : Array(UInt8), width : Int32, height : Int32, options : Options = Options.new, config : Config = Config.default) : Array(RGB)?
       extract_from_buffer(pixels.to_slice, width, height, options, config)
     end
   end

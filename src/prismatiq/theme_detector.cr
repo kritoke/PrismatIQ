@@ -57,12 +57,10 @@ module PrismatIQ
   # detector.clear_cache
   # ```
   class ThemeDetector
-    @luminance_cache : ThreadSafeCache(Tuple(Int32, Int32, Int32), Float64)
     @theme_cache : ThreadSafeCache(Tuple(Int32, Int32, Int32), Symbol)
     @accessibility : AccessibilityCalculator
 
     def initialize(accessibility : AccessibilityCalculator? = nil)
-      @luminance_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Float64).new(max_entries: 10_000)
       @theme_cache = ThreadSafeCache(Tuple(Int32, Int32, Int32), Symbol).new(max_entries: 10_000)
       @accessibility = accessibility || AccessibilityCalculator.new
     end
@@ -83,10 +81,7 @@ module PrismatIQ
     end
 
     def relative_luminance(rgb : RGB) : Float64
-      key = {rgb.r, rgb.g, rgb.b}
-      @luminance_cache.get_or_compute(key) do
-        LuminanceCalculator.relative_luminance(rgb)
-      end
+      @accessibility.relative_luminance(rgb)
     end
 
     def perceived_brightness(rgb : RGB) : Float64
@@ -171,14 +166,12 @@ module PrismatIQ
     end
 
     def clear_cache : Nil
-      @luminance_cache.clear
       @theme_cache.clear
     end
 
-    def cache_stats : NamedTuple(luminance: Int32, theme: Int32)
+    def cache_stats : NamedTuple(theme: Int32)
       {
-        luminance: @luminance_cache.size,
-        theme:     @theme_cache.size,
+        theme: @theme_cache.size,
       }
     end
   end

@@ -37,17 +37,13 @@ if fixed
 end
 puts
 
-puts "5. Extract theme with custom quality:"
-options = PrismatIQ::ThemeOptions.new
-options.quality = 500
-result = PrismatIQ.extract_theme("spec/fixtures/ico/golden_png_32.png", options)
+puts "5. Manage cache with an instance:"
+extractor = PrismatIQ::ThemeExtractor.new
+result = extractor.extract("spec/fixtures/ico/golden_png_32.png")
 if result
-  puts "   Background (quality=500): #{result.bg}"
+  puts "   Background (with cache): #{result.bg}"
 end
-puts
-
-puts "6. Clear the cache:"
-PrismatIQ.clear_theme_cache
+extractor.clear_cache
 puts "   Cache cleared"
 puts
 

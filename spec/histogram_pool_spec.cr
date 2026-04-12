@@ -121,25 +121,6 @@ describe PrismatIQ::Core::AdaptiveChunkSizer do
     end
   end
 
-  describe ".calculate" do
-    it "returns image size for small images" do
-      size = PrismatIQ::Core::AdaptiveChunkSizer.calculate(50_000, 8)
-      size.should eq(50_000)
-    end
-
-    it "returns clamped chunk size for medium images" do
-      size = PrismatIQ::Core::AdaptiveChunkSizer.calculate(500_000, 4)
-      size.should be >= 10_000
-      size.should be <= 100_000
-    end
-
-    it "returns clamped chunk size for large images" do
-      size = PrismatIQ::Core::AdaptiveChunkSizer.calculate(10_000_000, 8)
-      size.should be >= 50_000
-      size.should be <= 500_000
-    end
-  end
-
   describe ".optimal_thread_count" do
     it "returns 1 for small images" do
       count = PrismatIQ::Core::AdaptiveChunkSizer.optimal_thread_count(50_000, 16)

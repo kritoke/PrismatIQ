@@ -113,7 +113,7 @@ module PrismatIQ
     end
 
     def thread_count_for(height : Int32, requested : Int32) : Int32
-      t = requested <= 0 ? (threads || CPU.cores) : requested
+      t = requested <= 0 ? (threads || Utils::SystemInfo.cpu_count) : requested
       {t, height}.min
     end
 

@@ -61,12 +61,6 @@ module PrismatIQ
       @count.to_f64 * volume
     end
 
-    def contains?(yiq : Color) : Bool
-      yiq.y >= @y1 && yiq.y <= @y2 &&
-        yiq.i >= @i1 && yiq.i <= @i2 &&
-        yiq.q >= @q1 && yiq.q <= @q2
-    end
-
     def average_color : Color
       if @count == 0
         return Color.new(0, 0, 0)
@@ -103,7 +97,7 @@ module PrismatIQ
 
       @histo.each_with_index do |freq, index|
         next if freq == 0
-        y, i, q = VBox.from_index(index)
+        y, i, q = YIQConverter.from_index(index)
         if y >= @y1 && y <= @y2 && i >= @i1 && i <= @i2 && q >= @q1 && q <= @q2
           y_sum += y * freq.to_f64
           i_sum += i * freq.to_f64
@@ -208,7 +202,7 @@ module PrismatIQ
       indices = Array(Int32).new
       @histo.each_with_index do |freq, index|
         next if freq == 0
-        y, i, q = VBox.from_index(index)
+        y, i, q = YIQConverter.from_index(index)
         case axis
         when 0
           indices << y if y >= @y1 && y <= @y2
@@ -221,22 +215,11 @@ module PrismatIQ
       indices
     end
 
-    def self.from_index(index : Int32) : Tuple(Int32, Int32, Int32)
-      y = index >> 10
-      i = (index >> 5) & 31
-      q = index & 31
-      {y, i, q}
-    end
-
-    def self.to_index(y : Int32, i : Int32, q : Int32) : Int32
-      (y << 10) | (i << 5) | q
-    end
-
     def recalc_count : VBox
       c = 0
       @histo.each_with_index do |freq, index|
         next if freq == 0
-        y, i, q = VBox.from_index(index)
+        y, i, q = YIQConverter.from_index(index)
         if y >= @y1 && y <= @y2 && i >= @i1 && i <= @i2 && q >= @q1 && q <= @q2
           c += freq.to_i
         end

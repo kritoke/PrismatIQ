@@ -45,10 +45,6 @@ module PrismatIQ
       @accessibility = AccessibilityCalculator.new
     end
 
-    # Extract a theme (background + text colors) from an image or URL.
-    # @param source [String] File path or URL to the image
-    # @param options [ThemeOptions] Configuration options (cache_ttl, quality, http_timeout, etc.)
-    # @return [ThemeResult?] The extracted theme result, or nil if extraction fails
     def extract(source : String, options : ThemeOptions = ThemeOptions.new) : ThemeResult?
       skip_val = options.skip_if_configured
       return if skip_val && !skip_val.empty?
@@ -107,11 +103,6 @@ module PrismatIQ
       build_theme_result(bg_rgb)
     end
 
-    # Validate and fix a theme JSON string, ensuring text colors meet contrast requirements.
-    # @param theme_json [String] JSON string with "bg" and optional "text" keys
-    # @param legacy_bg [String?] Fallback background color if not in JSON
-    # @param legacy_text [String?] Fallback text color if not in JSON
-    # @return [String?] Fixed theme JSON string, or nil if invalid
     def fix_theme(theme_json : String, legacy_bg : String? = nil, legacy_text : String? = nil) : String?
       bg_rgb, text_hash = parse_theme_json(theme_json)
 
@@ -137,7 +128,7 @@ module PrismatIQ
       ThemeResult.new(bg_rgb, text_colors[:light].to_hex, text_colors[:dark].to_hex).to_json
     end
 
-    private def parse_theme_json(theme_json : String) : Tuple(Array(Int32)?, Hash(String, String))
+    private def parse_theme_json(theme_json : String) : Tuple(RGB?, Hash(String, String))
       bg_rgb = nil
       text_hash = {} of String => String
 
@@ -164,7 +155,7 @@ module PrismatIQ
       @cache.clear
     end
 
-    private def extract_ico_bg(path : String, options : ThemeOptions) : Array(Int32)?
+    private def extract_ico_bg(path : String, options : ThemeOptions) : RGB?
       ico = ICOFile.from_path(path, @config)
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
@@ -173,7 +164,7 @@ module PrismatIQ
       return
     end
 
-    private def extract_ico_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : Array(Int32)?
+    private def extract_ico_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : RGB?
       ico = ICOFile.from_slice(data, @config)
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
@@ -182,16 +173,13 @@ module PrismatIQ
       return
     end
 
-    private def extract_image_bg(path : String, options : ThemeOptions) : Array(Int32)?
-      # Handle SVG files separately since CrImage doesn't support them
+    private def extract_image_bg(path : String, options : ThemeOptions) : RGB?
       if path.downcase.ends_with?(".svg")
         svg_colors = SVGColorExtractor.extract_from_file(path)
         return unless svg_colors.ok?
 
-        # Use the first extracted color as background candidate
         return unless svg_colors.value.size > 0
-        first_color = svg_colors.value[0]
-        return [first_color.r, first_color.g, first_color.b]
+        svg_colors.value[0]
       end
 
       img = CrImage.read(path)
@@ -210,15 +198,13 @@ module PrismatIQ
       return
     end
 
-    private def extract_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : Array(Int32)?
-      # Check if data appears to be SVG (starts with <svg or <?xml)
+    private def extract_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : RGB?
       if data.size > 0 && data[0] == '<'.ord
         svg_content = String.new(data)
         if svg_content.downcase.includes?("<svg")
           svg_colors = SVGColorExtractor.extract_colors(svg_content)
           return unless svg_colors.size > 0
-          first_color = svg_colors[0]
-          return [first_color.r, first_color.g, first_color.b]
+          svg_colors[0]
         end
       end
 
@@ -230,10 +216,11 @@ module PrismatIQ
       return
     end
 
-    private def extract_pixel_colors(pixels, w, h, options : ThemeOptions) : Array(Int32)?
+    private def extract_pixel_colors(pixels, w, h, options : ThemeOptions) : RGB?
       extractor_opts = ColorExtractor::Options.new
       extractor_opts.sample_size = options.quality
-      ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
+      result = ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
+      result.try(&.first?)
     end
 
     private def fetch_url(uri : URI, options : ThemeOptions) : Slice(UInt8)?
@@ -356,21 +343,19 @@ module PrismatIQ
       HTTP::Client.new(io, original_host)
     end
 
-    private def build_theme_result(bg_rgb : Array(Int32)) : ThemeResult
+    private def build_theme_result(bg_rgb : RGB) : ThemeResult
       text_colors = find_text_colors(bg_rgb)
       ThemeResult.new(bg_rgb, text_colors[:light].to_hex, text_colors[:dark].to_hex)
     end
 
-    private def find_text_colors(bg_rgb : Array(Int32)) : NamedTuple(light: RGB, dark: RGB)
-      bg = RGB.new(bg_rgb[0], bg_rgb[1], bg_rgb[2])
-
+    private def find_text_colors(bg_rgb : RGB) : NamedTuple(light: RGB, dark: RGB)
       {
-        light: find_light_contrast_text(bg),
-        dark:  find_dark_contrast_text(bg),
+        light: find_darkest_compliant_text(bg_rgb),
+        dark:  find_lightest_compliant_text(bg_rgb),
       }
     end
 
-    private def find_light_contrast_text(bg : RGB) : RGB
+    private def find_darkest_compliant_text(bg : RGB) : RGB
       (0..255).step(Constants::ThemeExtraction::GRAY_STEP) do |val|
         candidate = RGB.new(val, val, val)
         return candidate if @accessibility.contrast_ratio(candidate, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
@@ -378,7 +363,7 @@ module PrismatIQ
       RGB.new(Constants::ThemeExtraction::DARK_TEXT_FALLBACK[0], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[1], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[2])
     end
 
-    private def find_dark_contrast_text(bg : RGB) : RGB
+    private def find_lightest_compliant_text(bg : RGB) : RGB
       val = 255
       while val >= 0
         candidate = RGB.new(val, val, val)
@@ -388,31 +373,19 @@ module PrismatIQ
       RGB.new(Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[0], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[1], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[2])
     end
 
-    private def parse_to_rgb(color_str : String?) : Array(Int32)?
+    private def parse_to_rgb(color_str : String?) : RGB?
       return unless color_str
       s = color_str.strip
-      begin
-        if s.starts_with?("rgb(") || s.starts_with?("rgba(")
-          rgb = RGB.from_rgb_string(s)
-          return [rgb.r, rgb.g, rgb.b]
-        end
-        if s.starts_with?("#")
-          rgb = RGB.from_hex(s)
-          return [rgb.r, rgb.g, rgb.b]
-        end
-      rescue ValidationError
-      end
+      RGB.from_color_string(s)
+    rescue ValidationError
       nil
     end
 
-    private def meets_contrast?(text_color : String, bg_rgb : Array(Int32)) : Bool
+    private def meets_contrast?(text_color : String, bg_rgb : RGB) : Bool
       text_rgb = parse_to_rgb(text_color)
       return false unless text_rgb
 
-      text = RGB.new(text_rgb[0], text_rgb[1], text_rgb[2])
-      bg = RGB.new(bg_rgb[0], bg_rgb[1], bg_rgb[2])
-
-      @accessibility.contrast_ratio(text, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
+      @accessibility.contrast_ratio(text_rgb, bg_rgb) >= Constants::WCAG::CONTRAST_RATIO_AA
     end
   end
 end

@@ -2,13 +2,13 @@ require "../spec_helper"
 
 describe "PrismatIQ::ColorExtractor" do
   it "extracts dominant color from a simple solid buffer" do
-    # Load canonical fixture for a 4x4 solid buffer
     fixture = File.join(__DIR__, "..", "fixtures", "solid_4x4_rgba.bin")
     pixels, width, height = load_rgba_fixture(fixture)
 
-    rgb = PrismatIQ::ColorExtractor.extract_from_buffer(pixels, width, height)
-    rgb.should_not be_nil
-    rgb.should eq [120, 200, 40]
+    result = PrismatIQ::ColorExtractor.extract_from_buffer(pixels, width, height)
+    result.should_not be_nil
+    rgb = result.as(Array(PrismatIQ::RGB)).first
+    rgb.should eq PrismatIQ::RGB.new(120, 200, 40)
   end
 
   it "returns nil for non-positive dimensions" do
@@ -22,18 +22,20 @@ describe "PrismatIQ::ColorExtractor" do
     fixture = File.join(__DIR__, "..", "fixtures", "transparent_2x1.bin")
     pixels, width, height = load_rgba_fixture(fixture)
 
-    rgb = PrismatIQ::ColorExtractor.extract_from_buffer(pixels, width, height)
-    rgb.should eq [10, 20, 30]
+    result = PrismatIQ::ColorExtractor.extract_from_buffer(pixels, width, height)
+    result.should_not be_nil
+    rgb = result.as(Array(PrismatIQ::RGB)).first
+    rgb.should eq PrismatIQ::RGB.new(10, 20, 30)
   end
 
   it "unpremultiplies partially transparent pixels correctly" do
     fixture = File.join(__DIR__, "..", "fixtures", "unpremult_1x1.bin")
     pixels, width, height = load_rgba_fixture(fixture)
 
-    rgb = PrismatIQ::ColorExtractor.extract_from_buffer(pixels, width, height)
-    rgb.should_not be_nil
-    # Expect integer unpremultiplied result (rounded down in implementation)
-    rgb.should eq [199, 99, 49]
+    result = PrismatIQ::ColorExtractor.extract_from_buffer(pixels, width, height)
+    result.should_not be_nil
+    rgb = result.as(Array(PrismatIQ::RGB)).first
+    rgb.should eq PrismatIQ::RGB.new(199, 99, 49)
   end
 
   it "is deterministic for repeated calls on the same buffer" do
@@ -43,6 +45,7 @@ describe "PrismatIQ::ColorExtractor" do
     first = PrismatIQ::ColorExtractor.extract_from_buffer(first_pixels, width, height)
     second = PrismatIQ::ColorExtractor.extract_from_buffer(first_pixels, width, height)
     first.should eq second
-    first.should eq [127, 127, 0]
+    first_rgb = first.as(Array(PrismatIQ::RGB)).first
+    first_rgb.should eq PrismatIQ::RGB.new(127, 127, 0)
   end
 end

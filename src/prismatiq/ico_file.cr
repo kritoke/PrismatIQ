@@ -114,15 +114,8 @@ module PrismatIQ
     private def find_png_entry(index : Int32, entry_base : Int32) : Tuple(Int32, Int32, Slice(UInt8))?
       off = entry_base + index * 16
 
-      size = @data[off + 8].to_u64 |
-             (@data[off + 9].to_u64 << 8) |
-             (@data[off + 10].to_u64 << 16) |
-             (@data[off + 11].to_u64 << 24)
-
-      image_offset = @data[off + 12].to_u64 |
-                     (@data[off + 13].to_u64 << 8) |
-                     (@data[off + 14].to_u64 << 16) |
-                     (@data[off + 15].to_u64 << 24)
+      size = BinaryReader.read_u32_le(@data, off + 8).to_u64
+      image_offset = BinaryReader.read_u32_le(@data, off + 12).to_u64
 
       return if size > MAX_ENTRY_SIZE
       return if image_offset + size > @data.size || size < 8
@@ -174,15 +167,8 @@ module PrismatIQ
     private def find_bmp_entry(index : Int32, entry_base : Int32) : Tuple(Int32, Int32, Int32, Slice(UInt8))?
       off = entry_base + index * 16
 
-      size = @data[off + 8].to_u64 |
-             (@data[off + 9].to_u64 << 8) |
-             (@data[off + 10].to_u64 << 16) |
-             (@data[off + 11].to_u64 << 24)
-
-      image_offset = @data[off + 12].to_u64 |
-                     (@data[off + 13].to_u64 << 8) |
-                     (@data[off + 14].to_u64 << 16) |
-                     (@data[off + 15].to_u64 << 24)
+      size = BinaryReader.read_u32_le(@data, off + 8).to_u64
+      image_offset = BinaryReader.read_u32_le(@data, off + 12).to_u64
 
       return if image_offset + size > @data.size || size < 40
 

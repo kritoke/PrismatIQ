@@ -4,7 +4,7 @@ require "math"
 module PrismatIQ
   module SVGColorExtractor
     COLOR_ATTRIBUTES = ["fill", "stroke", "stop-color", "flood-color", "lighting-color", "color"]
-    MAX_SVG_DEPTH = 256
+    MAX_SVG_DEPTH    = 256
 
     SVG_NAMED_COLORS = {
       "black"                => {0, 0, 0},
@@ -170,7 +170,7 @@ module PrismatIQ
       end
 
       colors
-    rescue ex : XML::Error
+    rescue XML::Error
       [] of RGB
     end
 
@@ -215,101 +215,11 @@ module PrismatIQ
         return RGB.new(0, 0, 0)
       end
 
-      if value.starts_with?("#")
-        return parse_hex(value)
-      end
-
-      if value.starts_with?("rgb(") || value.starts_with?("rgba(")
-        return parse_rgb(value)
-      end
-
-      if value.starts_with?("hsl(") || value.starts_with?("hsla(")
-        return parse_hsl(value)
-      end
-
       if rgb_tuple = SVG_NAMED_COLORS[value]?
         return RGB.new(rgb_tuple[0], rgb_tuple[1], rgb_tuple[2])
       end
 
-      nil
-    end
-
-    private def self.parse_hex(value : String) : RGB?
-      RGB.from_hex(value)
-    rescue ValidationError
-      nil
-    end
-
-    private def self.parse_rgb(value : String) : RGB?
-      RGB.from_rgb_string(value)
-    rescue ValidationError
-      nil
-    end
-
-    private def self.parse_hsl(value : String) : RGB?
-      inner = value.gsub(/^hsla?\(/, "").gsub(/\)$/, "")
-
-      parts = inner.split(',').map(&.strip)
-      return unless parts.size >= 3
-
-      hue_val = parse_hue(parts[0])
-      sat_val = parse_percentage(parts[1])
-      light_val = parse_percentage(parts[2])
-
-      return unless hue_val && sat_val && light_val
-
-      hsl_to_rgb(hue_val, sat_val, light_val)
-    rescue
-      nil
-    end
-
-    private def self.parse_hue(value : String) : Float64?
-      value = value.strip
-      value = value.rchop("deg") if value.ends_with?("deg")
-      value = value.rchop("°") if value.ends_with?("°")
-      value.to_f?
-    end
-
-    private def self.parse_percentage(value : String) : Float64?
-      value = value.strip
-      return unless value.ends_with?("%")
-      value.rchop('%').to_f?
-    end
-
-    private def self.hsl_to_rgb(h : Float64, s : Float64, l : Float64) : RGB
-      s /= 100.0
-      l /= 100.0
-
-      if s == 0
-        val = (l * 255).round.to_i
-        return RGB.new(val, val, val)
-      end
-
-      h = ((h % 360.0) + 360.0) % 360.0
-
-      c = (1.0 - (2.0 * l - 1.0).abs) * s
-      x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs)
-      m = l - c / 2.0
-
-      r1, g1, b1 = if h < 60.0
-                     {c, x, 0.0}
-                   elsif h < 120.0
-                     {x, c, 0.0}
-                   elsif h < 180.0
-                     {0.0, c, x}
-                   elsif h < 240.0
-                     {0.0, x, c}
-                   elsif h < 300.0
-                     {x, 0.0, c}
-                   else
-                     {c, 0.0, x}
-                   end
-
-      r = ((r1 + m) * 255).round.to_i.clamp(0, 255)
-      g = ((g1 + m) * 255).round.to_i.clamp(0, 255)
-      b = ((b1 + m) * 255).round.to_i.clamp(0, 255)
-
-      RGB.new(r, g, b)
+      RGB.from_color_string(value)
     end
 
     MAX_SVG_SIZE = 100 * 1024 * 1024_i64
@@ -336,8 +246,8 @@ module PrismatIQ
       Result(Array(RGB), Error).ok(colors)
     rescue ex : XML::Error
       Result(Array(RGB), Error).err(Error.corrupted_image("Invalid SVG XML: #{ex.message}"))
-    rescue ex : Exception
-      Result(Array(RGB), Error).err(Error.corrupted_image("Failed to parse SVG: #{ex.message}"))
+    rescue ex : IO::Error
+      Result(Array(RGB), Error).err(Error.corrupted_image("Failed to read SVG file: #{ex.message}"))
     end
   end
 end

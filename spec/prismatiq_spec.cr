@@ -71,8 +71,8 @@ describe PrismatIQ::VBox do
 
   describe "index conversion" do
     it "converts index to coordinates and back" do
-      y, i, q = PrismatIQ::VBox.from_index(1000)
-      index = PrismatIQ::VBox.to_index(y, i, q)
+      y, i, q = PrismatIQ::YIQConverter.from_index(1000)
+      index = PrismatIQ::YIQConverter.to_index(y, i, q)
       index.should eq(1000)
     end
   end

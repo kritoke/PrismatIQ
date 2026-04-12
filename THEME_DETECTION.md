@@ -243,7 +243,7 @@ end
 The `ThemeDetector` uses intelligent caching to improve performance:
 
 - **Theme detection results** are cached per RGB color
-- **Luminance calculations** are cached and shared with accessibility calculations
+- **Luminance calculations** are delegated to `AccessibilityCalculator`, which provides shared cached computations
 - **Palette analysis results** benefit from cached individual color detections
 
 ### Cache Management

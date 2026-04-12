@@ -54,20 +54,6 @@ module PrismatIQ
     end
 
     class AdaptiveChunkSizer
-      def self.calculate(image_size : Int32, thread_count : Int32) : Int32
-        if image_size < Constants::ParallelProcessing::SMALL_IMAGE_THRESHOLD
-          image_size
-        elsif image_size < Constants::ParallelProcessing::MEDIUM_IMAGE_THRESHOLD
-          (image_size // thread_count // 2).clamp(
-            Constants::ParallelProcessing::MIN_CHUNK_SIZE_SMALL,
-            Constants::ParallelProcessing::MAX_CHUNK_SIZE_SMALL)
-        else
-          (image_size // thread_count).clamp(
-            Constants::ParallelProcessing::MIN_CHUNK_SIZE_LARGE,
-            Constants::ParallelProcessing::MAX_CHUNK_SIZE_LARGE)
-        end
-      end
-
       def self.should_use_parallel?(image_size : Int32) : Bool
         image_size > Constants::ParallelProcessing::SMALL_IMAGE_THRESHOLD
       end

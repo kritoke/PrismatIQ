@@ -19,7 +19,7 @@ module PrismatIQ
             ch.send(palette)
           rescue ex : Exception
             @config.log_debug "get_palette_channel: #{ex.class}: #{ex.message}"
-            ch.send([RGB.new(0, 0, 0)])
+            ch.send([] of RGB)
           ensure
             ch.close
           end
@@ -51,46 +51,39 @@ module PrismatIQ
         palette.map(&.to_hex)
       end
 
-      def get_color_from_path(path : String) : RGB
+      def get_color_from_path(path : String) : RGB?
         options = Options.new(color_count: 1)
         begin
           extractor = PaletteExtractor.new(@config)
           palette = extractor.extract_from_path(path, options)
-          palette.first? || RGB.new(0, 0, 0)
+          palette.first?
         rescue ex : Exception
           @config.log_debug "get_color_from_path: #{ex.class}: #{ex.message}"
-          RGB.new(0, 0, 0)
+          nil
         end
       end
 
-      def get_color_from_io(io : IO) : RGB
+      def get_color_from_io(io : IO) : RGB?
         options = Options.new(color_count: 1)
         begin
           extractor = PaletteExtractor.new(@config)
           palette = extractor.extract_from_io(io, options)
-          palette.first? || RGB.new(0, 0, 0)
+          palette.first?
         rescue ex : Exception
           @config.log_debug "get_color_from_io: #{ex.class}: #{ex.message}"
-          RGB.new(0, 0, 0)
+          nil
         end
       end
 
-      def get_color(img) : RGB
+      def get_color(img : CrImage::Image) : RGB?
         options = Options.new(color_count: 1)
-        if img.is_a?(CrImage::Image)
+        begin
           extractor = PaletteExtractor.new(@config)
           palette = extractor.extract_from_image(img, options)
-          palette.first? || RGB.new(0, 0, 0)
-        else
-          begin
-            read_img = CrImage.read(img)
-            extractor = PaletteExtractor.new(@config)
-            palette = extractor.extract_from_image(read_img.as(CrImage::Image), options)
-            palette.first? || RGB.new(0, 0, 0)
-          rescue ex : Exception
-            @config.log_debug "get_color: #{ex.class}: #{ex.message}"
-            RGB.new(0, 0, 0)
-          end
+          palette.first?
+        rescue ex : Exception
+          @config.log_debug "get_color: #{ex.class}: #{ex.message}"
+          nil
         end
       end
 

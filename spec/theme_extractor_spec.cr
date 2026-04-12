@@ -10,8 +10,8 @@ describe PrismatIQ::ThemeResult do
       result.text["dark"].should eq("#000000")
     end
 
-    it "creates from RGB array and text colors" do
-      result = PrismatIQ::ThemeResult.new([100, 150, 200], "#ffffff", "#000000")
+    it "creates from RGB struct and text colors" do
+      result = PrismatIQ::ThemeResult.new(PrismatIQ::RGB.new(100, 150, 200), "#ffffff", "#000000")
       result.bg.should eq("rgb(100, 150, 200)")
       result.text["light"].should eq("#ffffff")
       result.text["dark"].should eq("#000000")
@@ -20,7 +20,7 @@ describe PrismatIQ::ThemeResult do
 
   describe "#to_json" do
     it "serializes to JSON" do
-      result = PrismatIQ::ThemeResult.new([100, 150, 200], "#ffffff", "#000000")
+      result = PrismatIQ::ThemeResult.new(PrismatIQ::RGB.new(100, 150, 200), "#ffffff", "#000000")
       json = result.to_json
       json.should contain("\"bg\":\"rgb(100, 150, 200)\"")
       json.should contain("\"text\":{")
