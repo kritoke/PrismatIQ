@@ -168,7 +168,7 @@ module PrismatIQ
       ico = ICOFile.from_path(path, @config)
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
-    rescue ex : IO::Error | ArgumentError | IndexError
+    rescue ex : IO::Error | ArgumentError | IndexError | OverflowError
       @config.log_debug "extract_ico_bg: #{ex.class}: #{ex.message}"
       return
     end
@@ -177,7 +177,7 @@ module PrismatIQ
       ico = ICOFile.from_slice(data, @config)
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
-    rescue ex : IO::Error | ArgumentError | IndexError
+    rescue ex : IO::Error | ArgumentError | IndexError | OverflowError
       @config.log_debug "extract_ico_buffer_bg: #{ex.class}: #{ex.message}"
       return
     end
@@ -205,7 +205,7 @@ module PrismatIQ
       return unless rgba
 
       extract_pixel_colors(rgba.pix, w.to_i32, h.to_i32, options)
-    rescue ex : IO::Error | ArgumentError
+    rescue ex : IO::Error | ArgumentError | OverflowError
       @config.log_debug "extract_image_bg: #{ex.class}: #{ex.message}"
       return
     end
@@ -246,10 +246,6 @@ module PrismatIQ
       return unless host
       return unless {"http", "https"}.includes?(uri.scheme)
 
-      if allowlist_allows?(host)
-        return fetch_url_without_ssrf_checks(uri, options)
-      end
-
       port = uri.port || (uri.scheme == "https" ? 443 : 80)
       use_tls = uri.scheme == "https"
 
@@ -268,36 +264,6 @@ module PrismatIQ
 
         default_port = use_tls ? 443 : 80
         host_value = port == default_port ? host : "#{host}:#{port}"
-
-        headers = HTTP::Headers{
-          "User-Agent" => "PrismatIQ/#{Version::VERSION}",
-          "Accept"     => "image/*,*/*;q=0.8",
-          "Host"       => host_value,
-        }
-
-        response = client.get(uri.request_target, headers: headers)
-        return unless response_valid?(response, options)
-
-        stream_body(response.body_io, options.max_file_size)
-      rescue ex : IO::Error | OpenSSL::Error | ArgumentError
-        @config.log_debug "fetch_url: exception #{ex.class.name}: #{ex.message}"
-        nil
-      ensure
-        client.try(&.close)
-      end
-    end
-
-    private def fetch_url_without_ssrf_checks(uri : URI, options : ThemeOptions) : Slice(UInt8)?
-      port = uri.port || (uri.scheme == "https" ? 443 : 80)
-      use_tls = uri.scheme == "https"
-
-      begin
-        client = HTTP::Client.new(uri.host.not_nil!, port, tls: use_tls)
-        client.read_timeout = options.http_timeout.seconds
-        client.connect_timeout = options.http_timeout.seconds
-
-        default_port = use_tls ? 443 : 80
-        host_value = port == default_port ? uri.host.not_nil! : "#{uri.host.not_nil!}:#{port}"
 
         headers = HTTP::Headers{
           "User-Agent" => "PrismatIQ/#{Version::VERSION}",
@@ -388,16 +354,6 @@ module PrismatIQ
       end
 
       HTTP::Client.new(io, original_host)
-    end
-
-    private def allowlist_allows?(host : String) : Bool
-      allowlist = @config.ssrf_allowlist
-      return false unless allowlist
-
-      host_lower = host.downcase
-      allowlist.any? do |allowed|
-        host_lower == allowed.downcase
-      end
     end
 
     private def build_theme_result(bg_rgb : Array(Int32)) : ThemeResult

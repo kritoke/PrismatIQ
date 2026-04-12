@@ -4,6 +4,7 @@ require "math"
 module PrismatIQ
   module SVGColorExtractor
     COLOR_ATTRIBUTES = ["fill", "stroke", "stop-color", "flood-color", "lighting-color", "color"]
+    MAX_SVG_DEPTH = 256
 
     SVG_NAMED_COLORS = {
       "black"                => {0, 0, 0},
@@ -165,34 +166,43 @@ module PrismatIQ
       color_values = Set(String).new
 
       if root = doc.root
-        extract_colors_recursive(root, colors, color_values)
+        extract_colors_iterative(root, colors, color_values)
       end
 
       colors
+    rescue ex : XML::Error
+      [] of RGB
     end
 
-    private def self.extract_colors_recursive(node : XML::Node, colors : Array(RGB), seen : Set(String))
-      if node.element?
-        COLOR_ATTRIBUTES.each do |attr|
-          if value = node[attr]?
-            value = value.strip
-            next if value.empty? || value == "none" || value == "inherit"
-            next if seen.includes?(value)
+    private def self.extract_colors_iterative(root : XML::Node, colors : Array(RGB), seen : Set(String))
+      stack = [{root, 0}]
 
-            if rgb = parse_color(value)
-              hex_key = rgb.to_hex
-              unless seen.includes?(hex_key)
-                colors << rgb
-                seen << hex_key
+      until stack.empty?
+        node, depth = stack.pop
+        next if depth > MAX_SVG_DEPTH
+
+        if node.element?
+          COLOR_ATTRIBUTES.each do |attr|
+            if value = node[attr]?
+              value = value.strip
+              next if value.empty? || value == "none" || value == "inherit"
+              next if seen.includes?(value)
+
+              if rgb = parse_color(value)
+                hex_key = rgb.to_hex
+                unless seen.includes?(hex_key)
+                  colors << rgb
+                  seen << hex_key
+                end
+                seen << value
               end
-              seen << value
             end
           end
         end
-      end
 
-      node.children.each do |child|
-        extract_colors_recursive(child, colors, seen)
+        node.children.to_a.reverse_each do |child|
+          stack << {child, depth + 1}
+        end
       end
     end
 

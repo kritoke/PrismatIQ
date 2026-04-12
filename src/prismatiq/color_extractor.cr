@@ -10,10 +10,11 @@ module PrismatIQ
     def self.extract_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.new, config : Config = Config.default) : Array(Int32)?
       return if width <= 0 || height <= 0
 
-      total = width.to_i32 * height.to_i32
-      expected_size = total.to_i64 * 4
-      return if pixels.size < expected_size
+      total_i64 = width.to_i64 * height.to_i64
+      expected_size = total_i64 * 4
+      return if total_i64 > Int32::MAX.to_i64 || pixels.size < expected_size
 
+      total = total_i64.to_i32
       sample_size = options.sample_size > 0 ? options.sample_size : 1000
       step = (total.to_f / sample_size.to_f).ceil.to_i32
       step = 1 if step < 1
@@ -27,7 +28,7 @@ module PrismatIQ
       b_avg = (b_total / count.to_i64).to_i32
 
       [r_avg.clamp(0, 255), g_avg.clamp(0, 255), b_avg.clamp(0, 255)]
-    rescue ex : ArgumentError
+    rescue ex : ArgumentError | OverflowError
       config.log_debug "ColorExtractor.extract_from_buffer: exception: #{ex.class.name}: #{ex.message}"
       nil
     end

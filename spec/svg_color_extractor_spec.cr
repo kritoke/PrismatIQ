@@ -222,6 +222,26 @@ describe PrismatIQ::SVGColorExtractor do
       colors.size.should eq(1)
     end
 
+    it "handles deeply nested svg without stack overflow" do
+      svg = "<svg>"
+      300.times do
+        svg += "<g>"
+      end
+      svg += %(<rect fill="#FF0000"/>)
+      300.times do
+        svg += "</g>"
+      end
+      svg += "</svg>"
+
+      colors = PrismatIQ::SVGColorExtractor.extract_colors(svg)
+      colors.size.should be <= 1
+    end
+
+    it "returns empty colors for entity declarations" do
+      colors = PrismatIQ::SVGColorExtractor.extract_colors("<svg><!ENTITY x SYSTEM \"file:///etc/passwd\"><rect fill=\"#FF0000\"/></svg>")
+      colors.should eq([] of PrismatIQ::RGB)
+    end
+
     it "handles inherited fill from group" do
       svg = <<-SVG
         <svg>

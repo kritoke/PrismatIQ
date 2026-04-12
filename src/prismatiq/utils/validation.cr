@@ -22,10 +22,10 @@ module PrismatIQ
         real_path = real_path_res.value
         return Result(String, Error).err(Error.invalid_image_path(path, "Access to system directories not allowed")) if system_directory?(real_path)
 
-        ext = File.extname(path).downcase
+        ext = File.extname(real_path).downcase
         return Result(String, Error).err(Error.unsupported_format(ext)) unless SUPPORTED_EXTENSIONS.includes?(ext)
 
-        size_result = validate_file_size(path)
+        size_result = validate_file_size(real_path)
         return size_result if size_result.err?
 
         Result(String, Error).ok(real_path)
