@@ -283,13 +283,14 @@ module PrismatIQ
     end
 
     private def resolve_and_validate_host(host : String) : Socket::IPAddress | Symbol?
-      return unless @config.ssrf_protection?
-
       resolved_ips = Utils::IPValidator.resolve_host(host)
       if resolved_ips.empty?
+        return unless @config.ssrf_protection?
         @config.log_debug "fetch_url: DNS resolution failed for '#{host}'"
         return :blocked
       end
+
+      return resolved_ips.first unless @config.ssrf_protection?
 
       resolved_ips.each do |ip|
         if Utils::IPValidator.private_address?(ip)

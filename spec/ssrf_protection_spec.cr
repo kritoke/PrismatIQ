@@ -63,6 +63,10 @@ describe PrismatIQ::Utils::IPValidator do
       PrismatIQ::Utils::IPValidator.private_ipv6?("::ffff:127.0.0.1").should be_true
     end
 
+    it "returns true for full-form IPv4-mapped loopback 0:0:0:0:0:ffff:127.0.0.1" do
+      PrismatIQ::Utils::IPValidator.private_ipv6?("0:0:0:0:0:ffff:127.0.0.1").should be_true
+    end
+
     it "returns true for IPv4-mapped RFC1918 ::ffff:192.168.1.1" do
       PrismatIQ::Utils::IPValidator.private_ipv6?("::ffff:192.168.1.1").should be_true
     end
@@ -77,6 +81,10 @@ describe PrismatIQ::Utils::IPValidator do
 
     it "returns false for IPv4-mapped public IP ::ffff:8.8.8.8" do
       PrismatIQ::Utils::IPValidator.private_ipv6?("::ffff:8.8.8.8").should be_false
+    end
+
+    it "returns false for full-form IPv4-mapped public IP 0:0:0:0:0:ffff:8.8.8.8" do
+      PrismatIQ::Utils::IPValidator.private_ipv6?("0:0:0:0:0:ffff:8.8.8.8").should be_false
     end
 
     it "returns true for IPv4-mapped 0.0.0.0/8 ::ffff:0.0.0.1" do

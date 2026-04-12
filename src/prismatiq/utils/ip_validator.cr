@@ -68,12 +68,8 @@ module PrismatIQ
       private def self.normalize_ipv6(address : String) : String
         addr = address.downcase
 
-        if addr.includes?("::") && addr.includes?(".")
-          return expand_ipv4_mapped_compressed(addr)
-        end
-
         if addr.includes?(".")
-          return translate_ipv4_mapped(addr).ljust(32, '0')
+          return normalize_ipv6_with_ipv4(addr)
         end
 
         if addr.includes?("::")
@@ -92,23 +88,31 @@ module PrismatIQ
         addr.ljust(32, '0')
       end
 
-      private def self.expand_ipv4_mapped_compressed(address : String) : String
-        parts = address.split("::", 2)
-        left_str = parts[0]? || ""
-        right_str = parts[1]? || ""
+      private def self.normalize_ipv6_with_ipv4(address : String) : String
+        left_groups, right_groups, ipv4_str = if address.includes?("::")
+                                                parts = address.split("::", 2)
+                                                left_str = parts[0]? || ""
+                                                right_str = parts[1]? || ""
 
-        left_groups = left_str.empty? ? [] of String : left_str.split(":")
+                                                left_groups = left_str.empty? ? [] of String : left_str.split(":")
 
-        last_colon = right_str.rindex(':')
-        if last_colon
-          ipv6_right = right_str[0...last_colon]
-          ipv4_str = right_str[(last_colon + 1)..]
-        else
-          ipv6_right = ""
-          ipv4_str = right_str
-        end
-
-        right_groups = ipv6_right.empty? ? [] of String : ipv6_right.split(":")
+                                                last_colon = right_str.rindex(':')
+                                                if last_colon
+                                                  ipv6_right = right_str[0...last_colon]
+                                                  ipv4_value = right_str[(last_colon + 1)..]
+                                                  right_groups = ipv6_right.empty? ? [] of String : ipv6_right.split(":")
+                                                else
+                                                  ipv4_value = right_str
+                                                  right_groups = [] of String
+                                                end
+                                                {left_groups, right_groups, ipv4_value}
+                                              else
+                                                ipv4_start = address.rindex!(':') + 1
+                                                ipv4_value = address[ipv4_start..]
+                                                ipv6_prefix = address[0...ipv4_start - 1]
+                                                left_groups = ipv6_prefix.empty? ? [] of String : ipv6_prefix.split(":")
+                                                {left_groups, [] of String, ipv4_value}
+                                              end
 
         ipv4_hex = ipv4_str.split(".").map { |octet| octet.to_u8?.try(&.to_s(16).rjust(2, '0')) || "00" }.join
 
@@ -117,20 +121,6 @@ module PrismatIQ
 
         expanded = left_groups + (["0000"] * missing) + right_groups + [ipv4_hex[0, 4], ipv4_hex[4, 4]]
         expanded.map(&.rjust(4, '0')).join.ljust(32, '0')
-      end
-
-      private def self.translate_ipv4_mapped(address : String) : String
-        ipv4_start = address.rindex!(':') + 1
-        ipv4_part = address[ipv4_start..]
-        ipv6_prefix = address[0...ipv4_start - 1].gsub(":", "")
-
-        ipv4_parts = ipv4_part.split(".")
-        if ipv4_parts.size == 4
-          hex = ipv4_parts.map { |octet| octet.to_u8?.try(&.to_s(16).rjust(2, '0')) || "00" }.join
-          return ipv6_prefix + hex
-        end
-
-        address.gsub(":", "").ljust(32, '0')
       end
 
       private def self.extract_ipv6_prefix(normalized : String, bits : Int) : UInt128
