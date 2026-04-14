@@ -193,7 +193,7 @@ module PrismatIQ
       return unless rgba
 
       extract_pixel_colors(rgba.pix, w.to_i32, h.to_i32, options)
-    rescue ex : IO::Error | ArgumentError | OverflowError
+    rescue ex : Exception
       @config.log_debug "extract_image_bg: #{ex.class}: #{ex.message}"
       return
     end

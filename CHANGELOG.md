@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.2] - 2026-04-14
+
+### Fixed
+
+- **CrImage exception handling**: `CrImage.read` can throw format-specific exceptions (`CrImage::JPEG::FormatError`, `Compress::Deflate::Error`, etc.) that were not caught. Added `rescue ex : Exception` in `extract_image_bg` and wrapped `CrImage.read` in `PNGExtractor.decode_via_tempfile` to prevent these from propagating as unhandled errors.
+- **ICOError in theme extraction**: Added `ICOFile::ICOError` to rescue clauses in `extract_ico_bg` and `extract_ico_buffer_bg` so invalid ICO files are handled gracefully instead of crashing.
+- **ICO low bit-depth support**: `find_bmp_entry` now accepts 1, 4, 8, and 16 bit-depth BMP entries instead of requiring `bit_count >= 24`. This allows valid ICO files with monochrome or palette-based entries to be parsed.
+
 ## [0.6.0] - 2026-04-12
 
 ### Breaking Changes

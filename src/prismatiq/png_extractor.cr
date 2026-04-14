@@ -122,7 +122,12 @@ module PrismatIQ
 
     private def decode_via_tempfile
       result = TempfileHelper.with_tempfile("prismatiq_png_", @data) do |png_path|
-        img = CrImage.read(png_path)
+        begin
+          img = CrImage.read(png_path)
+        rescue ex : Exception
+          debug_log("PNGExtractor: CrImage.read failed: #{ex.class} #{ex.message}")
+          next false
+        end
         return unless img
 
         rgba_image = begin
