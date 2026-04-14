@@ -181,7 +181,7 @@ module PrismatIQ
       h = (h_total / 2).to_i32
       bit_count = read_u16_le(hdr, 14).to_i32
 
-      return if w <= 0 || h <= 0 || bit_count < 24
+      return if w <= 0 || h <= 0 || ![1, 4, 8, 16, 24, 32].includes?(bit_count)
       return if w.to_i64 * h.to_i64 > 268_435_456_i64
 
       {w.to_i32, h, bit_count, hdr}

@@ -159,7 +159,7 @@ module PrismatIQ
       ico = ICOFile.from_path(path, @config)
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
-    rescue ex : IO::Error | ArgumentError | IndexError | OverflowError
+    rescue ex : IO::Error | ArgumentError | IndexError | OverflowError | ICOFile::ICOError
       @config.log_debug "extract_ico_bg: #{ex.class}: #{ex.message}"
       return
     end
@@ -168,7 +168,7 @@ module PrismatIQ
       ico = ICOFile.from_slice(data, @config)
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
-    rescue ex : IO::Error | ArgumentError | IndexError | OverflowError
+    rescue ex : IO::Error | ArgumentError | IndexError | OverflowError | ICOFile::ICOError
       @config.log_debug "extract_ico_buffer_bg: #{ex.class}: #{ex.message}"
       return
     end
