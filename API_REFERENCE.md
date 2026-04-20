@@ -1,6 +1,6 @@
 # API Reference
 
-This document provides a complete reference of all public APIs available in PrismatIQ v0.6.0.
+This document provides a complete reference of all public APIs available in PrismatIQ v0.6.2.
 
 ## Palette Extraction APIs
 

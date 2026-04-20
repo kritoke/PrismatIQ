@@ -93,7 +93,7 @@ palette = PrismatIQ.get_palette_from_buffer(pixels, width, height, options)
 
 ## Version
 
-`0.6.0`
+`0.6.2`
 
 ## Security Considerations
 
