@@ -159,21 +159,4 @@ describe PrismatIQ::Config do
       config.should be_a(PrismatIQ::Config)
     end
   end
-
-  describe "#thread_count_for" do
-    it "uses requested value when positive" do
-      config = PrismatIQ::Config.new(threads: 4)
-      config.thread_count_for(100, 2).should eq(2)
-    end
-
-    it "uses config.threads when requested is 0" do
-      config = PrismatIQ::Config.new(threads: 8)
-      config.thread_count_for(100, 0).should eq(8)
-    end
-
-    it "caps at height" do
-      config = PrismatIQ::Config.new(threads: 100)
-      config.thread_count_for(10, 50).should eq(10)
-    end
-  end
 end

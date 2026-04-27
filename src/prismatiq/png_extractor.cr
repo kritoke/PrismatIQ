@@ -130,6 +130,10 @@ module PrismatIQ
         end
         return unless img
 
+        w = img.bounds.width.to_i32
+        h = img.bounds.height.to_i32
+        return false if w > @config.max_image_width || h > @config.max_image_height
+
         rgba_image = begin
           CrImage::Pipeline.new(img).result
         rescue ex : Exception
@@ -139,8 +143,8 @@ module PrismatIQ
 
         return unless rgba_image
 
-        @width = rgba_image.bounds.width.to_i32
-        @height = rgba_image.bounds.height.to_i32
+        @width = w
+        @height = h
         src = rgba_image.pix
         @pixels = Slice(UInt8).new(src.size)
         src.copy_to(@pixels)

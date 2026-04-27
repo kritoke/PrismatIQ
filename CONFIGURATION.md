@@ -13,8 +13,7 @@ options = PrismatIQ::Options.new
 # Equivalent to:
 options = PrismatIQ::Options.new(
   color_count: 5,      # Number of colors to extract
-  quality: 10,         # Sampling quality (lower = better quality)  
-  threads: 0,          # Worker threads (0 = auto-detect)
+  quality: 10,         # Sampling quality (lower = better quality)
   alpha_threshold: 125 # Alpha cutoff for transparent pixels
 )
 ```
@@ -27,22 +26,12 @@ options = PrismatIQ::Options.new(
 - **Description**: Number of dominant colors to extract from the image
 - **Validation**: Raises `ValidationError` if < 1 or > 256
 
-#### `quality : Int32` 
+#### `quality : Int32`
 - **Range**: 1 - 100+
 - **Default**: 10
 - **Description**: Sampling quality where lower values = higher fidelity but slower processing
 - **Behavior**: Controls how many pixels are sampled (every Nth pixel)
 - **Validation**: Raises `ValidationError` if < 1
-
-#### `threads : Int32`
-- **Range**: Any integer
-- **Default**: 0 (auto-detect)
-- **Description**: Number of worker threads for histogram building
-- **Special values**:
-  - `0`: Auto-detect based on image size and CPU cores
-  - `1`: Force single-threaded processing  
-  - `>1`: Use specified number of threads
-- **Note**: Small images (<100K) automatically use single-threaded processing regardless of setting
 
 #### `alpha_threshold : UInt8`
 - **Range**: 0 - 255
@@ -58,11 +47,10 @@ options = PrismatIQ::Options.new(
 # Basic usage
 options = PrismatIQ::Options.new(color_count: 8)
 
-# Full configuration  
+# Full configuration
 options = PrismatIQ::Options.new(
   color_count: 10,
   quality: 5,
-  threads: 4,
   alpha_threshold: 128
 )
 ```
@@ -74,7 +62,6 @@ options = PrismatIQ::Options.new(
 options = PrismatIQ::Options.default
                 .with_color_count(8)
                 .with_quality(5)
-                .with_threads(2)
 
 # Or chain from new instance
 options = PrismatIQ::Options.new.with_color_count(6).with_quality(3)
@@ -99,7 +86,7 @@ end
 
 ## Config Struct
 
-The `Config` struct controls runtime behavior like debugging and threading overrides.
+The `Config` struct controls runtime behavior like debugging, image dimension limits, and security settings.
 
 ### Default Values
 
@@ -107,9 +94,9 @@ The `Config` struct controls runtime behavior like debugging and threading overr
 config = PrismatIQ::Config.new
 # Equivalent to:
 config = PrismatIQ::Config.new(
-  debug: false,        # Disable debug output
-  threads: nil,        # Use default thread detection
-  merge_chunk: nil     # Use default merge chunk size
+  debug: false,            # Disable debug output
+  max_image_width: 8192,   # Max image width in pixels
+  max_image_height: 8192   # Max image height in pixels
 )
 ```
 
@@ -120,23 +107,33 @@ config = PrismatIQ::Config.new(
 - **Description**: Enable detailed debug output to STDERR
 - **Output includes**: Processing steps, timing information, internal state
 
-#### `threads : Int32?`
-- **Default**: nil (use automatic detection)
-- **Description**: Override the automatic thread count detection
-- **Usage**: Useful for testing or when you know the optimal thread count
+#### `max_image_width : Int32`
+- **Default**: 8192
+- **Description**: Maximum image width in pixels. Images exceeding this are rejected before RGBA conversion.
+- **Validation**: Clamped to minimum of 1 if a value < 1 is provided
 
-#### `merge_chunk : Int32?`
-- **Default**: nil (use automatic calculation)  
-- **Description**: Override histogram merge chunk size
-- **Advanced**: Only needed for fine-tuning performance on specific workloads
+#### `max_image_height : Int32`
+- **Default**: 8192
+- **Description**: Maximum image height in pixels. Images exceeding this are rejected before RGBA conversion.
+- **Validation**: Clamped to minimum of 1 if a value < 1 is provided
+
+#### `ssrf_protection : Bool`
+- **Default**: true
+- **Description**: Enable SSRF protection for HTTP requests in theme extraction
+
+#### `ssrf_allowlist : Array(String)?`
+- **Default**: nil
+- **Description**: List of hosts allowed to bypass SSRF protection
 
 ### Environment Variables
 
 Config can also be controlled via environment variables:
 
 - `PRISMATIQ_DEBUG=1` - Enable debug mode
-- `PRISMATIQ_THREADS=N` - Set thread count override
-- `PRISMATIQ_MERGE_CHUNK=N` - Set merge chunk size override
+- `PRISMATIQ_MAX_IMAGE_WIDTH=N` - Set max image width
+- `PRISMATIQ_MAX_IMAGE_HEIGHT=N` - Set max image height
+- `PRISMATIQ_SSRF_PROTECTION=false` - Disable SSRF protection
+- `PRISMATIQ_SSRF_ALLOWLIST=host1,host2` - Set SSRF allowlist
 
 ### Usage Examples
 
@@ -148,19 +145,19 @@ result = PrismatIQ.get_palette_v2(pixels, width, height, options, config)
 # Outputs detailed processing information to STDERR
 ```
 
-#### Thread Override
+#### Image Dimension Limits
 
 ```crystal
-config = PrismatIQ::Config.new(threads: 8)
-result = PrismatIQ.get_palette_v2("large_image.png", options, config)
-# Forces 8 threads regardless of automatic detection
+config = PrismatIQ::Config.new(max_image_width: 4096, max_image_height: 4096)
+result = PrismatIQ.get_palette_v2("image.png", options, config)
+# Rejects images wider/taller than 4096px
 ```
 
 #### Combining Options and Config
 
 ```crystal
 options = PrismatIQ::Options.new(color_count: 8, quality: 3)
-config = PrismatIQ::Config.new(debug: true, threads: 4)
+config = PrismatIQ::Config.new(debug: true)
 
 result = PrismatIQ.get_palette_v2("image.png", options, config)
 ```
@@ -176,22 +173,13 @@ result = PrismatIQ.get_palette_v2("image.png", options, config)
 | 10 | Sample every 10th pixel | Faster, good quality |
 | 20+ | Sample every 20th+ pixel | Fastest, lower quality |
 
-### Thread Count Guidelines
-
-- **Small images** (< 100K pixels): Single-threaded is fastest
-- **Medium images** (100K - 1M pixels): 2-4 threads optimal  
-- **Large images** (> 1M pixels): 4-8 threads optimal
-- **Auto-detection** (`threads: 0`) works well for most cases
-
 ### Memory Optimization
 
-PrismatIQ automatically optimizes memory usage through:
+PrismatIQ optimizes memory usage through:
 
-- **Histogram pooling**: Reuses histogram objects (25-40% memory reduction)
-- **Adaptive processing**: Uses single-threaded for small images
-- **Chunked merging**: Optimized for CPU cache performance
-
-These optimizations are automatic and don't require configuration.
+- **Image dimension limits**: Configurable `max_image_width`/`max_image_height` (default 8192) reject oversized images before RGBA conversion
+- **Bounded histogram iteration**: VBox computations iterate only the relevant histogram range instead of all 32,768 entries
+- **Shared ThemeExtractor caching**: Module-level caching avoids per-call instance creation
 
 ## Best Practices
 
@@ -200,12 +188,9 @@ These optimizations are automatic and don't require configuration.
 Instead of relying on defaults, always create explicit `Options`:
 
 ```crystal
-# ✅ Good - explicit and clear
+# Good - explicit and clear
 options = PrismatIQ::Options.new(color_count: 5)
 result = PrismatIQ.get_palette_v2(path, options)
-
-# ❌ Avoid - unclear what parameters are being used
-result = PrismatIQ.get_palette_v2(path)
 ```
 
 ### 2. Validate User Input
@@ -216,7 +201,7 @@ When accepting user-provided parameters, validate them before creating Options:
 def create_safe_options(user_color_count, user_quality)
   color_count = {user_color_count, 1}.max.clamp(1, 256)
   quality = {user_quality, 1}.max
-  
+
   PrismatIQ::Options.new(color_count: color_count, quality: quality)
 end
 ```
@@ -234,18 +219,21 @@ result = PrismatIQ.get_palette_v2(path, options)
 # Debug output appears only when PRISMATIQ_DEBUG=1
 ```
 
-### 4. Profile Before Optimizing
+### 4. Set Image Dimension Limits for Untrusted Input
 
-Use the default auto-detection settings first, then profile and optimize only if needed:
+When processing user-uploaded images, set dimension limits to prevent memory spikes:
 
 ```crystal
-# Start with defaults
-options = PrismatIQ::Options.new(color_count: 5)
+config = PrismatIQ::Config.new(max_image_width: 4096, max_image_height: 4096)
+result = PrismatIQ.get_palette_v2(uploaded_path, options, config)
+```
 
-# Only optimize if profiling shows issues
-if image_is_very_large?
-  options = options.with_threads(8).with_quality(5)
-end
+### 5. Clear Caches Periodically
+
+If processing many unique themes, clear caches to free memory:
+
+```crystal
+PrismatIQ.clear_caches
 ```
 
 ## Error Handling
@@ -256,21 +244,14 @@ Both `Options` and `Config` can cause validation errors:
 
 - `color_count < 1` or `> 256`
 - `quality < 1`
-- Invalid parameter combinations
 
-### Config Validation
+### Image Too Large Error
 
-Config parameters are generally more flexible, but extreme values may cause processing failures that result in `ProcessingFailed` errors.
-
-Always handle validation errors appropriately:
+Images exceeding `max_image_width` or `max_image_height` return `ErrorType::ImageTooLarge`:
 
 ```crystal
-begin
-  options.validate!
-  config.validate! # Not currently implemented but future-proof
-  result = PrismatIQ.get_palette_v2(path, options, config)
-rescue ex : PrismatIQ::ValidationError
-  Log.error("Invalid configuration: #{ex.message}")
-  # Use safe defaults or return error to user
+result = PrismatIQ.get_palette_v2("huge.jpg", options)
+if result.err? && result.error.type.image_too_large?
+  puts "Image too large: #{result.error.message}"
 end
 ```

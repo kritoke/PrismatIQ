@@ -33,6 +33,8 @@ require "./prismatiq/theme_result"
 require "./prismatiq/theme_extractor"
 
 module PrismatIQ
+  @@theme_extractor : ThemeExtractor?
+  @@theme_extractor_mutex = Mutex.new
   # High-performance Crystal shard for extracting dominant color palettes from images.
   #
   # ## Thread Safety
@@ -45,10 +47,10 @@ module PrismatIQ
   #
   # ## Memory Optimization
   #
-  # Memory usage is reduced by 25-40% through:
-  # - Histogram object pooling (`Core::HistogramPool`)
-  # - Adaptive chunk sizing based on image dimensions
-  # - Chunked histogram merging optimized for CPU cache
+  # Memory usage is controlled through:
+  # - Configurable max image dimensions (`Config#max_image_width`, `Config#max_image_height`)
+  # - Bounded histogram iteration in VBox computations
+  # - Shared ThemeExtractor caching with configurable cache limits
   # - Lazy initialization of resources
   #
   # ## Error Handling
@@ -66,10 +68,23 @@ module PrismatIQ
   # Public API - Palette Extraction v2 (Result-based with Error struct)
   # ============================================================================
 
-  def self.get_palette_v2(path : String, options : Options = Options.default) : Result(Array(RGB), Error)
+  def self.get_palette_v2(path : String, options : Options = Options.default, config : Config = Config.default) : Result(Array(RGB), Error)
     options.validate!
-    extractor = Core::PaletteExtractor.new
-    result = extractor.extract_from_path(path, options)
+
+    validation = Utils::Validation.validate_file_path(path)
+    return Result(Array(RGB), Error).err(Error.file_not_found(path)) if validation.err?
+
+    img = Utils::ImageLoader.read(validation.value)
+    width = img.bounds.width.to_i32
+    height = img.bounds.height.to_i32
+
+    if width > config.max_image_width || height > config.max_image_height
+      return Result(Array(RGB), Error).err(Error.image_too_large(width, height, config.max_image_width, config.max_image_height))
+    end
+
+    rgba_image = Utils::ImageLoader.normalize(img)
+    extractor = Core::PaletteExtractor.new(config)
+    result = extractor.extract_from_image_data(rgba_image, width, height, options)
 
     if result.empty?
       return Result(Array(RGB), Error).err(Error.file_not_found(path, "Failed to extract palette"))
@@ -80,10 +95,23 @@ module PrismatIQ
     Result(Array(RGB), Error).err(Error.from_exception_with_path(ex, path))
   end
 
-  def self.get_palette_v2!(path : String, options : Options = Options.default) : Array(RGB)
+  def self.get_palette_v2!(path : String, options : Options = Options.default, config : Config = Config.default) : Array(RGB)
     options.validate!
-    extractor = Core::PaletteExtractor.new
-    result = extractor.extract_from_path(path, options)
+
+    validation = Utils::Validation.validate_file_path(path)
+    raise Exception.new("Failed to extract palette from #{path}") if validation.err?
+
+    img = Utils::ImageLoader.read(validation.value)
+    width = img.bounds.width.to_i32
+    height = img.bounds.height.to_i32
+
+    if width > config.max_image_width || height > config.max_image_height
+      raise Exception.new("Image dimensions #{width}x#{height} exceed maximum allowed #{config.max_image_width}x#{config.max_image_height}")
+    end
+
+    rgba_image = Utils::ImageLoader.normalize(img)
+    extractor = Core::PaletteExtractor.new(config)
+    result = extractor.extract_from_image_data(rgba_image, width, height, options)
 
     if result.empty?
       raise Exception.new("Failed to extract palette from #{path}")
@@ -92,10 +120,20 @@ module PrismatIQ
     result
   end
 
-  def self.get_palette_v2(io : IO, options : Options = Options.default) : Result(Array(RGB), Error)
+  def self.get_palette_v2(io : IO, options : Options = Options.default, config : Config = Config.default) : Result(Array(RGB), Error)
     options.validate!
-    extractor = Core::PaletteExtractor.new
-    result = extractor.extract_from_io(io, options)
+
+    img = Utils::ImageLoader.read(io)
+    width = img.bounds.width.to_i32
+    height = img.bounds.height.to_i32
+
+    if width > config.max_image_width || height > config.max_image_height
+      return Result(Array(RGB), Error).err(Error.image_too_large(width, height, config.max_image_width, config.max_image_height))
+    end
+
+    rgba_image = Utils::ImageLoader.normalize(img)
+    extractor = Core::PaletteExtractor.new(config)
+    result = extractor.extract_from_image_data(rgba_image, width, height, options)
 
     if result.empty?
       return Result(Array(RGB), Error).err(Error.corrupted_image("Failed to extract palette from IO"))
@@ -106,10 +144,20 @@ module PrismatIQ
     Result(Array(RGB), Error).err(Error.from_exception_for_io(ex))
   end
 
-  def self.get_palette_v2!(io : IO, options : Options = Options.default) : Array(RGB)
+  def self.get_palette_v2!(io : IO, options : Options = Options.default, config : Config = Config.default) : Array(RGB)
     options.validate!
-    extractor = Core::PaletteExtractor.new
-    result = extractor.extract_from_io(io, options)
+
+    img = Utils::ImageLoader.read(io)
+    width = img.bounds.width.to_i32
+    height = img.bounds.height.to_i32
+
+    if width > config.max_image_width || height > config.max_image_height
+      raise Exception.new("Image dimensions #{width}x#{height} exceed maximum allowed #{config.max_image_width}x#{config.max_image_height}")
+    end
+
+    rgba_image = Utils::ImageLoader.normalize(img)
+    extractor = Core::PaletteExtractor.new(config)
+    result = extractor.extract_from_image_data(rgba_image, width, height, options)
 
     if result.empty?
       raise Exception.new("Failed to extract palette from IO")
@@ -144,10 +192,19 @@ module PrismatIQ
     result
   end
 
-  def self.get_palette_v2(image : CrImage::Image, options : Options = Options.default) : Result(Array(RGB), Error)
+  def self.get_palette_v2(image : CrImage::Image, options : Options = Options.default, config : Config = Config.default) : Result(Array(RGB), Error)
     options.validate!
-    extractor = Core::PaletteExtractor.new
-    result = extractor.extract_from_image(image, options)
+
+    width = image.bounds.width.to_i32
+    height = image.bounds.height.to_i32
+
+    if width > config.max_image_width || height > config.max_image_height
+      return Result(Array(RGB), Error).err(Error.image_too_large(width, height, config.max_image_width, config.max_image_height))
+    end
+
+    rgba_image = Utils::ImageLoader.normalize(image)
+    extractor = Core::PaletteExtractor.new(config)
+    result = extractor.extract_from_image_data(rgba_image, width, height, options)
 
     if result.empty?
       return Result(Array(RGB), Error).err(Error.corrupted_image("Failed to extract palette from image"))
@@ -208,16 +265,27 @@ module PrismatIQ
   end
 
   def self.extract_theme(source : String, options : ThemeOptions = ThemeOptions.new) : ThemeResult?
-    ThemeExtractor.new.extract(source, options)
+    shared_theme_extractor.extract(source, options)
   end
 
   def self.fix_theme(theme_json : String, legacy_bg : String? = nil, legacy_text : String? = nil) : String?
-    ThemeExtractor.new.fix_theme(theme_json, legacy_bg, legacy_text)
+    shared_theme_extractor.fix_theme(theme_json, legacy_bg, legacy_text)
+  end
+
+  def self.clear_caches
+    @@theme_extractor_mutex.synchronize do
+      @@theme_extractor.try(&.clear_cache)
+    end
   end
 
   def self.clear_theme_cache
-    # Cache clearing now requires managing a ThemeExtractor instance directly.
-    # This method is a no-op for backward compatibility.
+    clear_caches
+  end
+
+  private def self.shared_theme_extractor : ThemeExtractor
+    @@theme_extractor_mutex.synchronize do
+      @@theme_extractor ||= ThemeExtractor.new
+    end
   end
 
   def self.log_debug(message : String) : Nil

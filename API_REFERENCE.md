@@ -137,14 +137,14 @@ Configuration struct for palette extraction parameters:
 ### `PrismatIQ::Config`
 Runtime configuration for debugging and performance:
 - `debug : Bool` - Enable debug output (default: false)
-- `threads : Int32?` - Override detected thread count
-- `merge_chunk : Int32?` - Override histogram merge chunk size
 - `ssrf_protection : Bool` - Enable SSRF protection for HTTP requests (default: true)
 - `ssrf_allowlist : Array(String)?` - List of hosts allowed to bypass SSRF protection
+- `max_image_width : Int32` - Maximum image width in pixels (default: 8192)
+- `max_image_height : Int32` - Maximum image height in pixels (default: 8192)
 
 ### `PrismatIQ::Error`
 Structured error type with:
-- `type : ErrorType` - Error category enum (includes `SSRFBlocked`)
+- `type : ErrorType` - Error category enum (includes `SSRFBlocked`, `ImageTooLarge`)
 - `message : String` - Human-readable message  
 - `context : Hash(String, String)?` - Additional context information
 

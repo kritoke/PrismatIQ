@@ -1,33 +1,6 @@
 require "./spec_helper"
 
 describe "Thread Safety" do
-  describe "HistogramPool" do
-    it "handles concurrent access safely" do
-      pool = PrismatIQ::Core::HistogramPool.new(5)
-      channel = Channel(Int32).new(5)
-
-      5.times do |i|
-        spawn do
-          histo = pool.acquire(i)
-          # Do some work to simulate contention
-          sleep(1.millisecond) if i % 2 == 0
-          histo[0] = (i + 1).to_u32
-          result = histo[0].to_i32
-          channel.send(result)
-        end
-      end
-
-      results = [] of Int32
-      5.times do
-        results << channel.receive
-      end
-
-      # Each histogram should have been modified independently
-      results.sort!
-      results.should eq([1, 2, 3, 4, 5])
-    end
-  end
-
   describe "PaletteExtractor" do
     it "produces consistent results with parallel processing" do
       # Create a test image
@@ -51,7 +24,7 @@ describe "Thread Safety" do
         end
       end
 
-      options = PrismatIQ::Options.new(color_count: 5, threads: 4)
+      options = PrismatIQ::Options.new(color_count: 5)
       results = [] of Array(PrismatIQ::RGB)
 
       # Run extraction multiple times
@@ -96,7 +69,7 @@ describe "Thread Safety" do
         idx += 4
       end
 
-      options = PrismatIQ::Options.new(color_count: 1, threads: 1)
+      options = PrismatIQ::Options.new(color_count: 1)
       channel1 = Channel(Array(PrismatIQ::RGB)).new(1)
       channel2 = Channel(Array(PrismatIQ::RGB)).new(1)
 

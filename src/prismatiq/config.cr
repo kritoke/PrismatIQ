@@ -70,11 +70,6 @@ module PrismatIQ
 
     # Enable debug logging
     property? debug : Bool
-    # Number of threads for parallel processing (nil = auto)
-    property threads : Int32?
-    # Chunk size for histogram merging
-    property merge_chunk : Int32?
-    # Enable SSRF protection for URL fetching
     property? ssrf_protection : Bool
     # Allowed hosts for URL fetching (bypasses SSRF check)
     property ssrf_allowlist : Array(String)?
@@ -82,15 +77,20 @@ module PrismatIQ
     property rate_limit : Int32
     # Internal rate limiter instance
     property rate_limiter : RateLimiter?
+    # Maximum image dimensions (pixels) to prevent excessive memory from decompressed images
+    property max_image_width : Int32
+    property max_image_height : Int32
 
     def initialize(
       @debug : Bool = false,
-      @threads : Int32? = nil,
-      @merge_chunk : Int32? = nil,
       @ssrf_protection : Bool = true,
       @ssrf_allowlist : Array(String)? = nil,
       @rate_limit : Int32 = 10,
+      @max_image_width : Int32 = 8192,
+      @max_image_height : Int32 = 8192,
     )
+      @max_image_width = 1 if @max_image_width < 1
+      @max_image_height = 1 if @max_image_height < 1
       if @rate_limit > 0
         @rate_limiter = RateLimiter.new(@rate_limit)
       end
@@ -102,19 +102,14 @@ module PrismatIQ
           rate_limit_val = ENV["PRISMATIQ_RATE_LIMIT"]?.try(&.to_i?) || 10
           new(
             debug: ENV["PRISMATIQ_DEBUG"]? == "true" || ENV["PRISMATIQ_DEBUG"]? == "1",
-            threads: ENV["PRISMATIQ_THREADS"]?.try(&.to_i?),
-            merge_chunk: ENV["PRISMATIQ_MERGE_CHUNK"]?.try(&.to_i?),
             ssrf_protection: ENV["PRISMATIQ_SSRF_PROTECTION"]? != "false",
             ssrf_allowlist: ENV["PRISMATIQ_SSRF_ALLOWLIST"]?.try(&.split(",").map(&.strip)),
-            rate_limit: rate_limit_val
+            rate_limit: rate_limit_val,
+            max_image_width: ENV["PRISMATIQ_MAX_IMAGE_WIDTH"]?.try(&.to_i?) || 8192,
+            max_image_height: ENV["PRISMATIQ_MAX_IMAGE_HEIGHT"]?.try(&.to_i?) || 8192,
           )
         end
       end
-    end
-
-    def thread_count_for(height : Int32, requested : Int32) : Int32
-      t = requested <= 0 ? (threads || Utils::SystemInfo.cpu_count) : requested
-      {t, height}.min
     end
 
     def log_debug(message : String) : Nil

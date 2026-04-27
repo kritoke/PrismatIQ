@@ -9,9 +9,9 @@ A high-performance Crystal shard for extracting dominant color palettes from ima
 - **WCAG Accessibility**: Built-in WCAG contrast checking and color adjustment  
 - **Theme Detection**: Automatic dark/light theme detection and color pairing
 - **ICO Support**: Extract palettes from Windows icon files (PNG and BMP encoded)
-- **Multi-threaded**: Parallel histogram building for improved performance
 - **Caching**: Intelligent caching for frequently-used calculations
 - **Error Handling**: Explicit error handling with Result types
+- **Memory Safe**: Configurable image dimension limits to prevent excessive memory use
 
 ## Quick Examples
 
@@ -20,7 +20,7 @@ A high-performance Crystal shard for extracting dominant color palettes from ima
 ```crystal
 require "prismatiq"
 
-options = PrismatIQ::Options.new(color_count: 5, quality: 10, threads: 0)
+options = PrismatIQ::Options.new(color_count: 5, quality: 10)
 
 # With explicit error handling (recommended)
 result = PrismatIQ.get_palette_v2("image.png", options)
@@ -60,10 +60,8 @@ if theme
   puts "Dark text: #{theme.text["dark"]}"
 end
 
-# For caching across calls, manage your own instance
-extractor = PrismatIQ::ThemeExtractor.new
-theme = extractor.extract("favicon.ico")
-extractor.clear_cache
+# Clear shared caches when needed
+PrismatIQ.clear_caches
 ```
 
 ### SVG Color Extraction
@@ -93,7 +91,7 @@ palette = PrismatIQ.get_palette_from_buffer(pixels, width, height, options)
 
 ## Version
 
-`0.6.2`
+`0.7.0`
 
 ## Security Considerations
 

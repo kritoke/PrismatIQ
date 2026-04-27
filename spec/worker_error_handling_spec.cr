@@ -13,8 +13,7 @@ describe "Worker error handling" do
 
     options = PrismatIQ::Options.new
     options.color_count = 5
-    options.quality = 10 # Lower quality to reduce processing
-    options.threads = 4
+    options.quality = 10
 
     extractor = PrismatIQ::Core::PaletteExtractor.new
 

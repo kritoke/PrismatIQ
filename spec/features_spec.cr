@@ -7,7 +7,6 @@ describe PrismatIQ::Options do
       opts = PrismatIQ::Options.new
       opts.color_count.should eq(5)
       opts.quality.should eq(10)
-      opts.threads.should eq(0)
       opts.alpha_threshold.should eq(125_u8)
     end
   end

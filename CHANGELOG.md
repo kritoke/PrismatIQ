@@ -1,5 +1,70 @@
 # Changelog
 
+## [0.7.0] - 2026-04-27
+
+### Breaking Changes
+
+- **Removed `Options.threads` property and `with_threads` method** — fiber-based parallelism was removed (see Performance section).
+- **Removed `Config.threads`, `Config.merge_chunk`, `Config.thread_count_for`** — only used by the removed parallel path.
+- **Removed `Core::HistogramPool` and `Core::AdaptiveChunkSizer`** — no longer needed.
+- **`clear_theme_cache` now delegates to `clear_caches`** — previously was a no-op.
+
+### Performance
+
+- **Removed fiber-based parallel histogram building** — Crystal fibers are cooperatively scheduled on a single OS thread. The parallel path added channel/fiber/pool allocation overhead with zero actual parallelism. All histogram building is now sequential, which is faster for typical workloads.
+- **VBox bounded histogram iteration** — `compute_weighted_sums`, `recalc_count`, and `get_indices` now iterate only the histogram index range corresponding to the VBox's YIQ bounds instead of all 32,768 entries. For typical small VBoxes in the MMCQ inner loop, this reduces iteration from 32K to a few hundred entries.
+
+### Memory
+
+- **Image dimension limits** — Added `Config.max_image_width` and `Config.max_image_height` (default 8192). Images exceeding these dimensions are rejected before RGBA pipeline conversion, preventing large pixel buffer allocations. Configurable via constructor or `PRISMATIQ_MAX_IMAGE_WIDTH`/`PRISMATIQ_MAX_IMAGE_HEIGHT` env vars.
+- **Module-level ThemeExtractor caching** — `extract_theme` and `fix_theme` now share a single lazily-initialized `ThemeExtractor` with mutex protection, avoiding per-call instance creation with unshared caches.
+- **Early dimension rejection** — For path, IO, and image entry points, dimensions are checked after decode but before RGBA pipeline conversion. The RGBA pixel buffer is never allocated for oversized images.
+
+### Added
+
+- **`PrismatIQ.clear_caches`** — clears the shared ThemeExtractor's internal caches.
+- **`ErrorType::ImageTooLarge`** — returned by `get_palette_v2(path/io/image)` when image dimensions exceed configured limits. Error context includes actual and max dimensions.
+- **`get_palette_v2(path/io/image)` now accept optional `config` parameter** — allows passing custom Config without relying on `Config.default`.
+
+### Migration Guide
+
+#### Removed thread options
+```crystal
+# Before
+options = PrismatIQ::Options.new(color_count: 5, threads: 4)
+config = PrismatIQ::Config.new(threads: 4)
+
+# After
+options = PrismatIQ::Options.new(color_count: 5)
+config = PrismatIQ::Config.new
+```
+
+#### Image dimension limits
+```crystal
+# Default: 8192x8192 — reject oversized images early
+result = PrismatIQ.get_palette_v2("huge.jpg")
+if result.err? && result.error.type == PrismatIQ::ErrorType::ImageTooLarge
+  puts "Image too large: #{result.error.message}"
+end
+
+# Customize limits
+config = PrismatIQ::Config.new(max_image_width: 4096, max_image_height: 4096)
+result = PrismatIQ.get_palette_v2("photo.jpg", config: config)
+
+# Or via env vars
+# PRISMATIQ_MAX_IMAGE_WIDTH=4096 PRISMATIQ_MAX_IMAGE_HEIGHT=4096
+```
+
+#### Cache management
+```crystal
+# Before (0.6.0) — clear_theme_cache was a no-op
+PrismatIQ.clear_theme_cache  # did nothing
+
+# After (0.7.0) — both clear the shared ThemeExtractor caches
+PrismatIQ.clear_caches
+PrismatIQ.clear_theme_cache  # delegates to clear_caches
+```
+
 ## [0.6.2] - 2026-04-14
 
 ### Fixed
@@ -80,14 +145,18 @@ result = ThemeResult.new(RGB.new(100, 150, 200), "#fff", "#000")
 
 #### Theme extraction with caching
 ```crystal
-# Before — used global singleton with implicit caching
+# Before (0.5.x) — used global singleton with implicit caching
 theme = PrismatIQ.extract_theme("favicon.ico")
 PrismatIQ.clear_theme_cache
 
-# After — manage instance for caching
+# 0.6.0 — manage instance for caching
 extractor = PrismatIQ::ThemeExtractor.new
 theme = extractor.extract("favicon.ico")
 extractor.clear_cache
+
+# 0.7.0+ — shared instance restored, caching works at module level again
+theme = PrismatIQ.extract_theme("favicon.ico")
+PrismatIQ.clear_caches
 ```
 
 #### VBox index methods

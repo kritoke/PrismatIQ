@@ -9,6 +9,7 @@ module PrismatIQ
     CorruptedImage
     InvalidOptions
     ProcessingFailed
+    ImageTooLarge
     SSRFBlocked
   end
 
@@ -82,6 +83,14 @@ module PrismatIQ
 
     def self.processing_failed(details : String) : Error
       new(ErrorType::ProcessingFailed, "Processing failed: #{details}")
+    end
+
+    def self.image_too_large(width : Int32, height : Int32, max_width : Int32, max_height : Int32) : Error
+      new(
+        ErrorType::ImageTooLarge,
+        "Image dimensions #{width}x#{height} exceed maximum allowed #{max_width}x#{max_height}",
+        {"width" => width.to_s, "height" => height.to_s, "max_width" => max_width.to_s, "max_height" => max_height.to_s}
+      )
     end
 
     def self.ssrf_blocked(url : String, ip : String, reason : String) : Error

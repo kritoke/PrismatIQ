@@ -95,15 +95,27 @@ module PrismatIQ
       q_sum = 0.0
       found = 0
 
-      @histo.each_with_index do |freq, index|
-        next if freq == 0
-        y, i, q = YIQConverter.from_index(index)
-        if y >= @y1 && y <= @y2 && i >= @i1 && i <= @i2 && q >= @q1 && q <= @q2
-          y_sum += y * freq.to_f64
-          i_sum += i * freq.to_f64
-          q_sum += q * freq.to_f64
-          found += freq.to_i
+      y = @y1
+      while y <= @y2
+        y_offset = y << 10
+        i = @i1
+        while i <= @i2
+          i_offset = i << 5
+          q = @q1
+          while q <= @q2
+            freq = @histo[y_offset | i_offset | q]
+            if freq > 0
+              f = freq.to_f64
+              y_sum += y.to_f64 * f
+              i_sum += i.to_f64 * f
+              q_sum += q.to_f64 * f
+              found += freq.to_i
+            end
+            q += 1
+          end
+          i += 1
         end
+        y += 1
       end
 
       {y_sum: y_sum, i_sum: i_sum, q_sum: q_sum, found: found}
@@ -200,29 +212,47 @@ module PrismatIQ
 
     private def get_indices(axis : Int32) : Array(Int32)
       indices = Array(Int32).new
-      @histo.each_with_index do |freq, index|
-        next if freq == 0
-        y, i, q = YIQConverter.from_index(index)
-        case axis
-        when 0
-          indices << y if y >= @y1 && y <= @y2
-        when 1
-          indices << i if i >= @i1 && i <= @i2
-        when 2
-          indices << q if q >= @q1 && q <= @q2
+      y = @y1
+      while y <= @y2
+        y_offset = y << 10
+        i = @i1
+        while i <= @i2
+          i_offset = i << 5
+          q = @q1
+          while q <= @q2
+            freq = @histo[y_offset | i_offset | q]
+            if freq > 0
+              case axis
+              when 0 then indices << y
+              when 1 then indices << i
+              when 2 then indices << q
+              end
+            end
+            q += 1
+          end
+          i += 1
         end
+        y += 1
       end
       indices
     end
 
     def recalc_count : VBox
       c = 0
-      @histo.each_with_index do |freq, index|
-        next if freq == 0
-        y, i, q = YIQConverter.from_index(index)
-        if y >= @y1 && y <= @y2 && i >= @i1 && i <= @i2 && q >= @q1 && q <= @q2
-          c += freq.to_i
+      y = @y1
+      while y <= @y2
+        y_offset = y << 10
+        i = @i1
+        while i <= @i2
+          i_offset = i << 5
+          q = @q1
+          while q <= @q2
+            c += @histo[y_offset | i_offset | q].to_i
+            q += 1
+          end
+          i += 1
         end
+        y += 1
       end
       VBox.new(@y1, @y2, @i1, @i2, @q1, @q2, c, @histo)
     end

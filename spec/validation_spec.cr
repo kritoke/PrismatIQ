@@ -45,7 +45,7 @@ describe PrismatIQ::Utils::Validation do
 
   describe ".validate_options" do
     it "returns ok for valid options" do
-      options = PrismatIQ::Options.new(color_count: 8, quality: 10, threads: 4)
+      options = PrismatIQ::Options.new(color_count: 8, quality: 10)
       result = PrismatIQ::Utils::Validation.validate_options(options)
       result.ok?.should be_true
     end
@@ -73,13 +73,6 @@ describe PrismatIQ::Utils::Validation do
 
     it "returns error for quality > 100" do
       options = PrismatIQ::Options.new(quality: 150)
-      result = PrismatIQ::Utils::Validation.validate_options(options)
-      result.err?.should be_true
-      result.error.type.should eq(PrismatIQ::ErrorType::InvalidOptions)
-    end
-
-    it "returns error for negative threads" do
-      options = PrismatIQ::Options.new(threads: -1)
       result = PrismatIQ::Utils::Validation.validate_options(options)
       result.err?.should be_true
       result.error.type.should eq(PrismatIQ::ErrorType::InvalidOptions)

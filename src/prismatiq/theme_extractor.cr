@@ -185,14 +185,15 @@ module PrismatIQ
       img = CrImage.read(path)
       return unless img
 
-      w = img.bounds.width
-      h = img.bounds.height
+      w = img.bounds.width.to_i32
+      h = img.bounds.height.to_i32
       return if w == 0 || h == 0
+      return if w > @config.max_image_width || h > @config.max_image_height
 
       rgba = CrImage::Pipeline.new(img).result
       return unless rgba
 
-      extract_pixel_colors(rgba.pix, w.to_i32, h.to_i32, options)
+      extract_pixel_colors(rgba.pix, w, h, options)
     rescue ex : Exception
       @config.log_debug "extract_image_bg: #{ex.class}: #{ex.message}"
       return

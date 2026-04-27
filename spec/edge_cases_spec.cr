@@ -107,25 +107,22 @@ describe "PrismatIQ Edge Cases" do
     end
   end
 
-  describe "threading (Result-based API)" do
-    it "works with threads = 0 (auto)" do
+  describe "Result-based API with various inputs" do
+    it "works with default options" do
       pixels = generate_checkerboard(20, 20)
-      options = PrismatIQ::Options.new(threads: 0)
+      options = PrismatIQ::Options.new
       result = PrismatIQ.get_palette_v2(pixels, 20, 20, options)
       result.ok?.should be_true
       result.value.size.should be > 0
     end
 
-    it "works with negative threads (uses default)" do
-      pixels = generate_solid(10, 20, 30, 10, 10)
-      options = PrismatIQ::Options.new(threads: -1)
-      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options)
-      # Negative threads may cause validation error - handle both cases
-      if result.ok?
-        result.value.size.should be > 0
-      else
-        result.error.message.should contain("threads")
-      end
+    it "works with custom config" do
+      pixels = generate_solid(0, 255, 0, 10, 10)
+      options = PrismatIQ::Options.new
+      config = PrismatIQ::Config.new
+      result = PrismatIQ.get_palette_v2(pixels, 10, 10, options, config)
+      result.ok?.should be_true
+      result.value.size.should be > 0
     end
   end
 
@@ -139,10 +136,10 @@ describe "PrismatIQ Edge Cases" do
       result.value.size.should be > 0
     end
 
-    it "works with custom thread setting" do
+    it "works with custom max dimensions" do
       pixels = generate_solid(0, 255, 0, 10, 10)
       options = PrismatIQ::Options.new
-      config = PrismatIQ::Config.new(threads: 1)
+      config = PrismatIQ::Config.new(max_image_width: 4096, max_image_height: 4096)
       result = PrismatIQ.get_palette_v2(pixels, 10, 10, options, config)
       result.ok?.should be_true
       result.value.size.should be > 0
