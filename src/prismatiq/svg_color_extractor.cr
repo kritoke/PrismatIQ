@@ -233,6 +233,11 @@ module PrismatIQ
         return Result(Array(RGB), Error).err(Error.unsupported_format(File.extname(path)))
       end
 
+      # Validate path to prevent path traversal attacks
+      validation = Utils::Validation.validate_file_path(path)
+      return Result(Array(RGB), Error).err(validation.error) if validation.err?
+      safe_path = validation.value
+
       file_size = File.size(path) rescue 0_i64
       if file_size > MAX_SVG_SIZE
         return Result(Array(RGB), Error).err(Error.invalid_image_path(path, "SVG file exceeds #{MAX_SVG_SIZE / (1024 * 1024)}MB limit"))
@@ -241,7 +246,7 @@ module PrismatIQ
         return Result(Array(RGB), Error).err(Error.corrupted_image("SVG file is empty"))
       end
 
-      content = File.read(path)
+      content = File.read(safe_path)
       colors = extract_colors(content)
       Result(Array(RGB), Error).ok(colors)
     rescue ex : XML::Error

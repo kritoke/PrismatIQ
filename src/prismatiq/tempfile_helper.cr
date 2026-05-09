@@ -37,7 +37,7 @@ module PrismatIQ
       tmp_dir = ENV["TMPDIR"]? || ENV["TEMP"]? || "."
       tries = 0
       while tries < 16
-        rnd = Random.new.rand(0_u32..0xFFFF_FFFF_u32)
+        rnd = Random::Secure.hex(4)
         path = "#{tmp_dir}/#{prefix}#{Process.pid}_#{Time.local.to_unix}_#{rnd}.tmp"
         begin
           File.open(path, "w", exclusive: true) do |file|

@@ -166,7 +166,7 @@ module PrismatIQ
       hi = arr.size - 1
 
       while lo < hi
-        pivot_idx = lo + rng.rand(hi - lo + 1)
+        pivot_idx = lo + Random::Secure.rand(hi - lo + 1)
         pivot = arr[pivot_idx]
         arr[pivot_idx] = arr[hi]
         arr[hi] = pivot

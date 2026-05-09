@@ -235,7 +235,7 @@ describe "concurrent palette extraction" do
     results = Channel(Array(PrismatIQ::RGB)).new(15)
     thread_counts = [1, 2, 4, 8]
 
-    thread_counts.each do |threads|
+    thread_counts.each do |_threads|
       spawn do
         options = PrismatIQ::Options.new(color_count: 5, quality: 3)
         results.send(PrismatIQ.get_palette_v2!(pixels, width, height, options))

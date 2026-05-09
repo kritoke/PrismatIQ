@@ -39,9 +39,14 @@ module PrismatIQ
     private getter config : Config
 
     def self.from_path(path : String, config : Config = Config.default) : ICOFile?
-      file_size = File.size(path) rescue 0_i64
+      # Validate path to prevent path traversal attacks
+      validation = Utils::Validation.validate_file_path(path)
+      return unless validation.ok?
+      safe_path = validation.value
+
+      file_size = File.size(safe_path) rescue 0_i64
       return if file_size > Constants::MAX_FILE_SIZE || file_size == 0
-      bytes = File.read(path).to_slice
+      bytes = File.read(safe_path).to_slice
       new(bytes, config)
     rescue ex : IO::Error | ArgumentError | IndexError
       config.log_debug "ICOFile.from_path: failed to read #{path}: #{ex.message}"

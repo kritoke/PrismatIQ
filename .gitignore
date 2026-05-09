@@ -44,3 +44,6 @@ flake.private.nix
 todo.md
 docs/
 openspec/
+
+# Planning
+planning/

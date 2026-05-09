@@ -35,6 +35,7 @@ require "./prismatiq/theme_extractor"
 module PrismatIQ
   @@theme_extractor : ThemeExtractor?
   @@theme_extractor_mutex = Mutex.new
+
   # High-performance Crystal shard for extracting dominant color palettes from images.
   #
   # ## Thread Safety
