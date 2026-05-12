@@ -70,6 +70,19 @@ module PrismatIQ
       BinaryReader.read_i32_le(@data, idx)
     end
 
+    # Read common header fields (bit_count, compression, colors_used) from offset.
+    private def read_common_header_fields
+      header_size = read_u32_le(0)
+      return if header_size < 40
+
+      @bit_count = read_u16_le(14).to_i32
+      @compression = read_u32_le(16)
+
+      if @data.size >= 36
+        @colors_used = read_u32_le(32)
+      end
+    end
+
     def initialize(@data : Slice(UInt8), @config : Config = Config.default)
       @valid = false
       @width = 0
@@ -89,22 +102,14 @@ module PrismatIQ
       @compression = 0_u32
       @colors_used = 0_u32
 
-      parse_header_fields if @data.size >= 40
+      return unless @data.size >= 40
+      read_common_header_fields
+      validate_dimensions
     end
 
     # Parse header fields except dimensions (used when dimensions are pre-set)
     private def parse_header_fields
-      header_size = read_u32_le(0)
-      return if header_size < 40
-
-      @bit_count = read_u16_le(14).to_i32
-      @compression = read_u32_le(16)
-
-      # Colors used field is at offset 32
-      if @data.size >= 36
-        @colors_used = read_u32_le(32)
-      end
-
+      read_common_header_fields
       validate_dimensions
     end
 
@@ -125,6 +130,16 @@ module PrismatIQ
       total.to_i32
     end
 
+    # Allocates and decodes RGBA pixel buffer. Raises on invalid/too-large images.
+    private def decode_to_rgba_buffer : Slice(UInt8)
+      raise BMPParseError.new("Invalid BMP data") unless @valid
+      buf_size = safe_pixel_buffer_size
+      raise BMPParseError.new("BMP dimensions too large") unless buf_size
+      pixels = Slice(UInt8).new(buf_size)
+      decode_pixels(pixels)
+      pixels
+    end
+
     # Returns the pixel data as RGBA bytes
     #
     # Returns a Slice(UInt8) of size width * height * 4 containing
@@ -137,13 +152,7 @@ module PrismatIQ
     # # pixels[0..3] = first pixel R, G, B, A
     # ```
     def to_rgba : Slice(UInt8)
-      raise BMPParseError.new("Invalid BMP data") unless @valid
-
-      buf_size = safe_pixel_buffer_size
-      raise BMPParseError.new("BMP dimensions too large") unless buf_size
-      pixels = Slice(UInt8).new(buf_size)
-      decode_pixels(pixels)
-      pixels
+      decode_to_rgba_buffer
     end
 
     # Returns a ParsedImage struct containing width, height, and RGBA pixels
@@ -156,12 +165,7 @@ module PrismatIQ
     # puts "Size: #{image.width}x#{image.height}"
     # ```
     def to_image : ParsedImage
-      raise BMPParseError.new("Invalid BMP data") unless @valid
-
-      buf_size = safe_pixel_buffer_size
-      raise BMPParseError.new("BMP dimensions too large") unless buf_size
-      pixels = Slice(UInt8).new(buf_size)
-      decode_pixels(pixels)
+      pixels = decode_to_rgba_buffer
       ParsedImage.new(@width, @height, pixels)
     end
 
@@ -193,14 +197,8 @@ module PrismatIQ
       @width = read_i32_le(4).abs
       height_signed = read_i32_le(8)
       @height = height_signed.abs
-      @bit_count = read_u16_le(14).to_i32
-      @compression = read_u32_le(16)
 
-      # Colors used field is at offset 32
-      if @data.size >= 36
-        @colors_used = read_u32_le(32)
-      end
-
+      read_common_header_fields
       validate_dimensions
     end
 

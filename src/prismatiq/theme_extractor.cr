@@ -155,22 +155,21 @@ module PrismatIQ
       @cache.clear
     end
 
-    private def extract_ico_bg(path : String, options : ThemeOptions) : RGB?
-      ico = ICOFile.from_path(path, @config)
+    # Private: Common ICO palette extraction from file or buffer.
+    private def extract_ico_colors(ico : ICOFile?, options : ThemeOptions) : RGB?
       return unless ico && ico.valid?
       extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
     rescue ex : IO::Error | ArgumentError | IndexError | OverflowError | ICOFile::ICOError
-      @config.log_debug "extract_ico_bg: #{ex.class}: #{ex.message}"
-      return
+      @config.log_debug "extract_ico_colors: #{ex.class}: #{ex.message}"
+      nil
+    end
+
+    private def extract_ico_bg(path : String, options : ThemeOptions) : RGB?
+      extract_ico_colors(ICOFile.from_path(path, @config), options)
     end
 
     private def extract_ico_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : RGB?
-      ico = ICOFile.from_slice(data, @config)
-      return unless ico && ico.valid?
-      extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
-    rescue ex : IO::Error | ArgumentError | IndexError | OverflowError | ICOFile::ICOError
-      @config.log_debug "extract_ico_buffer_bg: #{ex.class}: #{ex.message}"
-      return
+      extract_ico_colors(ICOFile.from_slice(data, @config), options)
     end
 
     private def extract_image_bg(path : String, options : ThemeOptions) : RGB?
@@ -356,22 +355,34 @@ module PrismatIQ
       }
     end
 
-    private def find_darkest_compliant_text(bg : RGB) : RGB
-      (0..255).step(Constants::ThemeExtraction::GRAY_STEP) do |val|
+    # Private: Search for a compliant gray text color.
+    # direction: :ascending scans 0→255 (darkest), :descending scans 255→0 (lightest).
+    # Private: Search for a compliant gray text color.
+    # ascending=true scans 0→255 (darkest compliant), ascending=false scans 255→0 (lightest compliant).
+    private def find_compliant_text(bg : RGB, ascending : Bool) : RGB
+      if ascending
+        fallback = RGB.new(Constants::ThemeExtraction::DARK_TEXT_FALLBACK[0], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[1], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[2])
+      else
+        fallback = RGB.new(Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[0], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[1], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[2])
+      end
+
+      step = Constants::ThemeExtraction::GRAY_STEP
+      val = ascending ? 0 : 255
+
+      while ascending ? (val <= 255) : (val >= 0)
         candidate = RGB.new(val, val, val)
         return candidate if @accessibility.contrast_ratio(candidate, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
+        val += ascending ? step : -step
       end
-      RGB.new(Constants::ThemeExtraction::DARK_TEXT_FALLBACK[0], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[1], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[2])
+      fallback
+    end
+
+    private def find_darkest_compliant_text(bg : RGB) : RGB
+      find_compliant_text(bg, ascending: true)
     end
 
     private def find_lightest_compliant_text(bg : RGB) : RGB
-      val = 255
-      while val >= 0
-        candidate = RGB.new(val, val, val)
-        return candidate if @accessibility.contrast_ratio(candidate, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
-        val -= Constants::ThemeExtraction::GRAY_STEP
-      end
-      RGB.new(Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[0], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[1], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[2])
+      find_compliant_text(bg, ascending: false)
     end
 
     private def parse_to_rgb(color_str : String?) : RGB?

@@ -89,33 +89,39 @@ module PrismatIQ
       end
     end
 
+    # Iterates over all populated histogram cells in the VBox bounds.
+    # Yields (y, i, q, freq) for each cell with freq > 0.
+    private def each_populated_cell(& : Int32, Int32, Int32, UInt32 ->)
+      y_idx = @y1
+      while y_idx <= @y2
+        y_offset = y_idx << 10
+        i_idx = @i1
+        while i_idx <= @i2
+          i_offset = i_idx << 5
+          q_idx = @q1
+          while q_idx <= @q2
+            freq = @histo[y_offset | i_offset | q_idx]
+            yield y_idx, i_idx, q_idx, freq if freq > 0
+            q_idx += 1
+          end
+          i_idx += 1
+        end
+        y_idx += 1
+      end
+    end
+
     private def compute_weighted_sums : NamedTuple(y_sum: Float64, i_sum: Float64, q_sum: Float64, found: Int32)
       y_sum = 0.0
       i_sum = 0.0
       q_sum = 0.0
       found = 0
 
-      y = @y1
-      while y <= @y2
-        y_offset = y << 10
-        i = @i1
-        while i <= @i2
-          i_offset = i << 5
-          q = @q1
-          while q <= @q2
-            freq = @histo[y_offset | i_offset | q]
-            if freq > 0
-              f = freq.to_f64
-              y_sum += y.to_f64 * f
-              i_sum += i.to_f64 * f
-              q_sum += q.to_f64 * f
-              found += freq.to_i
-            end
-            q += 1
-          end
-          i += 1
-        end
-        y += 1
+      each_populated_cell do |y_val, i_val, q_val, frequency|
+        f = frequency.to_f64
+        y_sum += y_val.to_f64 * f
+        i_sum += i_val.to_f64 * f
+        q_sum += q_val.to_f64 * f
+        found += frequency.to_i
       end
 
       {y_sum: y_sum, i_sum: i_sum, q_sum: q_sum, found: found}
@@ -212,47 +218,20 @@ module PrismatIQ
 
     private def get_indices(axis : Int32) : Array(Int32)
       indices = Array(Int32).new
-      y = @y1
-      while y <= @y2
-        y_offset = y << 10
-        i = @i1
-        while i <= @i2
-          i_offset = i << 5
-          q = @q1
-          while q <= @q2
-            freq = @histo[y_offset | i_offset | q]
-            if freq > 0
-              case axis
-              when 0 then indices << y
-              when 1 then indices << i
-              when 2 then indices << q
-              end
-            end
-            q += 1
-          end
-          i += 1
+      each_populated_cell do |y_val, i_val, q_val, _frequency|
+        case axis
+        when 0 then indices << y_val
+        when 1 then indices << i_val
+        when 2 then indices << q_val
         end
-        y += 1
       end
       indices
     end
 
     def recalc_count : VBox
       c = 0
-      y = @y1
-      while y <= @y2
-        y_offset = y << 10
-        i = @i1
-        while i <= @i2
-          i_offset = i << 5
-          q = @q1
-          while q <= @q2
-            c += @histo[y_offset | i_offset | q].to_i
-            q += 1
-          end
-          i += 1
-        end
-        y += 1
+      each_populated_cell do |_y_val, _i_val, _q_val, frequency|
+        c += frequency.to_i
       end
       VBox.new(@y1, @y2, @i1, @i2, @q1, @q2, c, @histo)
     end

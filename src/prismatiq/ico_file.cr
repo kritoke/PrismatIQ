@@ -251,9 +251,9 @@ module PrismatIQ
     private def parse_ico_header : NamedTuple(reserved: UInt16, type: UInt16, count: UInt16)?
       return if @data.size < 6
 
-      reserved = @data[0].to_u16 | (@data[1].to_u16 << 8)
-      typ = @data[2].to_u16 | (@data[3].to_u16 << 8)
-      count = @data[4].to_u16 | (@data[5].to_u16 << 8)
+      reserved = BinaryReader.read_u16_le(@data, 0)
+      typ = BinaryReader.read_u16_le(@data, 2)
+      count = BinaryReader.read_u16_le(@data, 4)
 
       return if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
 

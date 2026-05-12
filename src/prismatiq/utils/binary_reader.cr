@@ -31,20 +31,16 @@ module PrismatIQ
 
     def read_u16_le?(slice : Slice(UInt8), idx : Int) : UInt16?
       return if idx + 1 >= slice.size
-      slice[idx].to_u16 | (slice[idx + 1].to_u16 << 8)
+      read_u16_le(slice, idx)
     end
 
     def read_u32_le?(slice : Slice(UInt8), idx : Int) : UInt32?
       return if idx + 3 >= slice.size
-      slice[idx].to_u32 |
-        (slice[idx + 1].to_u32 << 8) |
-        (slice[idx + 2].to_u32 << 16) |
-        (slice[idx + 3].to_u32 << 24)
+      read_u32_le(slice, idx)
     end
 
     def read_i32_le?(slice : Slice(UInt8), idx : Int) : Int32?
-      v = read_u32_le?(slice, idx)
-      v ? v.to_i32 : nil
+      read_u32_le?(slice, idx).try(&.to_i32)
     end
   end
 end

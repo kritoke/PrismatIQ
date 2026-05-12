@@ -48,16 +48,10 @@ module PrismatIQ
       h = slice[offset + 1]
       colors = slice[offset + 2]
       res = slice[offset + 3]
-      planes = slice[offset + 4].to_u16 | (slice[offset + 5].to_u16 << 8)
-      bpp = slice[offset + 6].to_u16 | (slice[offset + 7].to_u16 << 8)
-      size = slice[offset + 8].to_u32 |
-             (slice[offset + 9].to_u32 << 8) |
-             (slice[offset + 10].to_u32 << 16) |
-             (slice[offset + 11].to_u32 << 24)
-      img_off = slice[offset + 12].to_u32 |
-                (slice[offset + 13].to_u32 << 8) |
-                (slice[offset + 14].to_u32 << 16) |
-                (slice[offset + 15].to_u32 << 24)
+      planes = BinaryReader.read_u16_le(slice, offset + 4)
+      bpp = BinaryReader.read_u16_le(slice, offset + 6)
+      size = BinaryReader.read_u32_le(slice, offset + 8)
+      img_off = BinaryReader.read_u32_le(slice, offset + 12)
 
       new(w, h, colors, res, planes, bpp, size, img_off)
     end

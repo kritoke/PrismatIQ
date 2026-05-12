@@ -48,14 +48,19 @@ module PrismatIQ
       @valid
     end
 
-    def to_rgba : Slice(UInt8)
+    # Allocates and decodes RGBA pixel buffer. Raises on invalid PNG.
+    private def decode_to_rgba_buffer : Slice(UInt8)
       raise PNGExtractError.new("Invalid PNG data") unless @valid
       @pixels
     end
 
+    def to_rgba : Slice(UInt8)
+      decode_to_rgba_buffer
+    end
+
     def to_image : ParsedImage
-      raise PNGExtractError.new("Invalid PNG data") unless @valid
-      ParsedImage.new(@width, @height, @pixels)
+      pixels = decode_to_rgba_buffer
+      ParsedImage.new(@width, @height, pixels)
     end
 
     def self.from_slice?(data : Slice(UInt8)) : PNGExtractor?
@@ -68,9 +73,9 @@ module PrismatIQ
     def self.extract_from_ico(ico_data : Slice(UInt8), max_size : Int64 = MAX_PNG_SIZE) : PNGExtractor?
       return if ico_data.size < 6
 
-      reserved = ico_data[0].to_u16 | (ico_data[1].to_u16 << 8)
-      typ = ico_data[2].to_u16 | (ico_data[3].to_u16 << 8)
-      count = ico_data[4].to_u16 | (ico_data[5].to_u16 << 8)
+      reserved = BinaryReader.read_u16_le(ico_data, 0)
+      typ = BinaryReader.read_u16_le(ico_data, 2)
+      count = BinaryReader.read_u16_le(ico_data, 4)
 
       return if reserved != 0 || (typ != 1 && typ != 2) || count <= 0
 
@@ -88,15 +93,8 @@ module PrismatIQ
     private def self.try_png_entry_at(ico_data : Slice(UInt8), entry_base : Int32, index : Int32, max_size : Int64) : PNGExtractor?
       off = entry_base + index * 16
 
-      size = ico_data[off + 8].to_u64 |
-             (ico_data[off + 9].to_u64 << 8) |
-             (ico_data[off + 10].to_u64 << 16) |
-             (ico_data[off + 11].to_u64 << 24)
-
-      image_offset = ico_data[off + 12].to_u64 |
-                     (ico_data[off + 13].to_u64 << 8) |
-                     (ico_data[off + 14].to_u64 << 16) |
-                     (ico_data[off + 15].to_u64 << 24)
+      size = BinaryReader.read_u32_le(ico_data, off + 8).to_u64
+      image_offset = BinaryReader.read_u32_le(ico_data, off + 12).to_u64
 
       return if size > max_size
 

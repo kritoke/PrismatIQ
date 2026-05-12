@@ -39,6 +39,21 @@ module PrismatIQ
       def initialize(@config : Config = Config.default)
       end
 
+      # Private: Common pipeline for image-based extraction.
+      # Loads image, checks dimensions, normalizes, and extracts palette.
+      private def extract_from_image_source(img, options : Options) : Array(RGB)
+        width = img.bounds.width.to_i32
+        height = img.bounds.height.to_i32
+
+        if width > @config.max_image_width || height > @config.max_image_height
+          @config.log_debug "extract_from_image_source: dimensions #{width}x#{height} exceed max #{@config.max_image_width}x#{@config.max_image_height}"
+          return [] of RGB
+        end
+
+        rgba_image = Utils::ImageLoader.normalize(img)
+        do_extract_from_image_data(rgba_image, width, height, options)
+      end
+
       def extract_from_path(path : String, options : Options) : Array(RGB)
         if @config.debug_log?
           @config.log_debug "get_palette(path): path=#{path} options=#{options.inspect}"
@@ -48,30 +63,12 @@ module PrismatIQ
         return [] of RGB if validation.err?
 
         img = Utils::ImageLoader.read(validation.value)
-        width = img.bounds.width.to_i32
-        height = img.bounds.height.to_i32
-
-        if width > @config.max_image_width || height > @config.max_image_height
-          @config.log_debug "extract_from_path: image dimensions #{width}x#{height} exceed max #{@config.max_image_width}x#{@config.max_image_height}"
-          return [] of RGB
-        end
-
-        rgba_image = Utils::ImageLoader.normalize(img)
-        do_extract_from_image_data(rgba_image, width, height, options)
+        extract_from_image_source(img, options)
       end
 
       def extract_from_io(io : IO, options : Options) : Array(RGB)
         img = Utils::ImageLoader.read(io)
-        width = img.bounds.width.to_i32
-        height = img.bounds.height.to_i32
-
-        if width > @config.max_image_width || height > @config.max_image_height
-          @config.log_debug "extract_from_io: image dimensions #{width}x#{height} exceed max #{@config.max_image_width}x#{@config.max_image_height}"
-          return [] of RGB
-        end
-
-        rgba_image = Utils::ImageLoader.normalize(img)
-        do_extract_from_image_data(rgba_image, width, height, options)
+        extract_from_image_source(img, options)
       end
 
       def extract_from_image(image, options : Options) : Array(RGB)
@@ -79,16 +76,7 @@ module PrismatIQ
           @config.log_debug "get_palette_from_image: image.class=#{image.class} options=#{options.inspect}"
         end
 
-        width = image.bounds.width.to_i32
-        height = image.bounds.height.to_i32
-
-        if width > @config.max_image_width || height > @config.max_image_height
-          @config.log_debug "extract_from_image: image dimensions #{width}x#{height} exceed max #{@config.max_image_width}x#{@config.max_image_height}"
-          return [] of RGB
-        end
-
-        rgba_image = Utils::ImageLoader.normalize(image)
-        do_extract_from_image_data(rgba_image, width, height, options)
+        extract_from_image_source(image, options)
       end
 
       def extract_from_image_data(rgba_image, width : Int32, height : Int32, options : Options) : Array(RGB)

@@ -51,39 +51,34 @@ module PrismatIQ
         palette.map(&.to_hex)
       end
 
-      def get_color_from_path(path : String) : RGB?
-        options = Options.new(color_count: 1)
+      # Private: Common pattern for single-color extraction from any source.
+      private def extract_single_color(&block : -> Array(RGB)) : RGB?
         begin
-          extractor = PaletteExtractor.new(@config)
-          palette = extractor.extract_from_path(path, options)
-          palette.first?
+          block.call.first?
         rescue ex : Exception
-          @config.log_debug "get_color_from_path: #{ex.class}: #{ex.message}"
+          @config.log_debug "extract_single_color: #{ex.class}: #{ex.message}"
           nil
+        end
+      end
+
+      def get_color_from_path(path : String) : RGB?
+        extract_single_color do
+          options = Options.new(color_count: 1)
+          PaletteExtractor.new(@config).extract_from_path(path, options)
         end
       end
 
       def get_color_from_io(io : IO) : RGB?
-        options = Options.new(color_count: 1)
-        begin
-          extractor = PaletteExtractor.new(@config)
-          palette = extractor.extract_from_io(io, options)
-          palette.first?
-        rescue ex : Exception
-          @config.log_debug "get_color_from_io: #{ex.class}: #{ex.message}"
-          nil
+        extract_single_color do
+          options = Options.new(color_count: 1)
+          PaletteExtractor.new(@config).extract_from_io(io, options)
         end
       end
 
       def get_color(img : CrImage::Image) : RGB?
-        options = Options.new(color_count: 1)
-        begin
-          extractor = PaletteExtractor.new(@config)
-          palette = extractor.extract_from_image(img, options)
-          palette.first?
-        rescue ex : Exception
-          @config.log_debug "get_color: #{ex.class}: #{ex.message}"
-          nil
+        extract_single_color do
+          options = Options.new(color_count: 1)
+          PaletteExtractor.new(@config).extract_from_image(img, options)
         end
       end
 
