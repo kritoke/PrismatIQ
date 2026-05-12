@@ -102,16 +102,21 @@ module PrismatIQ
 
         @histo.each_with_index do |freq, index|
           next if freq == 0
-          y, i, q = YIQConverter.from_index(index)
-          y1 = y if y < y1
-          y2 = y if y > y2
-          i1 = i if i < i1
-          i2 = i if i > i2
-          q1 = q if q < q1
-          q2 = q if q > q2
+          y1, y2, i1, i2, q1, q2 = update_range_bounds(y1, y2, i1, i2, q1, q2, index)
         end
 
         VBox.new(y1, y2, i1, i2, q1, q2, @total, @histo)
+      end
+
+      private def update_range_bounds(y1, y2, i1, i2, q1, q2, index)
+        y, i, q = YIQConverter.from_index(index)
+        y1 = y if y < y1
+        y2 = y if y > y2
+        i1 = i if i < i1
+        i2 = i if i > i2
+        q1 = q if q < q1
+        q2 = q if q > q2
+        {y1, y2, i1, i2, q1, q2}
       end
     end
   end
