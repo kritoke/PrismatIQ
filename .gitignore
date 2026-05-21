@@ -39,6 +39,7 @@ flake.private.nix
 .opencode
 .kilocode
 .ruff_cache
+.catseye/
 
 # Local audit todo file
 todo.md

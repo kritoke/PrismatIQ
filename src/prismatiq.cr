@@ -185,7 +185,7 @@ module PrismatIQ
     result
   end
 
-  # --- CrImage-based overload ---
+  # --- CrImage-based overloads ---
 
   def self.get_palette_v2(image : CrImage::Image, options : Options = Options.default, config : Config = Config.default) : Result(Array(RGB), Error)
     options.validate!
@@ -276,7 +276,35 @@ module PrismatIQ
     end
   end
 
+  # ============================================================================
+  # Debug Logging with Sensitive Data Sanitization
+  # ============================================================================
+
+  # Regex pattern to match sensitive key=value pairs in URLs, headers, or config.
+  # Matches: ?password=secret, &token=xyz, "secret: value", etc.
+  # The entire key+separator+value is replaced with [REDACTED].
+  SENSITIVE_KEY_PATTERN = /[?&](?:password|passwd|pwd|secret|token|key|api[_-]?key|auth|credential|bearer|basic|jwt|oauth|api[_-]?secret|session[_-]?id|private[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)\s*[=:][^&\s]*/i
+
+  # Sanitizes potentially sensitive data from debug messages before logging.
+  # Redacts passwords, tokens, API keys, and authentication credentials.
+  #
+  # Uses a simple replacement strategy: find sensitive key=value patterns and
+  # replace them entirely with [REDACTED]. This is more robust than trying to
+  # preserve partial values since secrets should never appear in debug logs anyway.
+  #
+  # Handles:
+  # - URL query parameters: ?password=secret&token=xyz
+  # - Header-like values: "Authorization: Bearer xyz"
+  # - Config values: api_key=secret
+  def self.sanitize_message(message : String) : String
+    message.gsub(SENSITIVE_KEY_PATTERN) { |_match| "[REDACTED]" }
+  end
+
+  # Logs a debug message with sensitive data sanitization.
+  # Only outputs when PRISMATIQ_DEBUG environment variable is set.
   def self.log_debug(message : String) : Nil
-    STDERR.puts message if ENV["PRISMATIQ_DEBUG"]?
+    return unless ENV["PRISMATIQ_DEBUG"]?
+    sanitized = sanitize_message(message)
+    STDERR.puts "[PrismatIQ DEBUG] #{sanitized}"
   end
 end

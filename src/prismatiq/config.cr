@@ -113,7 +113,10 @@ module PrismatIQ
     end
 
     def log_debug(message : String) : Nil
-      STDERR.puts message if @debug
+      return unless @debug
+      # Delegate to PrismatIQ.sanitize_message for consistent redaction
+      sanitized = PrismatIQ.sanitize_message(message)
+      STDERR.puts "[PrismatIQ DEBUG] #{sanitized}"
     end
 
     def debug_log? : Bool
