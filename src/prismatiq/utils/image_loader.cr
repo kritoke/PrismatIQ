@@ -18,11 +18,11 @@ module PrismatIQ
       end
 
       def self.read(path : String) : CrImage::Image
-        CrImage.read(path).as(CrImage::Image)
+        CrImage.read(path)
       end
 
       def self.read(io : IO) : CrImage::Image
-        CrImage.read(io).as(CrImage::Image)
+        CrImage.read(io)
       end
 
       def self.normalize(img : CrImage::Image) : CrImage::Image

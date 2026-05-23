@@ -6,6 +6,23 @@ module PrismatIQ
       MAX_FILE_SIZE        = 100 * 1024 * 1024
       SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tiff", ".tif", ".svg"]
 
+      # Expanded system directory protection for security.
+      # Blocks access to OS-critical directories across all platforms.
+      private SYSTEM_DIRECTORIES = {
+        # Linux
+        "/etc/", "/sys/", "/proc/", "/dev/", "/boot/", "/root/",
+        "/usr/", "/var/", "/lib/", "/sbin/", "/bin/",
+        "/run/", "/snap/", "/srv/", "/opt/", "/mnt/", "/media/",
+        "/lost+found", "/.snapshots",
+        # macOS
+        "/System/", "/Library/", "/Applications/", "/bin/", "/sbin/",
+        "/usr/lib/", "/usr/sbin/", "/usr/bin/", "/var/log/",
+        "/var/root/", "/private/",
+        # Windows (using forward slashes for cross-platform compatibility)
+        "C:/Windows/", "C:/Program Files/", "C:/Program Files (x86)/",
+        "C:/Boot/", "C:/Recovery/", "C:/System Volume Information/",
+      }
+
       def self.validate_file_path(path : String) : Result(String, Error)
         return Result(String, Error).err(Error.invalid_image_path(path, "Path is empty")) if path.empty?
 
@@ -39,14 +56,19 @@ module PrismatIQ
       end
 
       private def self.system_directory?(path : String) : Bool
-        {% if flag?(:linux) %}
-          path.starts_with?("/etc/") || path.starts_with?("/sys/") || path.starts_with?("/proc/") ||
-            path.starts_with?("/dev/") || path.starts_with?("/boot/") || path.starts_with?("/root/") ||
-            path.starts_with?("/usr/") || path.starts_with?("/var/") || path.starts_with?("/lib/") ||
-            path.starts_with?("/sbin/") || path.starts_with?("/bin/") || path == "/"
-        {% else %}
-          false
-        {% end %}
+        # Fast path: check exact matches
+        return true if path == "/"
+        return true if path == "C:/" || path == "C:"
+
+        # Normalize path separators for consistent checking
+        normalized = path.gsub("\\", "/")
+
+        # Check against known system directories
+        SYSTEM_DIRECTORIES.each do |sys_dir|
+          return true if normalized.starts_with?(sys_dir)
+        end
+
+        false
       end
 
       private def self.validate_file_size(path : String) : Result(String, Error)
@@ -118,10 +140,10 @@ module PrismatIQ
         return true if header[0..3] == Bytes[0x00, 0x00, 0x01, 0x00]
         return true if header[0..3] == Bytes[0x52, 0x49, 0x46, 0x46]
 
-        if header[0] == 0x3C && header.size >= 4
-          svg_sig = Bytes[0x3C_u8, 0x73_u8, 0x76_u8, 0x67_u8]
-          xml_sig = Bytes[0x3C_u8, 0x3F_u8, 0x78_u8, 0x6D_u8]
-          return true if header[0..3] == svg_sig || header[0..3] == xml_sig
+        # SVG: "<?xml" or "<svg"
+        if header.size >= 5
+          return true if header[0..4] == Bytes[0x3C_u8, 0x3F_u8, 0x78_u8, 0x6D_u8, 0x6C_u8]
+          return true if header[0..3] == Bytes[0x3C_u8, 0x73_u8, 0x76_u8, 0x67_u8]
         end
 
         false

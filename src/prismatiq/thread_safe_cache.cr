@@ -1,4 +1,9 @@
 module PrismatIQ
+  # Thread-safe LRU cache with optional size limit.
+  #
+  # Note: All public methods acquire @mutex. Private methods like evict_if_needed
+  # are designed to be called ONLY from within already-synchronized contexts
+  # to avoid deadlock (Crystal's Mutex is not reentrant).
   class ThreadSafeCache(K, V)
     @cache : Hash(K, V)
     @mutex : Mutex
@@ -18,7 +23,8 @@ module PrismatIQ
         return cached if cached
 
         value = block.call
-        evict_if_needed
+        # @cache.size is safe to read here because we're inside @mutex.synchronize
+        evict_if_needed_locked(@cache.size)
         @cache[key] = value
         @order << key
         value
@@ -59,7 +65,8 @@ module PrismatIQ
     def []=(key : K, value : V) : V
       @mutex.synchronize do
         unless @cache.has_key?(key)
-          evict_if_needed
+          # @cache.size is safe to read here because we're inside @mutex.synchronize
+          evict_if_needed_locked(@cache.size)
           @order << key
         end
         @cache[key] = value
@@ -67,13 +74,15 @@ module PrismatIQ
       end
     end
 
-    private def evict_if_needed : Nil
+    # Called ONLY from within @mutex.synchronize block - does NOT acquire lock
+    private def evict_if_needed_locked(current_size : Int32) : Nil
       return unless max = @max_entries
-      return if @cache.size < max
-      evict_oldest
+      return if current_size < max
+      evict_oldest_locked
     end
 
-    private def evict_oldest : Nil
+    # Called ONLY from within @mutex.synchronize block - does NOT acquire lock
+    private def evict_oldest_locked : Nil
       key = @order.shift?
       @cache.delete(key) if key
     end

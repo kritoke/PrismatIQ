@@ -11,6 +11,7 @@ module PrismatIQ
     ProcessingFailed
     ImageTooLarge
     SSRFBlocked
+    EmptyPalette  # Image has no opaque pixels or no pixels at all
   end
 
   class SSRFError < Exception
@@ -98,6 +99,20 @@ module PrismatIQ
         ErrorType::SSRFBlocked,
         "SSRF blocked: #{reason} (#{ip})",
         {"url" => url, "ip" => ip, "reason" => reason}
+      )
+    end
+
+    # Creates an error for images that contain no opaque pixels (all transparent)
+    # or have zero dimensions.
+    def self.empty_palette(width : Int32? = nil, height : Int32? = nil, source : String? = nil) : Error
+      context = Hash(String, String).new
+      context["width"] = width.to_s if width
+      context["height"] = height.to_s if height
+      context["source"] = source if source
+      new(
+        ErrorType::EmptyPalette,
+        "Image has no opaque pixels or zero dimensions",
+        context.empty? ? nil : context
       )
     end
 
