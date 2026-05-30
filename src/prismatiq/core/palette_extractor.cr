@@ -105,7 +105,7 @@ module PrismatIQ
 
         palette = vboxes.compact_map do |box|
           next if box.count == 0
-          box.average_color_rgb
+          box.average_color_rgb(histo)
         end
 
         sort_by_popularity(palette, histo)

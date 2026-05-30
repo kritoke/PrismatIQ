@@ -43,7 +43,7 @@ module PrismatIQ
       end
 
       private def split_and_enqueue(pq : Algorithm::PriorityQueue(VBox), box : VBox) : Bool
-        vbox1, vbox2 = box.split(@rng)
+        vbox1, vbox2 = box.split(@histo, @rng)
 
         if vbox1 == box
           pq.push(box)
@@ -105,7 +105,7 @@ module PrismatIQ
           y1, y2, i1, i2, q1, q2 = update_range_bounds(y1, y2, i1, i2, q1, q2, index)
         end
 
-        VBox.new(y1, y2, i1, i2, q1, q2, @total, @histo)
+        VBox.new(y1, y2, i1, i2, q1, q2, @total)
       end
 
       private def update_range_bounds(y1, y2, i1, i2, q1, q2, index)

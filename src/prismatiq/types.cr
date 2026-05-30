@@ -48,9 +48,8 @@ module PrismatIQ
     getter q1 : Int32
     getter q2 : Int32
     getter count : Int32
-    getter histo : Array(UInt32)
 
-    def initialize(@y1 : Int32, @y2 : Int32, @i1 : Int32, @i2 : Int32, @q1 : Int32, @q2 : Int32, @count : Int32 = 0, @histo : Array(UInt32) = Array(UInt32).new(Constants::HISTOGRAM_SIZE, 0_u32))
+    def initialize(@y1 : Int32, @y2 : Int32, @i1 : Int32, @i2 : Int32, @q1 : Int32, @q2 : Int32, @count : Int32 = 0)
     end
 
     def volume
@@ -61,12 +60,12 @@ module PrismatIQ
       @count.to_f64 * volume
     end
 
-    def average_color : Color
+    def average_color(histo : Array(UInt32)) : Color
       if @count == 0
         return Color.new(0, 0, 0)
       end
 
-      sums = compute_weighted_sums
+      sums = compute_weighted_sums(histo)
       if sums[:found] > 0
         Color.new(sums[:y_sum] / sums[:found], sums[:i_sum] / sums[:found], sums[:q_sum] / sums[:found])
       else
@@ -74,12 +73,12 @@ module PrismatIQ
       end
     end
 
-    def average_color_rgb : RGB
+    def average_color_rgb(histo : Array(UInt32)) : RGB
       if @count == 0
         return RGB.new(0, 0, 0)
       end
 
-      sums = compute_weighted_sums
+      sums = compute_weighted_sums(histo)
       if sums[:found] > 0
         color = Color.new(sums[:y_sum] / sums[:found], sums[:i_sum] / sums[:found], sums[:q_sum] / sums[:found])
         r, g, b = color.to_rgb_from_quantized
@@ -91,7 +90,7 @@ module PrismatIQ
 
     # Iterates over all populated histogram cells in the VBox bounds.
     # Yields (y, i, q, freq) for each cell with freq > 0.
-    private def each_populated_cell(& : Int32, Int32, Int32, UInt32 ->)
+    private def each_populated_cell(histo : Array(UInt32), & : Int32, Int32, Int32, UInt32 ->)
       y_idx = @y1
       while y_idx <= @y2
         y_offset = y_idx << 10
@@ -100,7 +99,7 @@ module PrismatIQ
           i_offset = i_idx << 5
           q_idx = @q1
           while q_idx <= @q2
-            freq = @histo[y_offset | i_offset | q_idx]
+            freq = histo[y_offset | i_offset | q_idx]
             yield y_idx, i_idx, q_idx, freq if freq > 0
             q_idx += 1
           end
@@ -110,13 +109,13 @@ module PrismatIQ
       end
     end
 
-    private def compute_weighted_sums : NamedTuple(y_sum: Float64, i_sum: Float64, q_sum: Float64, found: Int32)
+    private def compute_weighted_sums(histo : Array(UInt32)) : NamedTuple(y_sum: Float64, i_sum: Float64, q_sum: Float64, found: Int32)
       y_sum = 0.0
       i_sum = 0.0
       q_sum = 0.0
       found = 0
 
-      each_populated_cell do |y_val, i_val, q_val, frequency|
+      each_populated_cell(histo) do |y_val, i_val, q_val, frequency|
         f = frequency.to_f64
         y_sum += y_val.to_f64 * f
         i_sum += i_val.to_f64 * f
@@ -127,11 +126,11 @@ module PrismatIQ
       {y_sum: y_sum, i_sum: i_sum, q_sum: q_sum, found: found}
     end
 
-    def split(rng : Random::PCG32 = Random::PCG32.new) : Tuple(VBox, VBox)
+    def split(histo : Array(UInt32), rng : Random::PCG32 = Random::PCG32.new) : Tuple(VBox, VBox)
       axis = find_split_axis
       return {self, VBox.new(0, 0, 0, 0, 0, 0)} if axis == -1
 
-      indices = get_indices(axis)
+      indices = get_indices(histo, axis)
 
       return {self, VBox.new(0, 0, 0, 0, 0, 0)} if indices.empty?
 
@@ -153,10 +152,10 @@ module PrismatIQ
         box2_q1 = split_at + 1
       end
 
-      box1 = VBox.new(box1_y1, box1_y2, box1_i1, box1_i2, box1_q1, box1_q2, 0, @histo)
-      box2 = VBox.new(box2_y1, box2_y2, box2_i1, box2_i2, box2_q1, box2_q2, 0, @histo)
+      box1 = VBox.new(box1_y1, box1_y2, box1_i1, box1_i2, box1_q1, box1_q2)
+      box2 = VBox.new(box2_y1, box2_y2, box2_i1, box2_i2, box2_q1, box2_q2)
 
-      {box1.recalc_count, box2.recalc_count}
+      {box1.recalc_count(histo), box2.recalc_count(histo)}
     end
 
     # Quickselect algorithm to find k-th smallest element in O(n) average time.
@@ -216,9 +215,9 @@ module PrismatIQ
       end
     end
 
-    private def get_indices(axis : Int32) : Array(Int32)
+    private def get_indices(histo : Array(UInt32), axis : Int32) : Array(Int32)
       indices = Array(Int32).new
-      each_populated_cell do |y_val, i_val, q_val, _frequency|
+      each_populated_cell(histo) do |y_val, i_val, q_val, _frequency|
         case axis
         when 0 then indices << y_val
         when 1 then indices << i_val
@@ -228,12 +227,12 @@ module PrismatIQ
       indices
     end
 
-    def recalc_count : VBox
+    def recalc_count(histo : Array(UInt32)) : VBox
       c = 0
-      each_populated_cell do |_y_val, _i_val, _q_val, frequency|
+      each_populated_cell(histo) do |_y_val, _i_val, _q_val, frequency|
         c += frequency.to_i
       end
-      VBox.new(@y1, @y2, @i1, @i2, @q1, @q2, c, @histo)
+      VBox.new(@y1, @y2, @i1, @i2, @q1, @q2, c)
     end
   end
 
