@@ -217,8 +217,7 @@ module PrismatIQ
     end
 
     private def extract_pixel_colors(pixels, w, h, options : ThemeOptions) : RGB?
-      extractor_opts = ColorExtractor::Options.new
-      extractor_opts.sample_size = options.quality
+      extractor_opts = Options.new(quality: options.quality)
       result = ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
       result.try(&.first?)
     end

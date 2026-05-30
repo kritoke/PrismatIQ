@@ -1,9 +1,7 @@
 module PrismatIQ
   module ColorExtractor
-    struct Options
-      property sample_size : Int32 = 1000
-      property alpha_threshold : UInt8 = 1_u8
-    end
+    # Default sample size for averaging when deriving from PrismatIQ::Options.
+    DEFAULT_SAMPLE_SIZE = 1000
 
     def self.extract_from_buffer(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.new, config : Config = Config.default) : Array(RGB)?
       return if width <= 0 || height <= 0
@@ -13,11 +11,11 @@ module PrismatIQ
       return if total_i64 > Int32::MAX.to_i64 || pixels.size < expected_size
 
       total = total_i64.to_i32
-      sample_size = options.sample_size > 0 ? options.sample_size : 1000
+      sample_size = effective_sample_size(options)
       step = (total.to_f / sample_size.to_f).ceil.to_i32
       step = 1 if step < 1
 
-      r_total, g_total, b_total, count = sample_pixels(pixels, total, step, options, config)
+      r_total, g_total, b_total, count = sample_pixels(pixels, total, step, options.alpha_threshold, config)
 
       return if count == 0
 
@@ -31,7 +29,14 @@ module PrismatIQ
       nil
     end
 
-    private def self.sample_pixels(pixels : Slice(UInt8), total : Int32, step : Int32, options : Options, config : Config) : Tuple(Int64, Int64, Int64, Int32)
+    private def self.effective_sample_size(options : Options) : Int32
+      # PrismatIQ::Options.quality (1-100) maps inversely to sample density.
+      # Higher quality → lower step → more samples. Use quality directly as
+      # sample count to maintain consistent behavior.
+      options.quality > 0 ? options.quality : DEFAULT_SAMPLE_SIZE
+    end
+
+    private def self.sample_pixels(pixels : Slice(UInt8), total : Int32, step : Int32, alpha_threshold : UInt8, config : Config) : Tuple(Int64, Int64, Int64, Int32)
       r_total = 0_i64
       g_total = 0_i64
       b_total = 0_i64
@@ -42,7 +47,7 @@ module PrismatIQ
         idx = p * 4
         if idx + 3 < pixels.size
           a = pixels[idx + 3]
-          if a >= options.alpha_threshold
+          if a >= alpha_threshold
             r = pixels[idx].to_i32
             g = pixels[idx + 1].to_i32
             b = pixels[idx + 2].to_i32
