@@ -2,26 +2,23 @@
 # emit a ColorThief‑compatible JSON payload from a local image.
 #
 # Usage:
-#   crystal run examples/color_thief_adapter.cr -- path/to/image.jpg [count] [quality] [threads]
+#   crystal run examples/color_thief_adapter.cr -- path/to/image.jpg [count] [quality]
 
 require "../src/prismatiq"
 require "json"
 
 if ARGV.empty?
-  STDERR.puts "usage: crystal run examples/color_thief_adapter.cr -- path/to/image.jpg [count] [quality] [threads]"
+  STDERR.puts "usage: crystal run examples/color_thief_adapter.cr -- path/to/image.jpg [count] [quality]"
   exit 1
 end
 
 path = ARGV[0]
 color_count = (ARGV[1] || "5").to_i
 quality = (ARGV[2] || "10").to_i
-threads = (ARGV[3] || "0").to_i
-
-# Create Options struct with the new API pattern
+# Create Options struct with the current API
 options = PrismatIQ::Options.new(
   color_count: color_count,
-  quality: quality,
-  threads: threads
+  quality: quality
 )
 
 begin
