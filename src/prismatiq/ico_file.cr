@@ -46,7 +46,7 @@ module PrismatIQ
 
       file_size = File.size(safe_path) rescue 0_i64
       return if file_size > Constants::MAX_FILE_SIZE || file_size == 0
-      bytes = File.read(safe_path).to_slice
+      bytes = File.open(safe_path, &.getb_to_end).to_slice
       new(bytes, config)
     rescue ex : IO::Error | ArgumentError | IndexError
       config.log_debug "ICOFile.from_path: failed to read #{path}: #{ex.message}"

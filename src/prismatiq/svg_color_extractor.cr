@@ -246,7 +246,7 @@ module PrismatIQ
         return Result(Array(RGB), Error).err(Error.corrupted_image("SVG file is empty"))
       end
 
-      content = File.read(safe_path)
+      content = File.open(safe_path, &.gets_to_end)
       colors = extract_colors(content)
       Result(Array(RGB), Error).ok(colors)
     rescue ex : XML::Error
