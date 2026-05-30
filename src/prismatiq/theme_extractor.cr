@@ -239,6 +239,7 @@ module PrismatIQ
       validated_ip = resolve_and_validate_host(host)
       return if validated_ip == :blocked
 
+      client : HTTP::Client? = nil
       begin
         client = if validated_ip.is_a?(Socket::IPAddress)
                    connect_to_ip(validated_ip.as(Socket::IPAddress), host, port, use_tls)
@@ -315,32 +316,33 @@ module PrismatIQ
     end
 
     private def stream_body(body_io : IO, max_size : Int64) : Slice(UInt8)?
-      buffer = IO::Memory.new
-      chunk_size = 8192
+      buffer = IO::Memory.new(Math.min(max_size, 64 * 1024).to_i)
+      chunk = Bytes.new(8192)
       loop do
-        tmp = Bytes.new(chunk_size)
-        read_bytes = body_io.read(tmp)
+        read_bytes = body_io.read(chunk)
         break if read_bytes == 0
         remaining = max_size - buffer.bytesize
         if remaining <= 0
           @config.log_debug "fetch_url: response body exceeded max_file_size during streaming"
           return
         end
-        write_bytes = {read_bytes, remaining.to_i}.min
-        buffer.write(tmp[0, write_bytes])
+        buffer.write(chunk[0, Math.min(read_bytes, remaining.to_i)])
       end
       buffer.to_slice
     end
 
     private def connect_to_ip(ip : Socket::IPAddress, original_host : String, port : Int32, use_tls : Bool) : HTTP::Client
       tcp = TCPSocket.new(ip.address, port)
-      io : IO = tcp
-
-      if use_tls
-        io = OpenSSL::SSL::Socket::Client.new(tcp, hostname: original_host)
+      begin
+        io : IO = tcp
+        if use_tls
+          io = OpenSSL::SSL::Socket::Client.new(tcp, hostname: original_host)
+        end
+        HTTP::Client.new(io, original_host)
+      rescue ex
+        tcp.close rescue nil
+        raise ex
       end
-
-      HTTP::Client.new(io, original_host)
     end
 
     private def build_theme_result(bg_rgb : RGB) : ThemeResult
@@ -355,9 +357,6 @@ module PrismatIQ
       }
     end
 
-    # Private: Search for a compliant gray text color.
-    # direction: :ascending scans 0→255 (darkest), :descending scans 255→0 (lightest).
-    # Private: Search for a compliant gray text color.
     # ascending=true scans 0→255 (darkest compliant), ascending=false scans 255→0 (lightest compliant).
     private def find_compliant_text(bg : RGB, ascending : Bool) : RGB
       if ascending
