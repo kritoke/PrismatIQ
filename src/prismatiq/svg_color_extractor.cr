@@ -254,5 +254,31 @@ module PrismatIQ
     rescue ex : IO::Error
       Result(Array(RGB), Error).err(Error.corrupted_image("Failed to read SVG file: #{ex.message}"))
     end
+
+    # Unified background extraction from a file path.
+    # Detects SVG by extension, dispatches to appropriate extractor.
+    # Returns the dominant color as RGB, or nil if extraction fails.
+    def self.extract_bg_from_file(path : String, options : ThemeOptions = ThemeOptions.new) : RGB?
+      if path.downcase.ends_with?(".svg")
+        svg_colors = extract_from_file(path)
+        return unless svg_colors.ok?
+        return unless svg_colors.value.size > 0
+        svg_colors.value[0]
+      end
+    end
+
+    # Unified background extraction from a raw byte buffer.
+    # Detects SVG by content sniffing ("<svg" in first bytes).
+    # Returns the dominant color as RGB, or nil if extraction fails.
+    def self.extract_bg_from_buffer(data : Slice(UInt8)) : RGB?
+      if data.size > 0 && data[0] == '<'.ord
+        svg_content = String.new(data)
+        if svg_content.downcase.includes?("<svg")
+          colors = extract_colors(svg_content)
+          return unless colors.size > 0
+          colors[0]
+        end
+      end
+    end
   end
 end

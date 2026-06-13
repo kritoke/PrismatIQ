@@ -1,15 +1,12 @@
-require "http/client"
 require "uri"
-require "socket"
-require "openssl"
 require "./thread_safe_cache"
 require "./theme_result"
 require "./rgb"
-require "./utils/ip_validator"
 require "./utils/validation"
 require "./errors"
 require "./accessibility_calculator"
 require "./constants"
+require "./url_fetcher"
 
 module PrismatIQ
   class ThemeExtractionError < Exception
@@ -33,16 +30,23 @@ module PrismatIQ
     end
   end
 
+  # Orchestrator for theme extraction from various sources.
+  #
+  # Delegates HTTP fetching to URLFetcher (SSRF, rate limiting, streaming)
+  # and image parsing to focused extractors (SVGColorExtractor, ICOFile, CrImage).
+  # Owns caching and theme result construction only.
   class ThemeExtractor
     @cache : ThreadSafeCache(String, ThemeResult)
     @theme_detector : ThemeDetector
     @accessibility : AccessibilityCalculator
     @config : Config
+    @url_fetcher : URLFetcher
 
     def initialize(@config : Config = Config.default)
       @cache = ThreadSafeCache(String, ThemeResult).new(max_entries: 1000)
       @theme_detector = ThemeDetector.new
       @accessibility = AccessibilityCalculator.new
+      @url_fetcher = URLFetcher.new(@config)
     end
 
     def extract(source : String, options : ThemeOptions = ThemeOptions.new) : ThemeResult?
@@ -89,7 +93,7 @@ module PrismatIQ
       return unless uri.scheme && uri.host
       return unless {"http", "https"}.includes?(uri.scheme)
 
-      data = fetch_url(uri, options)
+      data = @url_fetcher.fetch(uri, options)
       return unless data
 
       bg_rgb = if url.downcase.ends_with?(".ico")
@@ -128,6 +132,106 @@ module PrismatIQ
       ThemeResult.new(bg_rgb, text_colors[:light].to_hex, text_colors[:dark].to_hex).to_json
     end
 
+    def clear_cache
+      @cache.clear
+    end
+
+    # --- Private: Image extraction ---
+
+    private def extract_ico_colors(ico : ICOFile?, options : ThemeOptions) : RGB?
+      return unless ico && ico.valid?
+      extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
+    rescue ex : IO::Error | ArgumentError | IndexError | OverflowError | ICOFile::ICOError
+      @config.log_debug "extract_ico_colors: #{ex.class}: #{ex.message}"
+      nil
+    end
+
+    private def extract_ico_bg(path : String, options : ThemeOptions) : RGB?
+      extract_ico_colors(ICOFile.from_path(path, @config), options)
+    end
+
+    private def extract_ico_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : RGB?
+      extract_ico_colors(ICOFile.from_slice(data, @config), options)
+    end
+
+    private def extract_image_bg(path : String, options : ThemeOptions) : RGB?
+      # Try SVG first (unified detection via extension)
+      svg_bg = SVGColorExtractor.extract_bg_from_file(path, options)
+      return svg_bg if svg_bg
+
+      img = CrImage.read(path)
+      return unless img
+
+      w = img.bounds.width.to_i32
+      h = img.bounds.height.to_i32
+      return if w == 0 || h == 0
+      return if w > @config.max_image_width || h > @config.max_image_height
+
+      rgba = CrImage::Pipeline.new(img).result
+      return unless rgba
+
+      extract_pixel_colors(rgba.pix, w, h, options)
+    rescue ex : Exception
+      @config.log_debug "extract_image_bg: #{ex.class}: #{ex.message}"
+      return
+    end
+
+    private def extract_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : RGB?
+      # Try SVG first (unified detection via content sniffing)
+      svg_bg = SVGColorExtractor.extract_bg_from_buffer(data)
+      return svg_bg if svg_bg
+
+      TempfileHelper.with_tempfile("prismatiq_theme_", data) do |tmp_path|
+        extract_image_bg(tmp_path, options)
+      end
+    rescue ex : IO::Error | ArgumentError
+      @config.log_debug "extract_buffer_bg: #{ex.class}: #{ex.message}"
+      return
+    end
+
+    private def extract_pixel_colors(pixels, w, h, options : ThemeOptions) : RGB?
+      extractor_opts = Options.new(quality: options.quality)
+      result = ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
+      result.try(&.first?)
+    end
+
+    # --- Private: Theme construction ---
+
+    private def build_theme_result(bg_rgb : RGB) : ThemeResult
+      text_colors = find_text_colors(bg_rgb)
+      ThemeResult.new(bg_rgb, text_colors[:light].to_hex, text_colors[:dark].to_hex)
+    end
+
+    private def find_text_colors(bg_rgb : RGB) : NamedTuple(light: RGB, dark: RGB)
+      {
+        light: find_compliant_text(bg_rgb, ascending: true),
+        dark:  find_compliant_text(bg_rgb, ascending: false),
+      }
+    end
+
+    # Scans gray values to find the first that meets WCAG AA contrast.
+    # ascending=true → darkest compliant (light text on dark bg).
+    # ascending=false → lightest compliant (dark text on light bg).
+    private def find_compliant_text(bg : RGB, ascending : Bool) : RGB
+      if ascending
+        fallback = RGB.new(Constants::ThemeExtraction::DARK_TEXT_FALLBACK[0], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[1], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[2])
+      else
+        fallback = RGB.new(Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[0], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[1], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[2])
+      end
+
+      step = Constants::ThemeExtraction::GRAY_STEP
+      val = ascending ? 0 : 255
+
+      while ascending ? (val <= 255) : (val >= 0)
+        candidate = RGB.new(val, val, val)
+        return candidate if @accessibility.contrast_ratio(candidate, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
+        val += ascending ? step : -step
+      end
+      fallback
+    end
+
+    # --- Private: JSON parsing ---
+
     private def parse_theme_json(theme_json : String) : Tuple(RGB?, Hash(String, String))
       bg_rgb = nil
       text_hash = {} of String => String
@@ -149,238 +253,6 @@ module PrismatIQ
       end
 
       {bg_rgb, text_hash}
-    end
-
-    def clear_cache
-      @cache.clear
-    end
-
-    # Private: Common ICO palette extraction from file or buffer.
-    private def extract_ico_colors(ico : ICOFile?, options : ThemeOptions) : RGB?
-      return unless ico && ico.valid?
-      extract_pixel_colors(ico.to_rgba, ico.width, ico.height, options)
-    rescue ex : IO::Error | ArgumentError | IndexError | OverflowError | ICOFile::ICOError
-      @config.log_debug "extract_ico_colors: #{ex.class}: #{ex.message}"
-      nil
-    end
-
-    private def extract_ico_bg(path : String, options : ThemeOptions) : RGB?
-      extract_ico_colors(ICOFile.from_path(path, @config), options)
-    end
-
-    private def extract_ico_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : RGB?
-      extract_ico_colors(ICOFile.from_slice(data, @config), options)
-    end
-
-    private def extract_image_bg(path : String, options : ThemeOptions) : RGB?
-      if path.downcase.ends_with?(".svg")
-        svg_colors = SVGColorExtractor.extract_from_file(path)
-        return unless svg_colors.ok?
-
-        return unless svg_colors.value.size > 0
-        svg_colors.value[0]
-      end
-
-      img = CrImage.read(path)
-      return unless img
-
-      w = img.bounds.width.to_i32
-      h = img.bounds.height.to_i32
-      return if w == 0 || h == 0
-      return if w > @config.max_image_width || h > @config.max_image_height
-
-      rgba = CrImage::Pipeline.new(img).result
-      return unless rgba
-
-      extract_pixel_colors(rgba.pix, w, h, options)
-    rescue ex : Exception
-      @config.log_debug "extract_image_bg: #{ex.class}: #{ex.message}"
-      return
-    end
-
-    private def extract_buffer_bg(data : Slice(UInt8), options : ThemeOptions) : RGB?
-      if data.size > 0 && data[0] == '<'.ord
-        svg_content = String.new(data)
-        if svg_content.downcase.includes?("<svg")
-          svg_colors = SVGColorExtractor.extract_colors(svg_content)
-          return unless svg_colors.size > 0
-          svg_colors[0]
-        end
-      end
-
-      TempfileHelper.with_tempfile("prismatiq_theme_", data) do |tmp_path|
-        extract_image_bg(tmp_path, options)
-      end
-    rescue ex : IO::Error | ArgumentError
-      @config.log_debug "extract_buffer_bg: #{ex.class}: #{ex.message}"
-      return
-    end
-
-    private def extract_pixel_colors(pixels, w, h, options : ThemeOptions) : RGB?
-      extractor_opts = Options.new(quality: options.quality)
-      result = ColorExtractor.extract_from_buffer(pixels, w, h, extractor_opts)
-      result.try(&.first?)
-    end
-
-    private def fetch_url(uri : URI, options : ThemeOptions) : Slice(UInt8)?
-      unless @config.rate_limit_allow?
-        @config.log_debug "fetch_url: rate limited, please retry later"
-        return
-      end
-
-      host = uri.host
-      return unless host
-      return unless {"http", "https"}.includes?(uri.scheme)
-
-      port = uri.port || (uri.scheme == "https" ? 443 : 80)
-      use_tls = uri.scheme == "https"
-
-      validated_ip = resolve_and_validate_host(host)
-      return if validated_ip == :blocked
-
-      client : HTTP::Client? = nil
-      begin
-        client = if validated_ip.is_a?(Socket::IPAddress)
-                   connect_to_ip(validated_ip.as(Socket::IPAddress), host, port, use_tls)
-                 else
-                   HTTP::Client.new(host, port, tls: use_tls)
-                 end
-
-        client.read_timeout = options.http_timeout.seconds
-        client.connect_timeout = options.http_timeout.seconds
-
-        default_port = use_tls ? 443 : 80
-        host_value = port == default_port ? host : "#{host}:#{port}"
-
-        headers = HTTP::Headers{
-          "User-Agent" => "PrismatIQ/#{Version::VERSION}",
-          "Accept"     => "image/*,*/*;q=0.8",
-          "Host"       => host_value,
-        }
-
-        response = client.get(uri.request_target, headers: headers)
-        return unless response_valid?(response, options)
-
-        stream_body(response.body_io, options.max_file_size)
-      rescue ex : IO::Error | OpenSSL::Error | ArgumentError
-        @config.log_debug "fetch_url: exception #{ex.class.name}: #{ex.message}"
-        nil
-      ensure
-        client.try(&.close)
-      end
-    end
-
-    private def resolve_and_validate_host(host : String) : Socket::IPAddress | Symbol?
-      resolved_ips = Utils::IPValidator.resolve_host(host)
-      if resolved_ips.empty?
-        return unless @config.ssrf_protection?
-        @config.log_debug "fetch_url: DNS resolution failed for '#{host}'"
-        return :blocked
-      end
-
-      return resolved_ips.first unless @config.ssrf_protection?
-
-      resolved_ips.each do |ip|
-        if Utils::IPValidator.private_address?(ip)
-          @config.log_debug "fetch_url: SSRF blocked - host=#{host} ip=#{ip.address} reason=private_address"
-          return :blocked
-        end
-      end
-
-      resolved_ips.first
-    end
-
-    private def response_valid?(response : HTTP::Client::Response, options : ThemeOptions) : Bool
-      return false unless response.status_code == 200
-
-      content_type = response.headers["Content-Type"]?
-      if content_type && !content_type.starts_with?("image/")
-        @config.log_debug "fetch_url: rejected non-image content-type: #{content_type}"
-        return false
-      end
-
-      content_length = response.headers["Content-Length"]?
-      if content_length
-        begin
-          length = content_length.to_i64
-          if length > options.max_file_size
-            @config.log_debug "fetch_url: rejected due to Content-Length: #{length}"
-            return false
-          end
-        rescue
-        end
-      end
-
-      true
-    end
-
-    private def stream_body(body_io : IO, max_size : Int64) : Slice(UInt8)?
-      buffer = IO::Memory.new(Math.min(max_size, 64 * 1024).to_i)
-      chunk = Bytes.new(8192)
-      loop do
-        read_bytes = body_io.read(chunk)
-        break if read_bytes == 0
-        remaining = max_size - buffer.bytesize
-        if remaining <= 0
-          @config.log_debug "fetch_url: response body exceeded max_file_size during streaming"
-          return
-        end
-        buffer.write(chunk[0, Math.min(read_bytes, remaining.to_i)])
-      end
-      buffer.to_slice
-    end
-
-    private def connect_to_ip(ip : Socket::IPAddress, original_host : String, port : Int32, use_tls : Bool) : HTTP::Client
-      tcp = TCPSocket.new(ip.address, port)
-      begin
-        io : IO = tcp
-        if use_tls
-          io = OpenSSL::SSL::Socket::Client.new(tcp, hostname: original_host)
-        end
-        HTTP::Client.new(io, original_host)
-      rescue ex
-        tcp.close rescue nil
-        raise ex
-      end
-    end
-
-    private def build_theme_result(bg_rgb : RGB) : ThemeResult
-      text_colors = find_text_colors(bg_rgb)
-      ThemeResult.new(bg_rgb, text_colors[:light].to_hex, text_colors[:dark].to_hex)
-    end
-
-    private def find_text_colors(bg_rgb : RGB) : NamedTuple(light: RGB, dark: RGB)
-      {
-        light: find_darkest_compliant_text(bg_rgb),
-        dark:  find_lightest_compliant_text(bg_rgb),
-      }
-    end
-
-    # ascending=true scans 0→255 (darkest compliant), ascending=false scans 255→0 (lightest compliant).
-    private def find_compliant_text(bg : RGB, ascending : Bool) : RGB
-      if ascending
-        fallback = RGB.new(Constants::ThemeExtraction::DARK_TEXT_FALLBACK[0], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[1], Constants::ThemeExtraction::DARK_TEXT_FALLBACK[2])
-      else
-        fallback = RGB.new(Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[0], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[1], Constants::ThemeExtraction::LIGHT_TEXT_FALLBACK[2])
-      end
-
-      step = Constants::ThemeExtraction::GRAY_STEP
-      val = ascending ? 0 : 255
-
-      while ascending ? (val <= 255) : (val >= 0)
-        candidate = RGB.new(val, val, val)
-        return candidate if @accessibility.contrast_ratio(candidate, bg) >= Constants::WCAG::CONTRAST_RATIO_AA
-        val += ascending ? step : -step
-      end
-      fallback
-    end
-
-    private def find_darkest_compliant_text(bg : RGB) : RGB
-      find_compliant_text(bg, ascending: true)
-    end
-
-    private def find_lightest_compliant_text(bg : RGB) : RGB
-      find_compliant_text(bg, ascending: false)
     end
 
     private def parse_to_rgb(color_str : String?) : RGB?
