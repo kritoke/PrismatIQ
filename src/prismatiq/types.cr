@@ -132,7 +132,7 @@ module PrismatIQ
 
       indices = get_indices(histo, axis)
 
-      return {self, VBox.new(0, 0, 0, 0, 0, 0)} if indices.empty?
+      return {self, VBox.new(0, 0, 0, 0, 0, 0)} if indices.size <= 1
 
       mid = indices.size // 2
       split_at = VBox.quickselect(indices, mid - 1, rng)
@@ -171,7 +171,7 @@ module PrismatIQ
       hi = arr.size - 1
 
       while lo < hi
-        pivot_idx = lo + Random::Secure.rand(hi - lo + 1)
+        pivot_idx = lo + rng.rand(hi - lo + 1)
         pivot = arr[pivot_idx]
         arr[pivot_idx] = arr[hi]
         arr[hi] = pivot

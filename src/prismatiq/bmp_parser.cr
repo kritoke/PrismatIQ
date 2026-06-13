@@ -366,10 +366,10 @@ module PrismatIQ
       b_shift = mask_to_shift_bits(blue_mask)
       a_shift = mask_to_shift_bits(alpha_mask)
 
-      r = (((pixel & red_mask) >> r_shift[0]) & 0xFF if r_shift[0] >= 0) || 0_u32
-      g = (((pixel & green_mask) >> g_shift[0]) & 0xFF if g_shift[0] >= 0) || 0_u32
-      b = (((pixel & blue_mask) >> b_shift[0]) & 0xFF if b_shift[0] >= 0) || 0_u32
-      a = (((pixel & alpha_mask) >> a_shift[0]) & 0xFF if a_shift[0] >= 0) || 255_u32
+      r = scale_channel(pixel & red_mask, r_shift)
+      g = scale_channel(pixel & green_mask, g_shift)
+      b = scale_channel(pixel & blue_mask, b_shift)
+      a = scale_channel(pixel & alpha_mask, a_shift, default: 255_u32)
 
       {r.to_u8, g.to_u8, b.to_u8, a.to_u8}
     end
@@ -432,6 +432,19 @@ module PrismatIQ
       end
 
       {shift, bits}
+    end
+
+    # Scale an extracted channel value from its native bit depth to 0-255.
+    # For example, a 5-bit value of 31 becomes 255, and 16 becomes 132.
+    # This ensures correct brightness when bitfields use fewer than 8 bits.
+    private def scale_channel(masked_value : UInt32, shift_bits : Tuple(Int32, Int32), default : UInt32 = 0_u32) : UInt32
+      return default if shift_bits[0] < 0
+      raw = (masked_value >> shift_bits[0])
+      bits = shift_bits[1]
+      return raw if bits >= 8
+      # Scale from [0, 2^bits - 1] to [0, 255] preserving relative position.
+      max_raw = (1_u32 << bits) - 1
+      (raw * 255_u32 / max_raw).to_u32
     end
   end
 end
