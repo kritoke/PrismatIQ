@@ -37,11 +37,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1770437261,
-        "narHash": "sha256-qoHWEN4V+lfArPtxgbcVW3ylvtuoX4tpEHmMonnEDg0=",
+        "lastModified": 1779951291,
+        "narHash": "sha256-JbxZR+N/LmVTUYS+RekfFLpvrejcqug/JniI/BRMCCw=",
         "owner": "Fission-AI",
         "repo": "OpenSpec",
-        "rev": "c574e7992dc9d3ac019f8c2e882406f696271eb6",
+        "rev": "11b269061897b011075a984c6c95d970a5533a66",
         "type": "github"
       },
       "original": {
@@ -53,24 +53,7 @@
     "root": {
       "inputs": {
         "nixpkgs": "nixpkgs",
-        "openspec": "openspec",
-        "ticket-src": "ticket-src"
-      }
-    },
-    "ticket-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1771728878,
-        "narHash": "sha256-zvt+SbHmQxqTvt2JyFXyYU1k3JM6AEsSIDI0RhpmPPk=",
-        "owner": "wedow",
-        "repo": "ticket",
-        "rev": "b564596e6f9ee5a9bf300600b61e1c681dc26d28",
-        "type": "github"
-      },
-      "original": {
-        "owner": "wedow",
-        "repo": "ticket",
-        "type": "github"
+        "openspec": "openspec"
       }
     }
   },

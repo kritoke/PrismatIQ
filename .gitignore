@@ -49,3 +49,5 @@ openspec/
 # Planning
 planning/
 .pi/
+# Local Pi runtime state
+.atl/
