@@ -267,29 +267,4 @@ module PrismatIQ
     class ICOError < Exception
     end
   end
-
-  # Extract palette from ICO file with explicit Error type (v2 API)
-  def self.get_palette_from_ico_v2(path : String, options : Options = Options.default, config : Config = Config.default) : Result(Array(RGB), Error)
-    ico = ICOFile.from_path(path, config)
-
-    if !ico
-      return Result(Array(RGB), Error).err(Error.file_not_found(path, "Failed to read ICO file"))
-    end
-
-    if !ico.valid?
-      return Result(Array(RGB), Error).err(Error.invalid_image_path(path, "Invalid or corrupted ICO file"))
-    end
-
-    begin
-      pixels = ico.to_rgba
-      w = ico.width
-      h = ico.height
-      palette = get_palette_from_buffer(pixels, w, h, options)
-      Result(Array(RGB), Error).ok(palette)
-    rescue ex : Exception
-      Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "ICO processing failed"))
-    end
-  rescue ex : Exception
-    Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "Failed to extract palette from ICO"))
-  end
 end

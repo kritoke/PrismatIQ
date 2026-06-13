@@ -123,8 +123,7 @@ module PrismatIQ
 
       private def sort_by_popularity(palette : Array(RGB), histo : Array(UInt32))
         palette.sort_by do |rgb|
-          y, i, q = YIQConverter.quantize_from_rgb(rgb.r, rgb.g, rgb.b)
-          idx = YIQConverter.to_index(y, i, q)
+          idx = YIQConverter.histogram_index(rgb.r, rgb.g, rgb.b)
           count = histo[idx].to_i
           -count
         end

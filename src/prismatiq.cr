@@ -31,6 +31,7 @@ require "./prismatiq/ico_file"
 require "./prismatiq/svg_color_extractor"
 require "./prismatiq/theme_result"
 require "./prismatiq/theme_extractor"
+require "./prismatiq/url_fetcher"
 
 module PrismatIQ
   @@theme_extractor : ThemeExtractor?
@@ -113,22 +114,22 @@ module PrismatIQ
     Result(Array(RGB), Error).err(Error.from_exception_with_path(ex, path))
   end
 
-  def self.get_palette_v2!(path : String, options : Options = Options.default, config : Config = Config.default) : Array(RGB)
-    options.validate!
-
-    validation = Utils::Validation.validate_file_path(path)
-    raise Exception.new("Failed to extract palette from #{path}") if validation.err?
-
-    img = Utils::ImageLoader.read(validation.value)
-    width, height = image_dimensions(img, config)
-
-    if width > config.max_image_width || height > config.max_image_height
-      raise Exception.new("Image dimensions #{width}x#{height} exceed maximum allowed #{config.max_image_width}x#{config.max_image_height}")
+  private def self.unwrap_or_raise(result : Result(Array(RGB), Error)) : Array(RGB)
+    if result.ok?
+      result.value
+    else
+      err = result.error
+      case err.type
+      when ErrorType::InvalidOptions
+        raise ValidationError.new(err.message)
+      else
+        raise Exception.new(err.message)
+      end
     end
+  end
 
-    result = extract_from_image_core(img, width, height, options, config)
-    raise Exception.new("Failed to extract palette from #{path}") if result.empty?
-    result
+  def self.get_palette_v2!(path : String, options : Options = Options.default, config : Config = Config.default) : Array(RGB)
+    unwrap_or_raise(get_palette_v2(path, options, config))
   end
 
   # --- IO-based overloads ---
@@ -152,18 +153,7 @@ module PrismatIQ
   end
 
   def self.get_palette_v2!(io : IO, options : Options = Options.default, config : Config = Config.default) : Array(RGB)
-    options.validate!
-
-    img = Utils::ImageLoader.read(io)
-    width, height = image_dimensions(img, config)
-
-    if width > config.max_image_width || height > config.max_image_height
-      raise Exception.new("Image dimensions #{width}x#{height} exceed maximum allowed #{config.max_image_width}x#{config.max_image_height}")
-    end
-
-    result = extract_from_image_core(img, width, height, options, config)
-    raise Exception.new("Failed to extract palette from IO") if result.empty?
-    result
+    unwrap_or_raise(get_palette_v2(io, options, config))
   end
 
   # --- Buffer-based overloads ---
@@ -179,10 +169,7 @@ module PrismatIQ
   end
 
   def self.get_palette_v2!(pixels : Slice(UInt8), width : Int32, height : Int32, options : Options = Options.default, config : Config = Config.default) : Array(RGB)
-    options.validate!
-    result = extract_from_buffer_core(pixels, width, height, options, config)
-    raise Exception.new("Failed to extract palette from buffer") if result.empty?
-    result
+    unwrap_or_raise(get_palette_v2(pixels, width, height, options, config))
   end
 
   # --- CrImage-based overloads ---
@@ -204,6 +191,10 @@ module PrismatIQ
     Result(Array(RGB), Error).err(Error.from_exception(ex, "image", "image"))
   end
 
+  def self.get_palette_v2!(image : CrImage::Image, options : Options = Options.default, config : Config = Config.default) : Array(RGB)
+    unwrap_or_raise(get_palette_v2(image, options, config))
+  end
+
   # ============================================================================
   # Modern Options-based APIs (non-deprecated)
   # ============================================================================
@@ -222,6 +213,31 @@ module PrismatIQ
     result = get_palette_v2(path, options)
     return unless result.ok?
     find_closest(target, result.value)
+  end
+
+  # Extract palette from ICO file with explicit Error type (v2 API)
+  def self.get_palette_from_ico_v2(path : String, options : Options = Options.default, config : Config = Config.default) : Result(Array(RGB), Error)
+    ico = ICOFile.from_path(path, config)
+
+    if !ico
+      return Result(Array(RGB), Error).err(Error.file_not_found(path, "Failed to read ICO file"))
+    end
+
+    if !ico.valid?
+      return Result(Array(RGB), Error).err(Error.invalid_image_path(path, "Invalid or corrupted ICO file"))
+    end
+
+    begin
+      pixels = ico.to_rgba
+      w = ico.width
+      h = ico.height
+      palette = get_palette_from_buffer(pixels, w, h, options)
+      Result(Array(RGB), Error).ok(palette)
+    rescue ex : Exception
+      Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "ICO processing failed"))
+    end
+  rescue ex : Exception
+    Result(Array(RGB), Error).err(Error.processing_failed(ex.message || "Failed to extract palette from ICO"))
   end
 
   # ============================================================================
@@ -301,10 +317,8 @@ module PrismatIQ
   end
 
   # Logs a debug message with sensitive data sanitization.
-  # Only outputs when PRISMATIQ_DEBUG environment variable is set.
+  # Routes through Config.default for unified debug control.
   def self.log_debug(message : String) : Nil
-    return unless ENV["PRISMATIQ_DEBUG"]?
-    sanitized = sanitize_message(message)
-    STDERR.puts "[PrismatIQ DEBUG] #{sanitized}"
+    Config.default.log_debug(message)
   end
 end

@@ -18,8 +18,7 @@ module PrismatIQ
               r = pixels[idx].to_i
               g = pixels[idx + 1].to_i
               b = pixels[idx + 2].to_i
-              y, i, q = YIQConverter.quantize_from_rgb(r, g, b)
-              histo[YIQConverter.to_index(y, i, q)] += 1_u32
+              histo[YIQConverter.histogram_index(r, g, b)] += 1_u32
               count += 1
             end
 

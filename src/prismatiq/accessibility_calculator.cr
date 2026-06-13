@@ -75,15 +75,11 @@ module PrismatIQ
       recommendations = [] of String
 
       if normal_level < WCAGLevel::AA
-        if ratio < Constants::WCAG::CONTRAST_RATIO_AA
-          recommendations << "Consider adjusting colors for normal text WCAG AA compliance (need #{Constants::WCAG::CONTRAST_RATIO_AA}:1, have #{ratio.round(2)}:1)"
-        end
+        recommendations << "Consider adjusting colors for normal text WCAG AA compliance (need #{Constants::WCAG::CONTRAST_RATIO_AA}:1, have #{ratio.round(2)}:1)"
       end
 
       if large_level < WCAGLevel::AA
-        if ratio < Constants::WCAG::CONTRAST_RATIO_AA_LARGE
-          recommendations << "Consider adjusting colors for large text WCAG AA compliance (need #{Constants::WCAG::CONTRAST_RATIO_AA_LARGE}:1, have #{ratio.round(2)}:1)"
-        end
+        recommendations << "Consider adjusting colors for large text WCAG AA compliance (need #{Constants::WCAG::CONTRAST_RATIO_AA_LARGE}:1, have #{ratio.round(2)}:1)"
       end
 
       if normal_level == WCAGLevel::AAA

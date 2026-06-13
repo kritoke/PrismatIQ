@@ -120,17 +120,17 @@ module PrismatIQ
 
     private def decode_via_tempfile
       result = TempfileHelper.with_tempfile("prismatiq_png_", @data) do |png_path|
-        begin
-          img = CrImage.read(png_path)
+        img = begin
+          CrImage.read(png_path)
         rescue ex : Exception
           debug_log("PNGExtractor: CrImage.read failed: #{ex.class} #{ex.message}")
-          next false
+          nil
         end
-        return unless img
+        next false unless img
 
         w = img.bounds.width.to_i32
         h = img.bounds.height.to_i32
-        return false if w > @config.max_image_width || h > @config.max_image_height
+        next false if w > @config.max_image_width || h > @config.max_image_height
 
         rgba_image = begin
           CrImage::Pipeline.new(img).result
@@ -138,8 +138,7 @@ module PrismatIQ
           debug_log("PNGExtractor: Pipeline normalization failed: #{ex.class} #{ex.message}")
           nil
         end
-
-        return unless rgba_image
+        next false unless rgba_image
 
         @width = w
         @height = h
@@ -151,7 +150,7 @@ module PrismatIQ
         true
       end
 
-      return unless result
+      result
     end
 
     private def debug_log(*parts)

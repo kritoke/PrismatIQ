@@ -93,8 +93,7 @@ module PrismatIQ
         return [] of PaletteEntry if total_pixels == 0
 
         palette.map do |rgb|
-          y, i, q = YIQConverter.quantize_from_rgb(rgb.r, rgb.g, rgb.b)
-          idx = YIQConverter.to_index(y, i, q)
+          idx = YIQConverter.histogram_index(rgb.r, rgb.g, rgb.b)
           count = (histo[idx]? || 0_u32).to_i32
           percent = total_pixels > 0 ? count.to_f64 / total_pixels.to_f64 : 0.0
           PaletteEntry.new(rgb, count, percent)

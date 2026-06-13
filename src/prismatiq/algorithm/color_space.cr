@@ -96,5 +96,16 @@ module PrismatIQ
       q = index & 31
       {y, i, q}
     end
+
+    # Combined quantize + to_index: converts RGB directly to histogram index.
+    #
+    # @param r the red component (0-255)
+    # @param g the green component (0-255)
+    # @param b the blue component (0-255)
+    # @return the histogram index (0-32767)
+    def self.histogram_index(r : Int32, g : Int32, b : Int32) : Int32
+      y, i, q = quantize_from_rgb(r, g, b)
+      to_index(y, i, q)
+    end
   end
 end
