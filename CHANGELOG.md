@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **Crystal 1.18.2 → 1.19.1** — bumped compiler requirement in `shard.yml`, the Nix dev shell (`flake.nix` now resolves `crystal_1_19`), and the GitHub Actions workflow. `shard.lock` resolved cleanly against `crimage` and `crtemp`; the full spec suite (303 examples) and the `examples/color_thief_adapter.cr` build pass on 1.19.1 with zero deprecation warnings.
+- **`RateLimiter` now uses `Time.instant`** (`src/prismatiq/config.cr`) instead of `Time.monotonic`, which is deprecated in Crystal 1.19+. The 1.18.2-era comments flagging the constraint have been removed. Semantics are unchanged: `Time::Instant + Time::Span` and `Time::Instant - Time::Instant` keep the same `.total_seconds` behavior the limiter relied on.
+
 ## [0.7.0] - 2026-04-27
 
 ### Breaking Changes
@@ -29,6 +36,7 @@
 ### Migration Guide
 
 #### Removed thread options
+
 ```crystal
 # Before
 options = PrismatIQ::Options.new(color_count: 5, threads: 4)
@@ -40,6 +48,7 @@ config = PrismatIQ::Config.new
 ```
 
 #### Image dimension limits
+
 ```crystal
 # Default: 8192x8192 — reject oversized images early
 result = PrismatIQ.get_palette_v2("huge.jpg")
@@ -56,6 +65,7 @@ result = PrismatIQ.get_palette_v2("photo.jpg", config: config)
 ```
 
 #### Cache management
+
 ```crystal
 # Before (0.6.0) — clear_theme_cache was a no-op
 PrismatIQ.clear_theme_cache  # did nothing
@@ -108,6 +118,7 @@ PrismatIQ.clear_theme_cache  # delegates to clear_caches
 ### Migration Guide
 
 #### ColorExtractor return type
+
 ```crystal
 # Before
 result = ColorExtractor.extract_from_buffer(pixels, w, h, opts)
@@ -120,6 +131,7 @@ puts rgb.r, rgb.g, rgb.b
 ```
 
 #### get_color now returns nil on failure
+
 ```crystal
 # Before — silently returns black on error
 color = PrismatIQ.get_color("missing.png")
@@ -135,6 +147,7 @@ end
 ```
 
 #### ThemeResult constructor
+
 ```crystal
 # Before
 result = ThemeResult.new([100, 150, 200], "#fff", "#000")
@@ -144,6 +157,7 @@ result = ThemeResult.new(RGB.new(100, 150, 200), "#fff", "#000")
 ```
 
 #### Theme extraction with caching
+
 ```crystal
 # Before (0.5.x) — used global singleton with implicit caching
 theme = PrismatIQ.extract_theme("favicon.ico")
@@ -160,6 +174,7 @@ PrismatIQ.clear_caches
 ```
 
 #### VBox index methods
+
 ```crystal
 # Before
 y, i, q = VBox.from_index(idx)
@@ -173,30 +188,37 @@ idx = YIQConverter.to_index(y, i, q)
 ## [0.5.6.1] - 2026-03-26
 
 ### Improved
+
 - **Debug logging overhead**: Added `debug_log?` method to `Config` to avoid string interpolation overhead when debug logging is disabled. Hot paths in `PaletteExtractor` and `MMCQ` now guard debug calls with `debug_log?` checks.
 - **HistogramPool documentation**: Fixed misleading documentation - the implementation already uses lazy allocation (not pre-allocation) as documented.
 
 ### Fixed
+
 - **Benchmark API consistency**: Updated `bench/performance_benchmark.cr` to use current v2 APIs (`get_palette_from_buffer` and `get_palette_v2`) instead of non-existent deprecated methods.
 
 ### Compatibility
+
 - **Crystal 1.18.2**: Maintained - no new features that would break compatibility
 
 ## [0.5.6.0] - 2026-03-19
 
 ### Added
+
 - **Compile-time VERSION derivation**: The `VERSION` constant is now automatically derived from `shard.yml` at compile time, ensuring consistency between source and package metadata
 - **Shared luminance calculation module**: Extracted duplicate `relative_luminance` logic into a shared `LuminanceCalculator` module used by both `AccessibilityCalculator` and `ThemeDetector`
 
 ### Improved
+
 - **ThreadSafeCache performance**: Implemented double-checked locking pattern to reduce contention during cache operations
 - **VBox.split algorithm**: Optimized median finding with quickselect algorithm (O(n) vs O(n log n) sort)
 - **AccessibilityCalculator reuse**: ThemeDetector now accepts AccessibilityCalculator as constructor dependency, reducing object allocation
 
 ### Fixed
+
 - **VERSION mismatch**: Previously hardcoded VERSION constant (0.5.4.0) didn't match shard.yml (0.5.5.0)
 
 ### Compatibility
+
 - **Crystal 1.18.2**: This release requires Crystal 1.18.2 or higher
 - **No breaking changes**: All public APIs remain unchanged; existing code will work without modification
 
@@ -318,6 +340,7 @@ idx = YIQConverter.to_index(y, i, q)
 ### Added
 
 #### Theme Extraction API
+
 - **Unified theme extraction**: `extract_theme(source, options)` supports files, URLs, and buffers
 - **Theme-aware results**: Returns background color with compliant light/dark text colors
 - **Accessibility auto-correction**: `fix_theme(theme_json, legacy_bg, legacy_text)` ensures WCAG 4.5 compliance
@@ -331,12 +354,14 @@ idx = YIQConverter.to_index(y, i, q)
 ### Breaking Changes
 
 #### Clean API Break
+
 - **Complete removal of all deprecated v1 APIs** that used sentinel error values `[RGB.new(0,0,0)]`
 - **Removal of module-level `Accessibility` and `Theme` methods** - users must now create `AccessibilityCalculator` and `ThemeDetector` instances
 - **All APIs now return explicit error handling** using `Result(Array(RGB), Error)` types or raise exceptions
 - **Simplified method signatures** - removed redundant overloads and parameter combinations
 
 #### Removed Methods
+
 - All v1 `get_palette` methods returning `Array(RGB)` with sentinel errors
 - All v1 `get_palette_or_error` methods returning `Result(Array(RGB), String)`
 - All deprecated positional parameter APIs (e.g., `get_palette(path, color_count, quality, threads)`)
@@ -344,6 +369,7 @@ idx = YIQConverter.to_index(y, i, q)
 - `PaletteResult` struct (redundant with `Result` type)
 
 #### Renamed Methods (Clean Names)
+
 - `get_palette_v2` → `get_palette` (now returns `Result(Array(RGB), Error)`)
 - `get_palette_v2!` → `get_palette!` (now raises exceptions on error)
 - `get_palette_from_ico_v2` → `get_palette_from_ico` (now returns `Result(Array(RGB), Error)`)
@@ -351,12 +377,14 @@ idx = YIQConverter.to_index(y, i, q)
 ### Added
 
 #### Modern Result-Based API
+
 - **Primary API**: `get_palette` returns `Result(Array(RGB), Error)` with structured error information
 - **Exception-based API**: `get_palette!` raises exceptions on errors for simpler error handling  
 - **Comprehensive Error struct** with `type`, `message`, and `context` fields for precise error handling
 - **All utility methods updated** to use consistent Result-based error handling
 
 #### Instance-Based Utility Classes
+
 - **`AccessibilityCalculator`** - Instance-based accessibility calculations with isolated caching
 - **`ThemeDetector`** - Instance-based theme detection with isolated caching  
 - **Thread-safe by design** - no shared mutable state between instances
@@ -365,18 +393,21 @@ idx = YIQConverter.to_index(y, i, q)
 ### Changed
 
 #### API Design Philosophy
+
 - **Explicit over implicit** - All errors are explicitly handled through Result types
 - **Instance-based over module-based** - Better encapsulation and thread safety
 - **Modern Crystal patterns** - Leverages Crystal's type system and functional programming features
 - **Single source of truth** - `Options` struct remains the configuration standard
 
 #### Performance and Security
+
 - **Maintains all v0.4.x improvements**: Memory optimization, thread safety, security fixes
 - **Continues using Options struct** as the single source of truth for configuration
 - **Preserves all existing performance optimizations** and security measures
 - **Optimized concurrency** - lock-free histogram pool eliminates mutex bottlenecks
 
 ### Fixed
+
 - **Race conditions** in utility modules (now fully instance-based)
 - **Memory allocation overhead** in histogram processing (lock-free design)
 - **Ambiguous error handling** (replaced with explicit Result types)
@@ -384,6 +415,7 @@ idx = YIQConverter.to_index(y, i, q)
 ### Migration Guide for v0.5.0
 
 #### Palette Extraction
+
 ```crystal
 # Before (v0.4.x) - Ambiguous sentinel errors
 colors = PrismatIQ.get_palette("image.png", options)
@@ -404,6 +436,7 @@ colors = PrismatIQ.get_palette!("image.png", options) # Raises on error
 ```
 
 #### ICO File Support
+
 ```crystal
 # Before (v0.4.x) - Sentinel error checking
 colors = PrismatIQ.get_palette_from_ico("icon.ico", options)
@@ -422,6 +455,7 @@ end
 ```
 
 #### Accessibility Calculations
+
 ```crystal
 # Before (v0.4.x) - Module-level methods
 lum = PrismatIQ::Accessibility.relative_luminance(color)
@@ -434,6 +468,7 @@ level = calculator.wcag_level(fg, bg)
 ```
 
 #### Theme Detection  
+
 ```crystal
 # Before (v0.4.x) - Module-level methods
 theme = PrismatIQ::Theme.detect_theme(background)
@@ -446,6 +481,7 @@ palette = detector.suggest_text_palette(background)
 ```
 
 #### Buffer-based Extraction (unchanged)
+
 ```crystal
 # This API remains the same since it was already modern
 options = PrismatIQ::Options.new(color_count: 5, quality: 10)
@@ -453,6 +489,7 @@ palette = PrismatIQ.get_palette(pixels, width, height, options)
 ```
 
 ### Examples Updated
+
 - All examples and documentation updated to use v0.5.0 APIs
 - ColorThief adapter example uses v0.5.0 APIs for ICO files  
 - Comprehensive test coverage for new APIs (220+ tests passing)
@@ -461,6 +498,7 @@ palette = PrismatIQ.get_palette(pixels, width, height, options)
 ## v0.4.1 - 2026-03-04
 
 ### Breaking Changes
+
 - **Removed deprecated API methods**: The following deprecated methods have been removed:
   - `get_palette(path, color_count, quality)` - use `get_palette(path, Options.new(color_count: N, quality: Q))` instead
   - `get_palette(io, color_count, quality)` - use `get_palette(io, Options.new(color_count: N, quality: Q))` instead
@@ -472,6 +510,7 @@ palette = PrismatIQ.get_palette(pixels, width, height, options)
 [... rest of the file remains the same ...]
 result = PrismatIQ.get_palette_result(pixels, w, h, options)
 hex_colors = PrismatIQ.get_palette_color_thief(pixels, w, h, options)
+
 ```
 
 ## v0.4.0 - 2026-02-26
@@ -509,6 +548,7 @@ rgb.r = 128  # This worked before
 ```
 
 **After (v0.4.0+):**
+
 ```crystal
 rgb = RGB.new(255, 0, 0)
 # rgb.r = 128  # This will cause a compile error
@@ -521,12 +561,14 @@ rgb = RGB.new(128, 0, 0)
 The `VBox#recalc_count` method now returns a new VBox instead of mutating the existing one:
 
 **Before:**
+
 ```crystal
 vbox = VBox.new(...)
 vbox.recalc_count  # Mutated vbox in place
 ```
 
 **After:**
+
 ```crystal
 vbox = VBox.new(...)
 vbox = vbox.recalc_count  # Assign the returned new VBox
@@ -537,12 +579,14 @@ vbox = vbox.recalc_count  # Assign the returned new VBox
 The API now uses `Options` as the single source of truth for extraction parameters. While deprecated methods still work, prefer the new pattern:
 
 **Before (deprecated but still works):**
+
 ```crystal
 palette = PrismatIQ.get_palette(path, 5, 10)
 palette = PrismatIQ.get_palette(img, 5, 10, 4)
 ```
 
 **After (recommended):**
+
 ```crystal
 options = PrismatIQ::Options.new(color_count: 5, quality: 10)
 palette = PrismatIQ.get_palette(path, options)
@@ -557,6 +601,7 @@ palette = PrismatIQ.get_palette(img, options)
 New `get_palette_or_error` methods provide explicit error handling:
 
 **Recommended pattern:**
+
 ```crystal
 result = PrismatIQ.get_palette_or_error(path, options)
 if result.ok?
@@ -567,6 +612,7 @@ end
 ```
 
 **Or use `value_or` for defaults:**
+
 ```crystal
 palette = PrismatIQ.get_palette_or_error(path, options).value_or([RGB.new(0, 0, 0)])
 ```

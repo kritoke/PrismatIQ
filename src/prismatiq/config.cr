@@ -4,15 +4,14 @@ module PrismatIQ
   # Token bucket rate limiter for HTTP request throttling.
   class RateLimiter
     @tokens : Float64
-    @last_refill : Time::Span
+    @last_refill : Time::Instant
     @mutex : Mutex
     @burst : Int32
 
     def initialize(@rate : Int32, burst : Int32? = nil)
       @burst = burst || @rate
       @tokens = @burst.to_f64
-      # Using Time.monotonic instead of Time::Instant due to Crystal 1.18.2 constraint
-      @last_refill = Time.monotonic
+      @last_refill = Time.instant
       @mutex = Mutex.new
     end
 
@@ -41,10 +40,10 @@ module PrismatIQ
     end
 
     def wait_for_token(timeout_seconds : Float64 = 5.0) : Bool
-      deadline = Time.monotonic + Time::Span.new(seconds: timeout_seconds)
+      deadline = Time.instant + Time::Span.new(seconds: timeout_seconds)
       sleep_time = 0.001
       max_sleep = 0.1
-      while Time.monotonic < deadline
+      while Time.instant < deadline
         return true if acquire
         sleep(sleep_time.seconds)
         sleep_time = {sleep_time * 1.5, max_sleep}.min
@@ -53,8 +52,7 @@ module PrismatIQ
     end
 
     private def refill_tokens : Nil
-      # Using Time.monotonic instead of Time::Instant due to Crystal 1.18.2 constraint
-      now = Time.monotonic
+      now = Time.instant
       elapsed = (now - @last_refill).total_seconds
       return if elapsed <= 0
 
