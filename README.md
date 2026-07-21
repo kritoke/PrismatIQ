@@ -91,7 +91,7 @@ palette = PrismatIQ.get_palette_from_buffer(pixels, width, height, options)
 
 ## Version
 
-`0.7.0`
+`0.7.3`
 
 ## Security Considerations
 
@@ -112,6 +112,7 @@ config = PrismatIQ::Config.new(ssrf_protection: false)
 ```
 
 Or via environment variables:
+
 ```bash
 export PRISMATIQ_SSRF_PROTECTION=false
 export PRISMATIQ_SSRF_ALLOWLIST=internal.company.com,localhost
@@ -120,6 +121,7 @@ export PRISMATIQ_SSRF_ALLOWLIST=internal.company.com,localhost
 ### Path Validation
 
 When extracting from local files, PrismatIQ validates:
+
 - **Path Traversal**: Blocks `..` and URL-encoded variants (`%2e%2e`, `%252e%252e`)
 - **Null Byte Injection**: Rejects paths containing `\0`
 - **System Directories**: Prevents access to system paths on Linux

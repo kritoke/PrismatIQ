@@ -1,11 +1,44 @@
 # Changelog
 
-## [Unreleased]
+## [0.7.3] - 2026-07-16
 
-### Changed
+Captures all changes since the `v0.7.2` tag (2026-05-30). Note: the `v0.7.1` and `v0.7.2` tags were not documented in this changelog at the time of their release; refer to the git tags and the commits they cover (`684447c`, `e9ab141`, `b3513cd`, `cea854e`, `dbade02`, `71259f3`) for those releases' content.
 
-- **Crystal 1.18.2 → 1.19.1** — bumped compiler requirement in `shard.yml`, the Nix dev shell (`flake.nix` now resolves `crystal_1_19`), and the GitHub Actions workflow. `shard.lock` resolved cleanly against `crimage` and `crtemp`; the full spec suite (303 examples) and the `examples/color_thief_adapter.cr` build pass on 1.19.1 with zero deprecation warnings.
-- **`RateLimiter` now uses `Time.instant`** (`src/prismatiq/config.cr`) instead of `Time.monotonic`, which is deprecated in Crystal 1.19+. The 1.18.2-era comments flagging the constraint have been removed. Semantics are unchanged: `Time::Instant + Time::Span` and `Time::Instant - Time::Instant` keep the same `.total_seconds` behavior the limiter relied on.
+### Breaking Changes
+
+- **`PrismatIQ.get_palette_from_ico_v2` relocated to the top-level `PrismatIQ` module** — previously lived on `PrismatIQ::ICOFile`. Update calls from `ICOFile.get_palette_from_ico_v2(path, options, config)` to `PrismatIQ.get_palette_from_ico_v2(path, options, config)`. (Refactor: DRY public API.)
+- **`PrismatIQ::BinaryReader` non-`?` methods raise on out-of-bounds** — methods like `read_u8`, `read_u16_le`, etc. now raise `IO::Error` when the read exceeds the buffer, instead of silently returning `0`. Use the `?`-suffixed variants (`read_u8?`, `read_u16_le?`, etc.) where graceful zero-on-EOF semantics are required. (Refactor: DRY public API.)
+- **`PrismatIQ::ColorExtractor::Options` removed** — the duplicated internal struct is gone; `ColorExtractor.extract_from_buffer` now accepts `PrismatIQ::Options` directly. `sample_size` and `alpha_threshold` are derived from `Options.quality` and `Options.alpha_threshold` respectively. Callers that constructed a `ColorExtractor::Options` must migrate to `PrismatIQ::Options`. This also fixes a long-standing bug where `alpha_threshold` set via `PrismatIQ::Options` was not being forwarded through the color extractor.
+
+### Build
+
+- **Crystal 1.18.2 → 1.19.1** — compiler requirement bumped across `shard.yml`, the Nix dev shell (`flake.nix` resolves `crystal_1_19` from `nixos-unstable`), and the GitHub Actions workflow (`crystal-lang/install-crystal@v1`). `RateLimiter` (`src/prismatiq/config.cr`) migrated from `Time.monotonic` to `Time.instant` to clear the deprecation introduced in 1.19; semantics are preserved because `Time::Instant + Time::Span` and `Time::Instant - Time::Instant` keep the `.total_seconds` arithmetic the limiter relies on.
+- **crimage pinned to `7d3244a`** — widens `write_bits` `n` parameter from `Int32` to `Number` in the JPEG Huffman and WebP bit writers, fixing compilation failures under Crystal's `no_autocast_number` flag. Closes naqvis/crimage#3.
+- **CI: `actions/checkout` upgraded to v5** — runs natively on Node.js 24, removing the `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` workaround.
+- **Flake inputs trimmed** — removed unused `ticket-src` input and derivation; `.atl/` added to `.gitignore` for local Pi runtime state.
+
+### Refactor
+
+- **SRP: `URLFetcher` extracted from `ThemeExtractor`** — HTTP fetching, SSRF protection, rate limiting, and streaming now live in a dedicated class (`src/prismatiq/url_fetcher.cr`). `ThemeExtractor` reduced from 401 → 273 lines (32% smaller) and is now a thin orchestrator handling source resolution, cache management, theme result construction, and delegation. `SVGColorExtractor.extract_bg_from_file/buffer` added as unified entry points, eliminating duplicated SVG detection between `extract_image_bg` and `extract_buffer_bg`. No public API changes.
+- **DRY: public API surface consolidated** — all `get_palette_v2!` raising variants reimplemented as thin `unwrap_or_raise` wrappers over `get_palette_v2`, eliminating ~80 lines of duplication. Debug logging routes through `Config.default` (`PrismatIQ.log_debug`) instead of reading `ENV` directly. `YIQConverter.histogram_index` added as a shared helper for the quantize+index pattern that was previously duplicated across `palette_extractor`, `palette_convenience`, and `histogram_processor`. Inner ratio checks in `compliance_report` removed as redundant.
+- **`VBox` is now a pure value type** — `@histo` reference removed from the struct; methods that need histogram data (`average_color`, `average_color_rgb`, `split`, `recalc_count`, `each_populated_cell`, `compute_weighted_sums`, `get_indices`) take `histo` as an explicit parameter. Eliminates shared mutable references and reduces struct copy overhead. No behavior change; 303 specs verified.
+
+### Bug Fixes
+
+- **Quickselect RNG correctness** — `quickselect` now uses the passed `rng` parameter instead of `Random::Secure` (which made pivot selection deterministic per process and weakened distribution on small inputs).
+- **`VBox#split` edge case** — guards `indices.size <= 1` to prevent `k = -1` when there are no pivots to select.
+- **BMP 16-bit decoding** — sub-8-bit channel values now scale to 0–255 via a new `scale_channel` helper, fixing dark/washed-out 16bpp images.
+- **TCP socket leak in `connect_to_ip`** — TLS handshake failure path now closes the underlying `TCPSocket` instead of leaking it when `HTTP::Client` is never constructed.
+- **`stream_body` chunk reuse** — single 8KB `Bytes` buffer reused across iterations instead of per-iteration allocation; `IO::Memory` pre-allocated to `min(max_size, 64KB)`.
+- **Double-allocation in binary file loading** — `ico_file.cr` uses `File.open(&.getb_to_end)` instead of `File.read().to_slice` to avoid the String→Slice copy; `svg_color_extractor.cr` uses `File.open(&.gets_to_end)` for consistency.
+- **`PNGExtractor` control flow** — replaced `return` inside a block with `next` for correct block-scoped flow.
+- **Stale comment block removed** in `find_compliant_text`.
+
+### Verification
+
+- Full spec suite (303 examples) verified on Crystal 1.19.1 with zero failures, zero errors, and zero deprecation warnings.
+- `examples/color_thief_adapter.cr` (the CI smoke binary) builds clean.
+- `src/prismatiq.cr` builds clean.
 
 ## [0.7.0] - 2026-04-27
 
